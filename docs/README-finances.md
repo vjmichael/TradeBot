@@ -71,3 +71,8 @@ The planned Paper Trading switch defaults ON. The current build cannot trade rea
 ### How do my monthly expenses and daily goals relate?
 
 The Financial Goals candidate separates monthly expenses, desired savings, other take-home income, an estimated tax reserve and any additional costs not already counted. For example, $2,500 expenses + $500 savings - $1,500 income leaves a $1,500 after-tax gap. A 20% estimated tax reserve implies a $1,875 pre-tax planning target (about $62.50 per day in a 30-day month). A personal daily target can instead be dollars or return points; 2 points on $100 verified opening active capital means $2. Daily points are unavailable if an authenticated day-start baseline is missing; a $100 principal or daily target never changes capital authority. Paper results are not actual income. Goal settings remain reporting-only. See [TB-FIN-01A](tb-fin-01a.md).
+
+
+### Can Maj Vaj stop entering trades when I reach my daily target?
+
+The optional daily entry pause is OFF by default. A verified positive target can pause only new entries for the rest of the local reporting day; protection and settlement of existing trades continue. A later downward correction does not undo a recorded daily pause. At the next local day only the goal restriction expires, not manual or risk pauses. If you choose a point-based pause and an authenticated opening baseline is missing, new entries remain blocked rather than guessing. A goal reached notification is retained in the local dashboard after verified financial reconciliation. This is not a quota or permission to increase capital. See [TB-FIN-01D](tb-fin-01d.md); integrated acceptance is pending.

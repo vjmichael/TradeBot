@@ -43,7 +43,7 @@ class DashboardTests(unittest.TestCase):
             store=Store(self.directory,0)
             instance=store.add(InstanceSpec(name='Goal fixture',pair='BTC/USD',virtual_cents=10000,provider='none',strategy_family='numerical-baseline'))['id']
             path='/api/financial-goals/'+instance
-            p=DEFAULT|dict(expenses_cents=250000,income_cents=150000,savings_cents=50000,tax_bps=2000,target_kind='usd',target_value=100,expected_version=0)
+            p=DEFAULT|dict(expenses_cents=250000,income_cents=150000,savings_cents=50000,tax_bps=2000,target_kind='usd',target_value=100,pause_on_goal=True,expected_version=0)
             before=c.get('/api/status',headers=AUTH).json()
             self.assertEqual(c.get(path).status_code,401)
             self.assertEqual(c.post(path,json=p).status_code,401)
@@ -54,7 +54,10 @@ class DashboardTests(unittest.TestCase):
             r=c.get(path,headers=AUTH).json()
             self.assertEqual(r['plan']['monthly_pre_tax_usd'],'1875.00000000')
             self.assertIsNone(r['daily_realized_usd'])
-            self.assertFalse(r['real_income'] or r['goal_pause_enabled'])
+            self.assertFalse(r['real_income'])
+            self.assertTrue(r['goal_pause_enabled'])
+            self.assertFalse(r['goal_pause_latched'])
+            self.assertIsNone(r['goal_notification'])
             self.assertEqual(c.get('/api/status',headers=AUTH).json(),before)
         with self.app() as c:
             self.assertEqual(c.get(path,headers=AUTH).json()['settings']['version'],1)

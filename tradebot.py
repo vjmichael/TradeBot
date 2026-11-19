@@ -33,6 +33,7 @@ from market_stream import StreamJournal
 from risk_gate import Gate, initialize as initialize_gate, restrictive_transition as restrict_gate
 from paper_execution import PaperBridge
 import financial_goals
+from goal_control import entry_guard
 from paper_custody import authenticated_projection, workspace_key
 from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial, gate_projection, replay as replay_financial, CENT as FIN_CENT
 
@@ -77,6 +78,7 @@ class GoalSettings(BaseModel):
     zone: str = Field(min_length=1, max_length=100)
     target_kind: Literal["none","usd","points"]
     target_value: int = Field(ge=0, le=MAX_CENTS)
+    pause_on_goal: bool = False
     expected_version: int = Field(ge=0, le=20000)
 
 
@@ -108,7 +110,9 @@ class Store:
             raise PermissionError("data directory must be private")
         self.path = directory / "desk.sqlite3"
         self.cap = cap
-        self.gate = Gate(self.transaction, account_projection=authenticated_projection(lambda i:workspace_key(directory,i)))
+        keys=lambda i:workspace_key(directory,i)
+        projection=authenticated_projection(keys)
+        self.gate = Gate(self.transaction, account_projection=projection, entry_guard=entry_guard(keys,projection))
         self.paper_execution = PaperBridge(self.transaction,self.gate)
         self.financial = FinancialLedger(self.transaction)
 

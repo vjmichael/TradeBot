@@ -242,12 +242,13 @@ def restrictive_transition(db, reason, now):
 class Gate:
     """Internal trusted runtime object; do not expose publisher/claim methods to AI."""
 
-    def __init__(self, transaction, *, clock=time.time, account_projection=None):
+    def __init__(self, transaction, *, clock=time.time, account_projection=None, entry_guard=None):
         self.transaction = transaction
         self.clock = clock
         # Store supplies the ledger projection. Direct RiskState publication is
         # retained only for isolated Gate qualification fixtures.
         self.account_projection = account_projection
+        self.entry_guard = entry_guard
 
     def _now(self, db):
         now = integer(int(self.clock()), 1, MAX_TIME)
@@ -351,6 +352,8 @@ class Gate:
         # instance activation are gated separately. No LLM is consulted.
         if inst["strategy_family"] != "numerical-baseline" or inst["state"] != "RUN":
             raise GateRefusal("strategy_or_instance_not_running")
+        if self.entry_guard is not None:
+            self.entry_guard(db,proposal.instance_id,now)
         policy, ph = self._current(db,"policy","desk",Policy)
         if policy.expires <= now:
             raise GateRefusal("policy_expired")

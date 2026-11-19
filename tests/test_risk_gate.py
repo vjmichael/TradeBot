@@ -86,6 +86,20 @@ class GateTests(unittest.TestCase):
     def claim(self, receipt):
         return self.g.claim(receipt['intent_id'],'paper-worker',1)
 
+    def test_entry_restriction_at_admission_claim_and_manual_pause(self):
+        blocked=set()
+        def guard(db,instance,now):
+            if instance in blocked:raise GateRefusal('daily_goal_reached')
+        self.g.entry_guard=guard
+        first=self.admit()
+        blocked.add('a')
+        self.assertEqual(self.claim(first)['reason'],'daily_goal_reached')
+        self.assertEqual(self.admit(proposal_id='goal-blocked')['reason'],'daily_goal_reached')
+        self.assertEqual(self.second()['state'],'AUTHORIZED')
+        blocked.clear()
+        with self.h.tx() as db:db.execute('UPDATE desk SET human_pause=1')
+        self.assertEqual(self.admit(proposal_id='manual-pause')['reason'],'desk_paused')
+
     def test_size_and_exact_idempotency(self):
         first=self.admit()
         self.assertEqual((first['state'],first['notional_cents'],first['reserved_cents']),

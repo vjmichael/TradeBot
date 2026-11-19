@@ -10,15 +10,16 @@ from financial_ledger import SCALE, CENT, ZERO, LIMIT, AccountingError, apply, c
 from paper_custody import authenticate
 
 FIELDS = {'expenses_cents','income_cents','savings_cents','extra_costs_cents','tax_bps','zone','target_kind','target_value'}
-DEFAULT = dict(expenses_cents=0,income_cents=0,savings_cents=0,extra_costs_cents=0,tax_bps=0,zone='America/Phoenix',target_kind='none',target_value=0)
+DEFAULT = dict(expenses_cents=0,income_cents=0,savings_cents=0,extra_costs_cents=0,tax_bps=0,zone='America/Phoenix',target_kind='none',target_value=0,pause_on_goal=False)
 
 
 def validate(p):
-    require(type(p) is dict and set(p)==FIELDS,'invalid_goal_settings')
+    require(type(p) is dict and set(p) in (FIELDS,FIELDS|{'pause_on_goal'}),'invalid_goal_settings')
     for k in ('expenses_cents','income_cents','savings_cents','extra_costs_cents','target_value'):
         require(type(p[k]) is int and 0<=p[k]<=100_000_000_000,'invalid_goal_amount')
     require(type(p['tax_bps']) is int and 0<=p['tax_bps']<10000,'invalid_estimated_tax')
     require(p['target_kind'] in ('none','usd','points') and (p['target_kind']!='none' or p['target_value']==0),'invalid_primary_goal')
+    require(type(p.get('pause_on_goal',False)) is bool and (not p.get('pause_on_goal') or (p['target_kind']!='none' and p['target_value']>0)),'invalid_goal_pause')
     require(p['target_kind']!='points' or p['target_value']<=1_000_000,'invalid_point_target')
     require(type(p['zone']) is str and 1<=len(p['zone'])<=100 and not p['zone'].startswith(('/', 'posix/', 'right/')) and '..' not in p['zone'],'invalid_reporting_zone')
     try:ZoneInfo(p['zone'])
@@ -28,7 +29,16 @@ def validate(p):
 
 def initialize(db):
     # Additive reporting tables; not read by Gate, order sizing or reserve policy.
+    db.execute('CREATE TABLE IF NOT EXISTS goal_daily(instance TEXT NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(instance,day,kind))')
     db.execute('CREATE TABLE IF NOT EXISTS goal_versions(instance TEXT NOT NULL, version INTEGER NOT NULL, at INTEGER NOT NULL, effective_day TEXT NOT NULL, body TEXT NOT NULL, previous TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(instance,version))')
+
+
+def day_record(db,instance,day,kind):
+    row=db.execute('SELECT body,digest FROM goal_daily WHERE instance=? AND day=? AND kind=?',(instance,day,kind)).fetchone()
+    if row is None:return None
+    body=json.loads(row[0]);require(row[0]==canon(body) and row[1]==sha([instance,day,kind,body]),'goal_daily_integrity')
+    require(db.execute('SELECT 1 FROM fin_events WHERE digest=?',(body['journal_head'],)).fetchone(),'goal_daily_source_missing')
+    return body
 
 
 def versions(db,instance):
@@ -146,6 +156,10 @@ def report(transaction,instance,*,clock=time.time,key_for=None):
             pnl=None if day_pl is None else Decimal(day_pl)/SCALE
             reached=None if target_usd is None or pnl is None else pnl>=target_usd
             shortfall=None if target_usd is None or pnl is None else max(Decimal(0),target_usd-pnl)
+        stored=day_record(db,instance,day,'baseline')
+        if stored and base is not None:
+            require(stored['base']==base and stored['receipt']==receipt,'goal_baseline_changed')
+        notice=day_record(db,instance,day,'reached')
         mark=s['mark'] if s else None
         mark_value=0 if s and not qty(s) else qty(s)*mark[0]//SCALE if s and mark and 0<=now-mark[1]<=60 else None
         unrealized=None if mark_value is None else mark_value-s['inventory']
@@ -159,4 +173,5 @@ def report(transaction,instance,*,clock=time.time,key_for=None):
                     active_cash_usd=usd(s['active']) if s else None,protected_usd=usd(s['protected']) if s else None,
                     unrealized_usd=usd(unrealized),active_equity_usd=usd(equity),active_equity_change_usd=usd(equity-base if equity is not None and base is not None else None),reserve_earmarks_usd={k:usd(v) for k,v in s['reserve']['earmarks'].items()} if s else None,
                     actual_service_costs_usd=None,withdrawal_status='not_available',journal_head=head,posting_time_valid=valid,
-                    progress_basis='journal_posting_time',goal_pause_enabled=False,real_income=False)
+                    progress_basis='journal_posting_time',goal_pause_enabled=settings.get('pause_on_goal',False),
+                    goal_pause_latched=bool(notice and notice['pause']),goal_notification=notice,baseline_persisted=bool(stored and receipt),real_income=False)

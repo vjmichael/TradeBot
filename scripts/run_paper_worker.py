@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import signal
+import sqlite3
+import time
 import socket
 import sys
 from threading import Event
@@ -14,6 +16,8 @@ from financial_ledger import ident, require
 from paper_execution import validate_config
 from paper_custody import AuthenticatedNativeDriver, IdlePublisher, authenticated_projection, run_owned, workspace_key
 from risk_gate import Gate
+import financial_goals
+from goal_control import evaluate, entry_guard
 from paper_provision import instance_id, installed_workspace
 from paper_recovery import RecoveryDriver, RecoveryWorker
 from paper_monitor import heartbeat
@@ -47,6 +51,7 @@ def run(data,instance):
         from tradebot import InstanceSpec
         with tx() as db:
             installed_workspace(data,instance,db)
+            financial_goals.initialize(db)
             row=db.execute('SELECT id,name,pair,virtual_cents,mode FROM instances WHERE id=?',(instance,)).fetchone()
             require(row is not None and row['mode']=='PAPER','paper_instance_required')
             pair=row['pair']; spec=InstanceSpec(name=row['name'],pair=pair,virtual_cents=row['virtual_cents'],provider='none',strategy_family='numerical-baseline')
@@ -65,10 +70,18 @@ def run(data,instance):
         require(driver.binding==binding,'native_db_replaced')
         driver.close=bot.cleanup
         return driver
+    keys=lambda i:workspace_key(data,i)
+    projection=authenticated_projection(keys)
     def report(ready):
+        # Notification processing never interrupts risk-reducing protection.
+        if not ready:
+            try:
+                with tx() as db:evaluate(db,instance,int(time.time()),keys,verify=projection)
+            except (ValueError,OSError,KeyError,TypeError,sqlite3.Error):
+                print("Daily goal evaluation unavailable; new-entry checks remain enforced.",file=sys.stderr,flush=True)
         heartbeat(data,instance,tx,ready)
         notify(ready)
-    run_owned(work,tx,create,lambda:Gate(tx,account_projection=authenticated_projection(lambda i:workspace_key(data,i))),
+    run_owned(work,tx,create,lambda:Gate(tx,account_projection=projection,entry_guard=entry_guard(keys,projection)),
               stop=stop,heartbeat=report,on_idle=IdlePublisher(data,tx),worker_factory=RecoveryWorker)
 
 
