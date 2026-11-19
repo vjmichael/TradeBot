@@ -1,8 +1,8 @@
 # TradeBot
 
-A 24/7 cloud trading desk based on [design v0.7](docs/design-v0.7.md) and the binding [implementation decisions](docs/decisions.md). See the [task ledger](docs/tasks.md).
+A 24/7 cloud trading desk based on [design v0.7](docs/design-v0.7.md), the binding [v0.8 design addendum](docs/design-v0.8-addendum.md) and [implementation decisions](docs/decisions.md). See the [task ledger](docs/tasks.md).
 
-**TB-03 dashboard candidate. Paper-only, paused on startup. TB-02 native engine mechanism accepted; the dashboard does not start or control a connected worker, and no deployed services or real order capability exist.** The localhost API requires a developer-supplied admin token. Do not expose it publicly or enter production credentials; production HTTPS, first-administrator authentication, provider verification and deployment are still release gates.
+**TB-03 dashboard/browser acceptance passed; reproducible dependency integrity closeout pending. Paper-only, paused on startup. TB-02 native engine mechanism accepted; the dashboard does not start or control a connected worker, and no deployed services or real order capability exist.** The localhost API requires a developer-supplied admin token. Do not expose it publicly or enter production credentials; production HTTPS, first-administrator authentication, provider verification and deployment are still release gates.
 
 Developer checks (not end-user installation): install `requirements.txt`, then run `python -m unittest discover -s tests -v`. For local API development only, set `TRADEBOT_ADMIN_TOKEN` to a random secret of at least 32 characters, and `TRADEBOT_DATA_DIR` to a private directory, then run `python -m tradebot`. The eventual supported VPS deployment will require no user-entered shell commands. Never commit credentials.
 
