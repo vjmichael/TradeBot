@@ -1,0 +1,23 @@
+[Unit]
+Description=Maj Vaj bounded PAPER reserve evaluation (keyless)
+ConditionPathExists=/var/lib/maj-vaj/data/desk.sqlite3
+
+[Service]
+Type=oneshot
+User=maj-vaj
+Group=maj-vaj
+WorkingDirectory=/opt/maj-vaj
+ExecStart=/opt/maj-vaj/venv/bin/python -m reserve_runtime /var/lib/maj-vaj/data tick
+TimeoutStartSec=25s
+TimeoutStopSec=10s
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/maj-vaj/data
+InaccessiblePaths=-/var/lib/maj-vaj/approval
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX

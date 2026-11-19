@@ -16,7 +16,7 @@ FIELDS = {'rate_bps','floor_mode','floor_fixed','floor_bps','ceiling','cycle_cap
 
 def fresh():
     return dict(earmarks=dict.fromkeys(BUCKETS,0), released=0, saved=None, active=None,
-                cursor=0, reference=0, last_cycle=None, last_time=0, policy_released=0)
+                cursor=0, reference=0, last_cycle=None, last_time=0, policy_released=0, activated=[])
 
 
 def validate(policy):
@@ -77,6 +77,8 @@ def apply_event(s,kind,body):
     elif action=='activate':
         require(r['saved'] is not None and r['saved']['version']==p['version'] and r['saved']['policy']==p['policy'],'unsaved_policy')
         policy=validate(p['policy'])
+        require(p['version'] not in r['activated'],'policy_already_activated')
+        r['activated'].append(p['version'])
         require(now<policy['end'] and now<policy['expiry'] and not s['losses'] and not s['correction_locked'],'activation_blocked')
         ref,_,eligible,_=surplus(s,policy)
         r.update(active=copy.deepcopy(r['saved']),reference=ref,cursor=max(r['cursor'],eligible),
@@ -114,11 +116,12 @@ class ReserveManager:
 
     No default key, no public HTTP route, no model access. Test keys are fixtures.
     """
-    def __init__(self, transaction, approval_key, *, clock=time.time):
-        require(type(approval_key) is bytes and len(approval_key)>=32,'approval_broker_required')
+    def __init__(self, transaction, approval_key=None, *, clock=time.time):
+        require(approval_key is None or type(approval_key) is bytes and len(approval_key)>=32,'invalid_approval_broker_key')
         self.tx=transaction; self.key=approval_key; self.clock=clock
 
     def _grant(self, db, receipt, instance, action, payload, grant, now, head):
+        require(self.key is not None,'approval_broker_required')
         require(type(grant) is dict and set(grant)=={'expiry','head','signature'},'human_approval_required')
         expiry=amount(grant['expiry'],True)
         require(now<=expiry<=now+900 and (action=='revoke' or grant['head']==head),'stale_human_approval')
@@ -163,15 +166,18 @@ class ReserveManager:
 
     def submit(self,receipt,instance,action,payload,grant=None):
         ident(receipt); ident(instance); require(action in ('save','activate','revoke','earmark','tick','once'),'invalid_reserve_action')
-        request=sha([instance,action,payload,grant]); now=amount(int(self.clock()),True)
+        request=sha([instance,action,payload,grant])
         with self.tx() as db:
+            now=amount(int(self.clock()),True)
             states,last,count,head=replay(db); require(instance in states,'unfunded_instance')
             old=db.execute('SELECT body FROM fin_events WHERE id=?',(receipt,)).fetchone()
             if old:
                 require(json.loads(old[0])['request_hash']==request,'reserve_receipt_conflict')
                 return {'duplicate':True,'receipt':receipt}
             s=states[instance]; r=s['reserve']; p=copy.deepcopy(payload)
-            if action not in ('save','tick'):
+            if self.key is None:
+                require(action=='tick','approval_broker_required')
+            if action not in ('save','tick') or (action=='save' and grant is not None):
                 self._grant(db,receipt,instance,action,payload,grant,now,head)
             if action=='save':
                 require(type(p) is dict and set(p)=={'version','policy'},'invalid_saved_policy')
@@ -199,6 +205,8 @@ class ReserveManager:
             kind='reserve_'+action; body={'at':now,'payload':p}
             apply(states,last,instance,kind,receipt,body)
             event={'request_hash':request,'payload':body,'recorded_at':now}
+            if grant is not None:
+                event['approval']=copy.deepcopy(grant)
             n=count+1; digest=sha([n,receipt,instance,kind,event,head])
             db.execute('INSERT INTO fin_events VALUES(?,?,?,?,?,?,?)',(n,receipt,instance,kind,canon(event),head,digest))
             db.execute('UPDATE fin_head SET count=?,digest=? WHERE id=1',(n,digest))

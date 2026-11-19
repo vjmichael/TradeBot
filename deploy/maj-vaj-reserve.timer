@@ -1,0 +1,11 @@
+[Unit]
+Description=Maj Vaj keyless reserve evaluation clock (explicit install only)
+
+[Timer]
+OnCalendar=*-*-* *:*:00,30 UTC
+AccuracySec=1s
+Persistent=false
+Unit=maj-vaj-reserve.service
+
+[Install]
+WantedBy=timers.target
