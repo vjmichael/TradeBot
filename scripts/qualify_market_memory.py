@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import duckdb
 from market_memory import MarketMemory, export_parquet, session_profile, sha256_file
 from engine import SYMBOLS
+from market_lake import HistoricalLake
 
 
 def main():
@@ -31,6 +32,13 @@ def main():
             export = export_parquet(m,pair,60,view['start'],view['end'],as_of)
             if sha256_file(m.root/export['path']) != export['sha256'] or export['row_count'] != count:
                 raise RuntimeError('native Parquet export mismatch')
+            lake=HistoricalLake(m)
+            manifest=lake.compact(pair,60,view['start'],view['end'])
+            compacted=lake.query(pair,60,view['start'],view['end'],as_of)
+            storage=compacted.pop('storage')
+            if compacted!=view or not storage['parquet_partitions'] or not any(x['state']=='published' for x in manifest):
+                raise RuntimeError('partitioned native observation mismatch')
+            print(f'RECEIPT: {pair} verified {storage["parquet_partitions"]} active Parquet partitions against exact journal observations',flush=True)
             print(f'RECEIPT: {pair} preserved {count} actual public closed candles; 168 session bins; checksum-verified Parquet round-trip',flush=True)
             print('Coverage limited to recent observation; not historical readiness.',flush=True)
 

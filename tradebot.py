@@ -17,6 +17,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from engine import candles, MarketUnavailable
 from market_memory import MarketMemory, MemoryUnavailable, session_profile
+from market_lake import HistoricalLake
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
 SLOTS = frozenset({"grok", "telegram_desk", "telegram_recovery", "kraken_read_key", "kraken_read_secret"})
@@ -212,6 +213,7 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     async def lifespan(app):
         store.boot()
         app.state.market_memory = MarketMemory(directory)
+        app.state.market_lake = HistoricalLake(app.state.market_memory)
         yield
 
     market_lock = Lock()
@@ -315,11 +317,18 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         now = int(time.time())
         end = now // 3600 * 3600
         try:
-            profile = session_profile(app.state.market_memory.query(asset + "/USD", 60, end-int(days)*86400, end, now), zone)
-        except (MemoryUnavailable, sqlite3.Error, ValueError):
+            profile = session_profile(app.state.market_lake.query(asset + "/USD", 60, end-int(days)*86400, end, now), zone)
+        except (MemoryUnavailable, sqlite3.Error, ValueError, OSError):
             raise HTTPException(503, "Historical market memory unavailable") from None
         profile["state"] = "observed" if profile["coverage"] else "awaiting_history"
         return profile
+
+    @app.get("/api/market-storage", dependencies=[Depends(authorize)])
+    def market_storage():
+        try:
+            return app.state.market_lake.status()
+        except (MemoryUnavailable, sqlite3.Error, OSError):
+            raise HTTPException(503, "Historical storage status unavailable") from None
 
     @app.get("/api/markets/{asset}/candles", dependencies=[Depends(authorize)])
     def market(asset: Literal["BTC", "ETH", "SOL"], minutes: Literal["5", "15", "60", "240", "1440"] = "60"):
