@@ -61,3 +61,8 @@ No. Changing reserve buckets is internal accounting, not a new profit, loss, dep
 The research and strategy layers may recommend or evaluate trades. They do not authorize reinvestment or set the financial risk limits. The deterministic Gate checks the ledger, exposure, market freshness and explicit authority. The reserve scheduler may only evaluate a previously approved policy. A local approval passphrase and exact review are separate from background scheduling. Production operator authentication, OS process isolation, actual independent receipt collection, and installation have not yet been qualified. No real-money mode is implied.
 
 See [binding financial design](tb-fin-01.md) and [reserve engine](tb-fin-01c.md) for technical requirements. The graphical Experiment → Apply/Update → ON/OFF experience is still a later acceptance gate.
+
+
+### What happens when I switch between paper and live trading?
+
+The planned Paper Trading switch defaults ON. The current build cannot trade real money. In the future, turning it OFF will display a separate real-money loss/no-guaranteed-profit warning and require explicit authenticated approval, exact capital and risk limits, and all readiness checks. Once live and authorized to RUN, Maj Vaj may trade autonomously within those limits only. Turning it ON will warn that new real-money entries will stop and unresolved positions may incur losses or fees. Real positions are not silently abandoned or liquidated: the system retains live-exit-only protection until verified resolution or authorized manual handoff. Cancel leaves the current state unchanged. Paper and live accounts remain separate. See [TB-LIVE-01](tb-live-01.md) for the full warning and release requirements.

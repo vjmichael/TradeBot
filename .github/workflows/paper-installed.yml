@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/qualify_installed_paper.py'
       - 'scripts/qualify_installed_paper.sh'
+      - 'requirements-native-worker.txt'
       - '.github/workflows/paper-installed.yml'
   workflow_dispatch:
 permissions:
@@ -20,6 +21,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Initialize evidence even if installation fails
+        run: |
+          mkdir -p r3r1-evidence
+          printf '%s\n' "$GITHUB_SHA" > r3r1-evidence/project-sha.txt
       - name: Install exact qualification source and native engine
         shell: bash
         run: |
@@ -32,11 +37,17 @@ jobs:
           sudo install -d -m 0755 /opt/maj-vaj
           git archive "$GITHUB_SHA" | sudo tar -x --no-same-owner -C /opt/maj-vaj
           sudo "$(command -v python)" -m venv /opt/maj-vaj/venv
-          sudo /opt/maj-vaj/venv/bin/python -m pip install --disable-pip-version-check -r /opt/maj-vaj/requirements.txt -r /opt/maj-vaj/requirements-market.txt 'freqtrade @ git+https://github.com/freqtrade/freqtrade.git@4cf0351e08d26e96a6429ef48103b726bb230cf8'
+          sudo /opt/maj-vaj/venv/bin/python -m pip install --disable-pip-version-check -r /opt/maj-vaj/requirements-native-worker.txt 'freqtrade @ git+https://github.com/freqtrade/freqtrade.git@4cf0351e08d26e96a6429ef48103b726bb230cf8' 2>&1 | tee r3r1-evidence/native-install.log
           sudo /opt/maj-vaj/venv/bin/python -m pip check
           /opt/maj-vaj/venv/bin/python -m pip freeze > r3r1-evidence/installed-dependencies.txt
           /opt/maj-vaj/venv/bin/python -c "import importlib.metadata as m,json; d=m.distribution('freqtrade'); p=json.loads(d.read_text('direct_url.json')); assert p['vcs_info']['commit_id']=='4cf0351e08d26e96a6429ef48103b726bb230cf8'; assert d.version.startswith('2026.10'); print(d.version, p['vcs_info']['commit_id'])" | tee r3r1-evidence/native-source.txt
           printf '%s\n' "$GITHUB_SHA" > r3r1-evidence/project-sha.txt
+      - name: Verify worker environment against accounting and recovery regressions
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE"
+          PYTHONPATH="$GITHUB_WORKSPACE/tests:$GITHUB_WORKSPACE" /opt/maj-vaj/venv/bin/python -m unittest -v test_financial_ledger test_financial_reconciliation test_reserve_policy test_reserve_runtime test_paper_execution test_paper_supervisor test_paper_custody test_paper_provision test_paper_recovery test_paper_monitor 2>&1 | tee r3r1-evidence/native-worker-regression.log
       - name: Qualify installed worker and real one-hour public PAPER fixture
         run: sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted bash /opt/maj-vaj/scripts/qualify_installed_paper.sh "$GITHUB_WORKSPACE/r3r1-evidence"
       - name: Publish non-secret evidence, including incomplete results
