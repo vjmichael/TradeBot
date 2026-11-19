@@ -20,6 +20,9 @@ from market_memory import MarketMemory, MemoryUnavailable, session_profile
 from market_lake import HistoricalLake
 from market_quality import QualityMemory
 from economic_memory import EconomicMemory, CALENDAR, MACRO, FED
+from data_lifecycle import coverage
+from data_preparation import Preparation
+from market_stream import StreamJournal
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
 SLOTS = frozenset({"grok", "telegram_desk", "telegram_recovery", "kraken_read_key", "kraken_read_secret"})
@@ -218,7 +221,11 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         app.state.market_lake = HistoricalLake(app.state.market_memory)
         app.state.market_quality = QualityMemory(app.state.market_memory)
         app.state.economic_memory = EconomicMemory(directory)
-        yield
+        app.state.preparation = Preparation(directory)
+        try:
+            yield
+        finally:
+            app.state.preparation.close()
 
     market_lock = Lock()
     market_cache = {}
@@ -361,6 +368,23 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
             raise HTTPException(422, "Invalid market quality settings") from None
         except (MemoryUnavailable, sqlite3.Error, OSError):
             raise HTTPException(503, "Market quality data unavailable") from None
+
+    @app.get("/api/data-preparation", dependencies=[Depends(authorize)])
+    def data_preparation():
+        try:
+            result = coverage(app.state.market_memory)
+            result["job"] = app.state.preparation.status()
+            result["streams"] = StreamJournal(app.state.market_memory).status()
+            return result
+        except (MemoryUnavailable, sqlite3.Error, OSError, ValueError):
+            raise HTTPException(503, "Data preparation status unavailable") from None
+
+    @app.post("/api/data-preparation/{mode}", dependencies=[Depends(authorize)])
+    def start_data_preparation(mode: Literal["prepare", "repair", "collect", "cancel"]):
+        try:
+            return app.state.preparation.cancel() if mode == "cancel" else app.state.preparation.start(mode)
+        except (MemoryUnavailable, sqlite3.Error, OSError, ValueError):
+            raise HTTPException(409, "Data preparation operation unavailable") from None
 
     @app.get("/api/market-storage", dependencies=[Depends(authorize)])
     def market_storage():

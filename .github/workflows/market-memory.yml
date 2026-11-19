@@ -14,6 +14,13 @@ on:
       - 'scripts/ingest_market.py'
       - 'scripts/qualify_market_memory.py'
       - 'tests/test_market_memory.py'
+      - 'data_lifecycle.py'
+      - 'data_preparation.py'
+      - 'scripts/prepare_data.py'
+      - 'scripts/manage_data.py'
+      - 'scripts/qualify_data_lifecycle.py'
+      - 'tests/test_data_lifecycle.py'
+      - 'tests/test_data_preparation.py'
       - 'requirements-market.txt'
       - '.github/workflows/market-memory.yml'
   workflow_dispatch:
@@ -22,7 +29,7 @@ permissions:
 jobs:
   native-market-memory:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,3 +44,5 @@ jobs:
       - run: python scripts/qualify_market_lake.py
 
       - run: python scripts/qualify_market_quality.py
+
+      - run: python scripts/qualify_data_lifecycle.py
