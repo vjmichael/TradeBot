@@ -1,4 +1,4 @@
-"""TB-01 local-only foundation. No exchange or order transport exists."""
+"""Local paper-only foundation; public Kraken market data only."""
 import hmac
 import os
 import sqlite3
@@ -6,6 +6,8 @@ from contextlib import closing, contextmanager, asynccontextmanager
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
+from threading import Lock
+import time
 
 from cryptography.fernet import Fernet
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -13,6 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, ConfigDict, Field
+from engine import candles, MarketUnavailable
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
 SLOTS = frozenset({"grok", "telegram_desk", "telegram_recovery", "kraken_read_key", "kraken_read_secret"})
@@ -135,6 +138,8 @@ def create_app(directory: Path, token: str, cap: int = 0):
         store.boot()
         yield
 
+    market_lock = Lock()
+    market_cache = {}
     app = FastAPI(title="TradeBot development foundation", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
@@ -170,6 +175,21 @@ def create_app(directory: Path, token: str, cap: int = 0):
     def pause():
         store.pause()
         return store.status()
+
+    @app.get("/api/markets/{asset}/candles", dependencies=[Depends(authorize)])
+    def market(asset: Literal["BTC", "ETH", "SOL"], minutes: Literal["5", "15", "60", "240", "1440"] = "60"):
+        # Bounded cache and one in-flight upstream call across the three markets.
+        key = (asset, minutes)
+        with market_lock:
+            cached = market_cache.get(key)
+            if cached is not None and time.monotonic() - cached[0] < 30:
+                return cached[1]
+            try:
+                data = candles(asset + "/USD", int(minutes))
+            except MarketUnavailable:
+                raise HTTPException(503, "Market data unavailable") from None
+            market_cache[key] = (time.monotonic(), data)
+            return data
 
     return app
 

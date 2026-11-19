@@ -4,8 +4,8 @@ No automatic progression to real money. Design v0.7 plus decisions.md governs ev
 
 | ID | Scope / acceptance | State |
 |---|---|---|
-| TB-01 | Repository, design, ledger, local authenticated API, SQLite journal, paper-only instances and bounded virtual allocations, internal encrypted credentials, dry-run contract, negative/restart tests | Foundation candidate; local test and publication receipts required |
-| TB-02 | Pin and qualify Freqtrade/FreqAI upstream images, Kraken public spot data and engine dry-run contract; no order capability; verified simulated lifecycle | Pending |
+| TB-01 | Repository, design, ledger, local authenticated API, SQLite journal, paper-only instances and bounded virtual allocations, internal encrypted credentials, dry-run contract, negative/restart tests | Local 8/8 + exact GitHub publication 7d483dbb; remote CI unconfirmed |
+| TB-02 | Pin and qualify Freqtrade/FreqAI upstream images, Kraken public spot data and engine dry-run contract; no order capability; verified simulated lifecycle | Candidate: local contract/API tests pass; native acceptance pending |
 | TB-03 | React responsive dashboard, authenticated setup, add-instance progression, economic calendar, privacy-safe health, HTTPS/access controls and secure credential entry | Pending |
 | TB-04 | Point-in-time historical ingestion, source licenses, coverage/gaps (5+ years where available), venue/product identity, resumable jobs, shared evidence, costs | Pending |
 | TB-05 | Grok Scout/Researcher/Analyst/Strategist/Reviewer, structured evidence and proposals, model isolation, budgets, stale/conflict/injection tests | Pending |
