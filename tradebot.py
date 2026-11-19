@@ -31,6 +31,7 @@ from storage_telemetry import storage_growth
 from storage_management import status as maintenance_status
 from market_stream import StreamJournal
 from risk_gate import Gate, initialize as initialize_gate, restrictive_transition as restrict_gate
+from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
 SLOTS = frozenset({"grok", "telegram_desk", "telegram_recovery", "kraken_read_key", "kraken_read_secret"})
@@ -92,6 +93,7 @@ class Store:
         self.path = directory / "desk.sqlite3"
         self.cap = cap
         self.gate = Gate(self.transaction)
+        self.financial = FinancialLedger(self.transaction)
 
     @contextmanager
     def transaction(self):
@@ -112,7 +114,7 @@ class Store:
             db.execute("PRAGMA journal_mode=WAL")
         with self.transaction() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3):
+            if version not in (0, 1, 2, 3, 4):
                 raise RuntimeError("unsupported schema version")
             db.execute("CREATE TABLE IF NOT EXISTS desk (id INTEGER PRIMARY KEY CHECK(id=1), paused INTEGER NOT NULL CHECK(paused=1), human_pause INTEGER NOT NULL CHECK(human_pause IN (0,1)))")
             db.execute("CREATE TABLE IF NOT EXISTS instances (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, pair TEXT NOT NULL CHECK(pair IN ('BTC/USD','ETH/USD','SOL/USD')), virtual_cents INTEGER NOT NULL CHECK(virtual_cents>0), mode TEXT NOT NULL CHECK(mode='PAPER'), state TEXT NOT NULL CHECK(state='PAUSED'))")
@@ -127,7 +129,7 @@ class Store:
             db.execute("UPDATE desk SET virtual_cap_cents=? WHERE id=1 AND cap_set_by_user=0", (self.cap,))
             db.execute("UPDATE desk SET paused=1 WHERE id=1")
             db.execute("INSERT INTO journal(event) VALUES ('startup_paused')")
-            if version == 3:
+            if version >= 3:
                 # Never silently reconstruct a missing established intent ledger.
                 required = {"gate_clock", "gate_inputs", "gate_current", "gate_decisions", "gate_intents", "gate_events"}
                 present = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -137,8 +139,12 @@ class Store:
                 # Initialize only as an atomic versioned migration; established
                 # ledgers are never recreated during ordinary startup.
                 initialize_gate(db)
-                db.execute("PRAGMA user_version=3")
             restrict_gate(db, "startup", int(time.time()))
+            if version < 4:
+                initialize_financial(db)
+            # Always verify the existing journal; never recreate a missing v4 ledger.
+            start_financial(db)
+            db.execute("PRAGMA user_version=4")
 
     def status(self):
         with self.transaction() as db:

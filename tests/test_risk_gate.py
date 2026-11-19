@@ -268,7 +268,7 @@ class GateTests(unittest.TestCase):
             # Only a fixture transplant: the actual runtime is never unpaused.
             with store.transaction() as db:
                 db.executemany("INSERT INTO gate_intents VALUES("+",".join("?" for _ in rows[0])+")",rows)
-                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0],3)
+                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0],4)
             store.pause()
             with store.transaction() as db:
                 states=dict(db.execute("SELECT id,state FROM gate_intents").fetchall())
@@ -289,7 +289,7 @@ class GateTests(unittest.TestCase):
             store.boot()
             existing=store.add(InstanceSpec(name='existing',pair='BTC/USD',virtual_cents=5000))
             with store.transaction() as db:
-                for table in ('gate_clock','gate_inputs','gate_current','gate_decisions','gate_intents','gate_events'):
+                for table in ('gate_clock','gate_inputs','gate_current','gate_decisions','gate_intents','gate_events','fin_events','fin_conflicts','fin_head'):
                     db.execute("DROP TABLE "+table)
                 db.execute("PRAGMA user_version=2")
             store.boot()
@@ -297,7 +297,7 @@ class GateTests(unittest.TestCase):
             self.assertEqual(store.status()['allocated_cents'],5000)
             self.assertTrue(store.status()['paused'])
             with store.transaction() as db:
-                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0],3)
+                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0],4)
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM gate_intents").fetchone()[0],0)
 
 if __name__ == '__main__':
