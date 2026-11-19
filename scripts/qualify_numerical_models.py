@@ -4,6 +4,7 @@ Run in the pinned image, with a readonly source tree and network disabled.
 No strategy, order, exchange credentials or production model artifacts.
 """
 import json
+import os
 import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -11,6 +12,7 @@ from numerical_models import fit,verify_model,evaluate,verify_evaluation,COHORTS
 from numerical_dataset import verify
 
 def main():
+    assert (os.getuid(),os.getgid())==(1000,1000), 'unexpected native worker identity'
     directory=Path(sys.argv[1]);sha=sys.argv[2];dest=Path(sys.argv[3])
     data=verify(directory,sha)
     for asset in data['markets']:
