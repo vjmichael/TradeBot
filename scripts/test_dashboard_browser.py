@@ -15,10 +15,13 @@ TOKEN='browser-test-only-access-'*3
 
 
 def exercise(page, reload_page, errors, external, mode):
+    expect(page.get_by_role('heading',name='Maj Vaj Trade Bot',exact=True)).to_be_visible()
     def sign_in():
         page.get_by_label('Admin access token').fill(TOKEN);page.get_by_role('button',name='Sign in',exact=True).click();expect(page.get_by_role('heading',name='Dashboard',exact=True)).to_be_visible()
     page.get_by_label('Admin access token').fill('bad-token');page.get_by_role('button',name='Sign in',exact=True).click();expect(page.get_by_role('alert')).to_contain_text('Authentication failed')
     sign_in()
+    expect(page.locator('.brand')).to_have_text('Maj Vaj Trade Bot')
+    if mode=='real local API':expect(page).to_have_title('Maj Vaj Trade Bot — Trading desk')
     page.get_by_role('button',name='Settings',exact=True).click()
     for label,value in [('Grok API key','synthetic-grok-test'),('Kraken read-only API key','synthetic-kraken-key'),('Kraken API secret','synthetic-kraken-secret'),('Telegram Desk token','synthetic-desk-token'),('Telegram Recovery token','synthetic-recovery-token')]:page.get_by_label(label).fill(value)
     page.get_by_role('button',name='Save credentials').click();expect(page.get_by_role('status')).to_contain_text('Credentials stored');expect(page.get_by_label('Grok API key')).to_have_value('')

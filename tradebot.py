@@ -229,7 +229,7 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
 
     market_lock = Lock()
     market_cache = {}
-    app = FastAPI(title="TradeBot development dashboard", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Maj Vaj Trade Bot development dashboard", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 

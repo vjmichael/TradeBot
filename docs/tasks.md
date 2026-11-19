@@ -1,4 +1,6 @@
-# Master development ledger
+# Maj Vaj Trade Bot — Master development ledger
+
+Product renamed from TradeBot; historical internal identifiers and all task IDs remain unchanged. Public branding updated; existing financial and execution authorization gates remain binding.
 
 No automatic progression to real money. Design v0.7 plus the binding [v0.8 addendum](design-v0.8-addendum.md), the binding [TB-FIN-01 financial protection amendment](tb-fin-01.md), and [decisions.md](decisions.md) govern every group. Acceptance must demonstrate behavior, not just source presence. Consolidate tests per task group. No live keys in CI; no paid resources without authorization.
 
@@ -25,7 +27,7 @@ The design's Phase 0 secure deployment gate precedes operational Phase 1 researc
 |---|---|---|
 | TB-04F2A | Durable opt-in data scheduler and retry/rotation, snapshot-verified bounded book retention, restart and cancel regression | Local candidate; native regression pending |
 | TB-04F2B | Native actual archive-to-recent gap recovery at scale, measurable progress/cursor continuity, long-duration independent Linux service supervision, GUI schedule and storage maintenance, measured capacity/backpressure and crash/restore qualification | Pending |
-| TB-04F3 | User-configurable Kraken Spot market registry and pair selection; canonical venue mapping, eligibility, precision and status, per-pair source/history/freshness/cost/readiness and durable enable/remove lifecycle; migrate the three initial markets as defaults | Pending — before general-market training or paper readiness |
+| TB-04F3 | User-configurable Kraken Spot market registry and pair selection; directly fetch and persist a versioned public AssetPairs directory snapshot (independent of Freqtrade/FreqAI/Grok), searchable user selection and fresh selected-market validation; canonical venue mapping, eligibility, precision and status, per-pair source/history/freshness/cost/readiness and durable enable/remove lifecycle; migrate the three initial markets as defaults | Pending — before general-market training or paper readiness |
 | TB-04F4 | Consolidate full evidence coverage, source retention, historical readiness, per-market reports and user-facing data preparation; all unresolved gaps explicitly classified | Pending |
 
 
