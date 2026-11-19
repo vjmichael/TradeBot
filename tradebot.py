@@ -14,8 +14,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from engine import candles, MarketUnavailable
+from market_memory import MarketMemory, MemoryUnavailable, session_profile
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
 SLOTS = frozenset({"grok", "telegram_desk", "telegram_recovery", "kraken_read_key", "kraken_read_secret"})
@@ -30,11 +31,17 @@ class InstanceSpec(BaseModel):
     virtual_cents: int = Field(gt=0, le=MAX_CENTS)
     exchange: Literal["kraken"] = "kraken"
     mode: Literal["PAPER"] = "PAPER"
-    provider: Literal["grok"] = "grok"
+    provider: Literal["grok", "none"] = "grok"
     model: str = Field(default="", max_length=120, pattern=r"^[A-Za-z0-9._:/-]*$")
     strategy_family: Literal["research-assisted", "numerical-baseline"] = "research-assisted"
     history_years: int = Field(default=5, ge=1, le=20)
     monthly_budget_cents: int = Field(default=0, ge=0, le=MAX_CENTS)
+
+    @model_validator(mode="after")
+    def no_provider_boundary(self):
+        if self.provider == "none" and (self.strategy_family != "numerical-baseline" or self.model or self.monthly_budget_cents):
+            raise ValueError("provider-free plans must be numerical-only without a model or research budget")
+        return self
 
 
 class PaperCapital(BaseModel):
@@ -204,6 +211,7 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     @asynccontextmanager
     async def lifespan(app):
         store.boot()
+        app.state.market_memory = MarketMemory(directory)
         yield
 
     market_lock = Lock()
@@ -301,6 +309,17 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     @app.get("/api/calendar", dependencies=[Depends(authorize)])
     def calendar():
         return {"state": "not_connected", "events": [], "source": None}
+
+    @app.get("/api/markets/{asset}/session-profile", dependencies=[Depends(authorize)])
+    def market_profile(asset: Literal["BTC", "ETH", "SOL"], days: Literal["30", "90", "365", "1825"] = "90", zone: Literal["UTC", "America/Phoenix", "America/New_York", "Europe/London", "Asia/Tokyo", "Asia/Hong_Kong"] = "UTC"):
+        now = int(time.time())
+        end = now // 3600 * 3600
+        try:
+            profile = session_profile(app.state.market_memory.query(asset + "/USD", 60, end-int(days)*86400, end, now), zone)
+        except (MemoryUnavailable, sqlite3.Error, ValueError):
+            raise HTTPException(503, "Historical market memory unavailable") from None
+        profile["state"] = "observed" if profile["coverage"] else "awaiting_history"
+        return profile
 
     @app.get("/api/markets/{asset}/candles", dependencies=[Depends(authorize)])
     def market(asset: Literal["BTC", "ETH", "SOL"], minutes: Literal["5", "15", "60", "240", "1440"] = "60"):

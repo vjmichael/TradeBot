@@ -94,3 +94,7 @@ Later investigate a read-only adapter from frozen permitted point-in-time datase
 ## 8. Work mapping
 
 TB-04 independent ingestion, memory and session profiling; TB-05 limited specialist; TB-06 baseline, temporal features and AI ablations; TB-07 unchanged deterministic authority; TB-08 shared infrastructure and isolated portfolios; TB-10 storage sizing, backups and DigitalOcean qualification; TB-11 AI-absence/outage, caps, session correctness and original security/fault drills; TB-12 required real-time paper observation and forward evaluation. Deferred TB-R01 only afterward. No waiver of any existing deployment, recovery, safety, human approval or historical-readiness gate.
+
+### TB-R01 experiment clarification — 2026-11-18
+
+After completing TradeBot, an optional fun, separately scoped Cognitum research project may consume frozen permitted database snapshots, continuous genuine public market observations, and TradeBot paper-decision/fill/outcome streams via a read-only versioned adapter. Connect Cognitum only to independently isolated virtual portfolios and simulated venue adapters, with matched clocks, fees, spreads, slippage, capital and deterministic authorization. Keep observations and synthetic fills explicitly distinct; use delayed outcome labels and prevent future-outcome leakage. No connection to a live-order endpoint, trading key or real-money account. The adapter is deferred, not part of TB-04 or a replacement of the accepted database/FreqAI/Gate. Establish reproducible baseline comparisons before claiming any improvement.

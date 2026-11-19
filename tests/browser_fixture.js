@@ -9,6 +9,7 @@ window.fetch=async (path,request)=>{
   if(path==='/api/instances'&&request.method==='GET')return response(f.instances);
   if(path==='/api/setup')return response(f.setup);
   if(path==='/api/calendar')return response(f.calendar);
+  if(path.startsWith('/api/markets/BTC/session-profile?'))return response({pair:'BTC/USD',coverage:0,expected:2160,missing:2160,conflicts:0,bins:[],state:'awaiting_history'});
   if(path==='/api/setup/credentials'){
     for(const key of Object.keys(body))f.setup.credentials[key]='stored_unverified';
     return response(f.setup);

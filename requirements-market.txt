@@ -1,0 +1,2 @@
+# TB-04A native analytics dependency; no LLM or network data dependency.
+duckdb==1.4.4
