@@ -32,6 +32,7 @@ from storage_management import status as maintenance_status
 from market_stream import StreamJournal
 from risk_gate import Gate, initialize as initialize_gate, restrictive_transition as restrict_gate
 from paper_execution import PaperBridge
+from paper_custody import authenticated_projection, workspace_key
 from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial, gate_projection, replay as replay_financial, CENT as FIN_CENT
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
@@ -93,7 +94,7 @@ class Store:
             raise PermissionError("data directory must be private")
         self.path = directory / "desk.sqlite3"
         self.cap = cap
-        self.gate = Gate(self.transaction, account_projection=gate_projection)
+        self.gate = Gate(self.transaction, account_projection=authenticated_projection(lambda i:workspace_key(directory,i)))
         self.paper_execution = PaperBridge(self.transaction,self.gate)
         self.financial = FinancialLedger(self.transaction)
 

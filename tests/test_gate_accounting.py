@@ -67,7 +67,8 @@ class GateAccountingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             store=Store(Path(name),12000)
             store.boot()
-            self.assertIs(store.gate.account_projection,gate_projection)
+            self.assertIsNotNone(store.gate.account_projection)
+            self.assertIsNot(store.gate.account_projection,gate_projection)
             with self.assertRaisesRegex(GateRefusal,'ledger_projection_required'):
                 store.gate.trusted_account(self.base.a)
             self.assertTrue(store.status()['paused'])

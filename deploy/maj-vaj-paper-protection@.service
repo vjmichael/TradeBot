@@ -1,8 +1,9 @@
 [Unit]
-Description=Maj Vaj recovery-only paper protection (%i)
+Description=Maj Vaj leased paper execution and protection (%i)
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/var/lib/maj-vaj/data/paper/%i/paper.sqlite
+ConditionPathExists=/var/lib/maj-vaj/data/paper/%i/receipt.key
 
 [Service]
 Type=notify

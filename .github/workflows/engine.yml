@@ -5,6 +5,7 @@ on:
       - 'engine.py'
       - 'paper_execution.py'
       - 'paper_supervisor.py'
+      - 'paper_custody.py'
       - 'scripts/run_paper_worker.py'
       - 'deploy/maj-vaj-paper-protection@.service'
       - 'financial_ledger.py'

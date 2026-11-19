@@ -217,7 +217,7 @@ def gate_native_bridge(work):
     # Copy the exact candidate modules into the pinned native environment.
     # Synthetic book and isolated database only; no public or private requests.
     for path in ("financial_ledger.py", "reserve_policy.py", "risk_gate.py",
-                 "paper_execution.py", "paper_supervisor.py", "tests/test_risk_gate.py",
+                 "paper_execution.py", "paper_supervisor.py", "paper_custody.py", "tests/test_risk_gate.py",
                  "engine_strategies/GatePaper.py", "scripts/qualify_gate_native.py"):
         shutil.copyfile(ROOT / path, work / Path(path).name)
     result = run(work, ["/work/qualify_gate_native.py"], timeout=180,
@@ -228,6 +228,8 @@ def gate_native_bridge(work):
     for kind in ("stop","target"):
         if f"RECEIPT: native protected {kind} exit while paused, verified terminal wallet and released reservation" not in result.splitlines():
             raise AssertionError("missing native protection receipt: " + kind)
+    if "RECEIPT: authenticated native entry, reopened ORM and terminal fee evidence, 100 protection observations, verified settlement" not in result.splitlines():
+        raise AssertionError("missing authenticated native recovery receipt")
 
 
 def main():

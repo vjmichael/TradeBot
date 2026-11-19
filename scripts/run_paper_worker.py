@@ -1,4 +1,4 @@
-"""Explicit Linux recovery-only protection service. Never starts an entry loop."""
+"""Explicit Linux leased paper service. No activation or autonomous strategy entries."""
 import argparse
 import json
 import os
@@ -12,7 +12,8 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from financial_ledger import ident, require
 from paper_execution import validate_config
-from paper_supervisor import NativeProtectionDriver, supervise
+from paper_custody import AuthenticatedNativeDriver, IdlePublisher, authenticated_projection, run_owned, workspace_key
+from risk_gate import Gate
 from reserve_runtime import desk_transaction, private_directory, private_open
 
 
@@ -55,10 +56,13 @@ def run(data,instance):
         validate_config(config,pair)
         require(not config.get('external_message_consumer',{}).get('enabled'),'unsafe_native_service')
         bot=FreqtradeBot(config)
-        driver=NativeProtectionDriver(bot,path,instance)
+        key,binding=workspace_key(data,instance)
+        driver=AuthenticatedNativeDriver(bot,path,instance,key)
+        require(driver.binding==binding,'native_db_replaced')
         driver.close=bot.cleanup
         return driver
-    supervise(work,tx,create,stop=stop,heartbeat=notify)
+    run_owned(work,tx,create,lambda:Gate(tx,account_projection=authenticated_projection(lambda i:workspace_key(data,i))),
+              stop=stop,heartbeat=notify,on_idle=IdlePublisher(data,tx))
 
 
 if __name__=='__main__':

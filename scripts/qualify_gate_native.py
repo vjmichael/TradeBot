@@ -21,6 +21,7 @@ from GatePaper import GatePaper
 from financial_ledger import FinancialLedger, SCALE, initialize, gate_projection
 from paper_execution import NativeDriver, PaperBridge
 from paper_supervisor import NativeProtectionDriver, ProtectionWorker
+from paper_custody import AuthenticatedNativeDriver, observation, publish, authenticated_projection
 from risk_gate import Gate
 from test_risk_gate import GateTests
 
@@ -53,7 +54,7 @@ class BookFixture:
     def fetch_order(self,order_id,pair):return self._dry_run_open_orders[order_id]
 
 
-def qualify(protection=None):
+def qualify(protection=None, authenticated=False):
     base=GateTests('test_size_and_exact_idempotency');base.setUp()
     try:
         h=base.h
@@ -86,7 +87,22 @@ def qualify(protection=None):
                 trade.update_trade(trade.select_order_by_order_id(order_id))
                 return False
             bot.update_trade_state=fee_update
-            driver=NativeDriver(bot,path,'a');bridge=PaperBridge(h.tx,gate,clock=lambda:h.now)
+            if authenticated:
+                key=b'native-qualification-only-key-32'[:32]
+                assert len(key)==32
+                driver=AuthenticatedNativeDriver(bot,path,'a',key,clock=lambda:h.now)
+                # The other portfolio is an explicit independent flat wallet fixture.
+                class Flat:
+                    instance='b';binding='b'*64
+                    def observation(self,row):return {'quote':60*SCALE,'qty':0}
+                peer=Flat();peer.key=key
+                key_for=lambda i:(key,driver.binding if i=='a' else peer.binding)
+                gate=Gate(h.tx,clock=lambda:h.now,account_projection=authenticated_projection(key_for))
+                denied=gate.admit(replace(base.req,proposal_id='unsigned-denied',evidence_id=market.receipt))
+                assert denied['reason']=='financial:worker_evidence_required',denied
+                publish(h.tx,{i:observation(h.tx,source,clock=lambda:h.now) for i,source in [('a',driver),('b',peer)]},key_for,clock=lambda:h.now)
+            else:driver=NativeDriver(bot,path,'a')
+            bridge=PaperBridge(h.tx,gate,clock=lambda:h.now)
             assert not bot.strategy.confirm_trade_entry('BTC/USD','limit',.1,100.,'GTC',datetime.now(timezone.utc),'unapproved','long')
             intent=gate.admit(replace(base.req,proposal_id='native-proposal',evidence_id=market.receipt))
             assert intent['state']=='AUTHORIZED',intent
@@ -104,7 +120,21 @@ def qualify(protection=None):
                 bot.get_valid_price=lambda custom,proposed:proposed
                 bot.cancel_stoploss_on_exchange=lambda trade,**kwargs:trade
                 bot._exit_reason_cache={}
-                worker=ProtectionWorker(h.tx,NativeProtectionDriver(bot,path,'a',clock=lambda:h.now),clock=lambda:h.now)
+                if authenticated:
+                    # Reopen real ORM persistence, discard in-memory dry-run book
+                    # orders and construct a fresh authenticated native driver.
+                    Trade.session.remove()
+                    init_db(config['db_url'])
+                    bot.exchange=BookFixture(config)
+                    bot.wallets=Wallets(config,bot.exchange)
+                    driver=AuthenticatedNativeDriver(bot,path,'a',key,clock=lambda:h.now)
+                    worker=ProtectionWorker(h.tx,driver,clock=lambda:h.now)
+                    for _ in range(100):
+                        result=worker.tick(intent['intent_id'])
+                        assert result['state']=='MONITORING' and result['accounting']=='ok',result
+                        h.now+=2
+                else:
+                    worker=ProtectionWorker(h.tx,NativeProtectionDriver(bot,path,'a',clock=lambda:h.now),clock=lambda:h.now)
                 with h.tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
                 bot.exchange.mid=120. if protection=='target' else 90.
                 action=worker.tick(intent['intent_id']);assert action['reason']==protection,action
@@ -114,6 +144,8 @@ def qualify(protection=None):
                 else:assert state['active']<60*SCALE and state['protected']==0,state
                 assert worker.tick(intent['intent_id'])['state']=='ACCOUNTED'
                 print('RECEIPT: native protected '+protection+' exit while paused, verified terminal wallet and released reservation',flush=True)
+                if authenticated:
+                    print('RECEIPT: authenticated native entry, reopened ORM and terminal fee evidence, 100 protection observations, verified settlement',flush=True)
                 return
             # Controlled terminal sell uses real native simulator and ORM. This
             # tests reconciliation, not autonomous protective-exit scheduling.
@@ -139,3 +171,4 @@ if __name__=='__main__':
     qualify()
     qualify('stop')
     qualify('target')
+    qualify('target',authenticated=True)
