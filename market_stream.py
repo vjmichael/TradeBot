@@ -25,6 +25,10 @@ MAX_GAPS=MAX_QUERY_ROWS
 RECONNECT=(5,10,20,40,60)
 
 
+class FormingBoundaryUnavailable(ValueError):
+    """Previous forming bucket observed during a narrowly bounded rollover."""
+
+
 def exact_closed(pair, interval=60, *, client=None, now=None, symbols=SYMBOLS):
     """Same qualified public endpoint, but retain exact source decimals/count."""
     if pair not in symbols or interval not in (5,60): raise ValueError('unsupported repair market')
@@ -45,10 +49,29 @@ def exact_closed(pair, interval=60, *, client=None, now=None, symbols=SYMBOLS):
         # Forming candle is validated using an artificial close bound, never emitted.
         normalized=normalize([r[0],r[1],r[2],r[3],r[4],r[6],r[7]],interval,max(observed,r[0]+step))
         rows.append([r[0]*1000,*normalized[1:6],normalized[6]])
-    if rows[-1][0]//1000!=observed//step*step: raise ValueError('REST forming hour missing; retry')
+    expected=observed//step*step
+    if rows[-1][0]//1000!=expected:
+        if observed-expected<=30 and rows[-1][0]//1000==expected-step:
+            raise FormingBoundaryUnavailable('REST forming hour missing; retry')
+        raise ValueError('REST forming hour missing; retry')
     rows=rows[:-1]
     if observed-rows[-1][0]//1000>2*step: raise ValueError('stale REST observation')
     return {'exchange':'kraken','product':'spot','pair':pair,'interval_minutes':interval,'observed_at':observed,'candles':rows}
+
+
+def qualification_closed(pair, interval, *, fetch=exact_closed, sleep=time.sleep):
+    """Qualification only: bounded retry of an otherwise fully validated rollover.
+
+    Each attempt obtains a fresh public response and observation time. Never
+    relabel the old forming bucket, retry malformed data or publish placeholders.
+    Runtime collectors keep their existing pacing and failure handling.
+    """
+    for delay in (2,4,8,None):
+        try:return fetch(pair,interval)
+        except FormingBoundaryUnavailable:
+            if delay is None:raise
+            sleep(delay)
+    raise AssertionError('unreachable')
 
 
 class StreamJournal:

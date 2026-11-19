@@ -16,6 +16,8 @@ on:
       - 'scripts/ingest_quality.py'
       - 'scripts/qualify_market_quality.py'
       - 'tests/test_market_quality.py'
+      - 'tests/test_qualification_rollover.py'
+      - 'market_stream.py'
       - 'market_lake.py'
       - 'scripts/manage_history.py'
       - 'scripts/qualify_market_lake.py'
