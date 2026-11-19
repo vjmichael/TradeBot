@@ -41,6 +41,7 @@ on:
       - 'vintage_memory.py'
       - 'tests/test_archive_custody.py'
       - 'tests/test_vintage_memory.py'
+      - 'historical_readiness.py'
       - 'scripts/schedule_data.py'
       - 'tests/test_data_scheduler.py'
       - 'scripts/prepare_data.py'
@@ -56,7 +57,7 @@ permissions:
 jobs:
   native-market-memory:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:

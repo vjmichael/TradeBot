@@ -31,6 +31,8 @@ class HistoricalReadinessTests(unittest.TestCase):
         self.assertEqual(report['coverage'],0);self.assertEqual(report['missing'],HOURS)
         self.assertEqual(report['ranges'][0]['recovery'],'independent_anchors_missing')
         self.assertFalse(report['training_ready']);self.assertFalse(report['paper_ready'])
+        self.assertEqual((report['vintage_coverage']['saved'],report['vintage_coverage']['missing']),(0,360))
+        self.assertTrue(all(len(s['missing_preview'])==6 for s in report['vintage_coverage']['series']))
     def test_classification_conflict_and_retention(self):
         a=self.end-10*STEP
         src=self.archive([a,a+2*STEP,a+3*STEP])
@@ -84,5 +86,7 @@ class HistoricalReadinessTests(unittest.TestCase):
             response=c.get(route,headers=AUTH)
             self.assertEqual(response.status_code,200,response.text)
             self.assertFalse(response.json()['training_ready'])
+            self.assertEqual(c.get('/api/economic/vintage-coverage').status_code,401)
+            v=c.get('/api/economic/vintage-coverage',headers=AUTH).json();self.assertEqual(v['expected'],360);self.assertEqual(len(v['rows']),60)
             self.assertEqual(c.get(route+'?offset=50',headers=AUTH).status_code,409)
             self.assertFalse(c.get('/api/status',headers=AUTH).json()['live_available'])

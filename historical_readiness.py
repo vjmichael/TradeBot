@@ -185,13 +185,15 @@ def historical_report(memory,economic,pair,*,as_of=None,offset=0,report_id=None,
     coverage=len(clean);missing=HOURS-coverage
     if sum(n for label,n in counts.items() if label!='conflicting_trade_counts')!=missing:
         raise MemoryUnavailable('historical classification does not reconcile')
+    from vintage_memory import coverage as vintage_coverage
+    vintages=vintage_coverage(economic,as_of=as_of)
     report={'pair':pair,'as_of':as_of,'start':start,'end':end,'expected':HOURS,'coverage':coverage,
             'missing':missing,'conflicts':conflicts,'trade_count_conflicts':trade_conflicts,
             'first_observed':first,'last_observed':last,'archive_first':archive_first,'archive_last':archive_last,
             'last_recent':collector['last_success'] if collector else None,
             'collector_state':collector['state'] if collector else 'not_observed',
             'classification_hours':dict(sorted(counts.items())),'source_counts':source_counts,'archive_retention':assets,
-            'latest_book_observed':book['observed'] if book else None,'cost_sample':cost,'economic_sources':evidence,
+            'latest_book_observed':book['observed'] if book else None,'cost_sample':cost,'economic_sources':evidence,'vintage_coverage':vintages,
             'historical_state':'observations_incomplete' if missing or trade_conflicts else 'integrity_review_required',
             'training_ready':False,'paper_ready':False,
             'range_count':len(ranges),'no_trade_hours_verified':0}

@@ -1,9 +1,11 @@
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
+from datetime import datetime,timezone
 from pathlib import Path
 import httpx
-from vintage_memory import VintageMemory,parse,cutoff,URL
+from vintage_memory import VintageMemory,parse,cutoff,URL,coverage,ensure_plan,targets
 from market_memory import MemoryUnavailable
 V='2020-05-01'
 RAW=b'observation_date,UNRATE_20200501\n2020-02-01,3.5\n2020-03-01,4.4\n'
@@ -34,3 +36,39 @@ class VintageTests(unittest.TestCase):
             with self.assertRaises(MemoryUnavailable):self.m.collect('UNRATE',V,client=client,clock=lambda:now)
             self.assertEqual(VintageMemory(self.root).collect('PAYEMS',V,client=client,clock=lambda:now+1)['state'],'paced')
         self.assertEqual(self.m.status()['snapshots'],0)
+
+    def test_frozen_360_targets_resume_and_asof_counts(self):
+        now=int(datetime(2026,10,15,tzinfo=timezone.utc).timestamp())
+        def clock():return now
+        def sleep(seconds):
+            nonlocal now
+            now+=seconds
+        def fetch(req):
+            series=req.url.params['id'];vintage=req.url.params['vintage_date']
+            return httpx.Response(200,stream=httpx.ByteStream(f'observation_date,{series}_{vintage.replace("-","")}\n{vintage},3.5\n'.encode()))
+        first=now
+        with httpx.Client(transport=httpx.MockTransport(fetch)) as client:
+            self.assertEqual(self.m.collect_batch(client=client,clock=clock,sleep=sleep)['observed'],6)
+            self.assertEqual(coverage(self.m.memory,as_of=first-1)['saved'],0)
+            self.assertEqual(coverage(self.m.memory,as_of=now)['saved'],6)
+            self.assertTrue(all(len(s['missing_preview'])==6 for s in coverage(self.m.memory,as_of=now)['series']))
+            now+=32*86400 # month boundary does not replace plan
+            self.assertEqual(VintageMemory(self.root).collect_batch(client=client,clock=clock,sleep=sleep)['observed'],6)
+            self.assertEqual(coverage(self.m.memory,as_of=now)['anchor_month'],'2026-10-01')
+            for _ in range(58):
+                now+=3600
+                VintageMemory(self.root).collect_batch(client=client,clock=clock,sleep=sleep)
+            result=coverage(self.m.memory,as_of=now,detail=True)
+            self.assertEqual((result['saved'],result['missing'],result['expected']),(360,0,360))
+            self.assertTrue(all(s['saved']==120 for s in result['series']))
+            self.assertEqual(self.m.collect_batch(client=client,clock=clock,sleep=sleep)['state'],'complete')
+            self.assertEqual(coverage(self.m.memory,as_of=now,offset=300,detail=True)['next_offset'],None)
+    def test_throttle_and_budget_persist(self):
+        now=int(time.time())
+        def fetch(req):return httpx.Response(429,headers={'Retry-After':'1800'})
+        with httpx.Client(transport=httpx.MockTransport(fetch)) as c:
+            with self.assertRaises(MemoryUnavailable):self.m.collect('UNRATE',V,client=c,clock=lambda:now)
+            self.assertEqual(VintageMemory(self.root).collect('PAYEMS',V,client=c,clock=lambda:now+1799)['state'],'cooldown')
+        with patch('vintage_memory.HOUR_LIMIT',1):
+            with httpx.Client(transport=httpx.MockTransport(lambda req:self.fail('budget should stop request'))) as c:
+                self.assertEqual(self.m.collect('PAYEMS',V,client=c,clock=lambda:now+1800)['state'],'budget_exhausted')

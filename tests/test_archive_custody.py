@@ -71,6 +71,43 @@ class CustodyTests(unittest.TestCase):
         self.assertTrue((self.copies/('.rotation-'+a)).is_dir())
         self.assertEqual(apply(self.data,self.copies,plan)['state'],'complete')
         self.assertTrue((self.copies/b).exists() and (self.copies/c).exists())
+    def test_multi_batch_archive_and_legacy_resume(self):
+        # Time-shifted sample receipts, not genuinely elapsed month-long run.
+        from market_directory import MarketDirectory,parse_directory
+        from test_market_directory import payload
+        registry=MarketDirectory(self.data)
+        snap=registry.refresh(now=self.now,fetch=lambda:parse_directory(payload()))
+        registry.select('ADA/USD',True,snap['version'],now=self.now)
+        pairs=registry.selected_symbols()
+        self.assertEqual(len(pairs),4)
+        old=self.slot-305*300
+        with self.m.tx() as db:
+            for pair in pairs:
+                for i in range(301):
+                    slot=old+i*300
+                    db.execute('INSERT INTO quality_attempts VALUES(?,?,?,?,?)',(pair,slot,slot,slot,'unavailable'))
+                db.execute('INSERT INTO quality_attempts VALUES(?,?,?,?,?)',(pair,self.slot,self.slot,self.slot,'unavailable'))
+        key,r=self.copy(1);digest=r['manifest_sha256']
+        first=retire_books(self.data,self.copies/key,digest,apply=True,now=self.now,limit=1000)
+        second=retire_books(self.data,self.copies/key,digest,apply=True,now=self.now,limit=1000)
+        self.assertEqual((first['attempts'],second['attempts']),(1000,204))
+        self.assertEqual(status(self.m)['archived_records'],1204)
+        with self.m.tx() as db:db.execute('DELETE FROM quality_archive')
+        self.assertEqual(consolidate(self.data,self.copies/key,digest)['archived'],1000)
+        self.assertEqual(consolidate(self.data,self.copies/key,digest)['archived'],204)
+        self.assertEqual(consolidate(self.data,self.copies/key,digest)['archived'],0)
+        key2,r2=self.copy(2);restore(self.copies/key2,self.root/'multi-restored',r2['manifest_sha256'])
+        reopened=MarketMemory(self.root/'multi-restored')
+        self.assertEqual(status(reopened)['archived_records'],1204)
+        self.assertEqual(archived_sample(reopened,'ADA/USD',old)['attempt']['state'],'unavailable')
+    def test_rotation_resume_after_removal_before_terminal_commit(self):
+        a,_=self.copy(1);b,_=self.copy(2);c,_=self.copy(3)
+        plan=preview(self.data,self.copies)
+        with patch('recovery_rotation.syncdir',side_effect=OSError('simulated crash after removal')):
+            with self.assertRaises(OSError):apply(self.data,self.copies,plan)
+        self.assertFalse((self.copies/a).exists())
+        self.assertEqual(apply(self.data,self.copies,plan)['state'],'complete')
+        self.assertTrue((self.copies/b).exists() and (self.copies/c).exists())
     def test_rotation_rejects_unknown_copy(self):
         a,_=self.copy(1);b,_=self.copy(2);c,_=self.copy(3)
         plan=preview(self.data,self.copies);self.assertTrue(plan['eligible'])

@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from data_preparation import parent_guard,progress,MODES
 from market_directory import MarketDirectory
-from market_memory import MarketMemory
+from market_memory import MarketMemory,MemoryUnavailable
 from market_archive import RemoteParts,public_client,import_members,RELEASE
 from market_stream import StreamJournal,run_stream,exact_closed
 from market_quality import QualityMemory
@@ -18,6 +18,8 @@ from storage_telemetry import sample_storage
 from market_lake import HistoricalLake
 from economic_memory import EconomicMemory,SOURCES
 from storage_management import run as run_maintenance
+from vintage_memory import VintageMemory,BACKGROUND_INTERVAL
+from market_archive import ArchiveError
 
 
 def run(directory,mode,job):
@@ -117,14 +119,24 @@ def run(directory,mode,job):
                 await asyncio.sleep(90)
                 while True:
                     await asyncio.to_thread(check_scope)
-                    await asyncio.to_thread(recover_batch,m,journal.gap_reports(),scope_check=check_scope)
+                    await asyncio.to_thread(lambda:recover_batch(m,journal.gap_reports(),scope_check=check_scope))
                     await asyncio.sleep(120)
+            async def vintage_backfill():
+                # The explicit continuous-collection opt-in authorizes the
+                # same fixed public source as manual vintage collection.
+                await asyncio.sleep(30)
+                while True:
+                    await asyncio.to_thread(check_scope)
+                    try:await asyncio.to_thread(lambda:VintageMemory(directory).collect_batch(scope_check=check_scope))
+                    except (OSError,ValueError,sqlite3.Error,ArchiveError,MemoryUnavailable):pass
+                    await asyncio.sleep(BACKGROUND_INTERVAL)
             async with asyncio.TaskGroup() as group:
                 group.create_task(run_stream(m,symbols=symbols))
                 group.create_task(periodic())
                 group.create_task(scope_guard())
                 group.create_task(historical_recovery())
                 group.create_task(telemetry())
+                group.create_task(vintage_backfill())
         asyncio.run(collect())
     else:raise ValueError('unsupported mode')
 
