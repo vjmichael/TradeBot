@@ -215,6 +215,16 @@ class BridgeTests(unittest.TestCase):
         j=GapBridge(self.mem).run('BTC/USD',self.start,self.end,fetch=second,pace=lambda _:None,clock=lambda:NOW)
         self.assertEqual(j['state'],'complete');v=self.mem.query('BTC/USD',60,T,T+3*3600,NOW);self.assertEqual(v['coverage'],3);self.assertEqual(v['rows'][1]['trades'],1)
         self.assertEqual(GapBridge(self.mem).run('BTC/USD',self.start,self.end,fetch=lambda *_:self.fail('already completed'),clock=lambda:NOW)['source_id'],j['source_id'])
+    def test_admission_deferral_before_network_preserves_exact_frontier(self):
+        from market_gap import RecoveryDeferred
+        first=self.run_page(self.page([T,self.start],[11,12]))
+        def denied(pair):raise RecoveryDeferred('budget')
+        with self.assertRaises(RecoveryDeferred):
+            self.b.run('BTC/USD',self.start,self.end,max_pages=1,fetch=lambda *_:self.fail('request escaped budget'),clock=lambda:NOW,before_page=denied)
+        with self.mem.tx() as db:
+            state=db.execute('SELECT cursor,pages,state FROM gap_jobs WHERE id=?',(first['id'],)).fetchone()
+            self.assertEqual(tuple(state),(first['cursor'],1,'recovering'))
+        self.assertEqual(self.mem.query('BTC/USD',60,self.start,self.end,NOW)['coverage'],0)
     def test_bad_anchor_never_publishes(self):
         p=self.page([T,self.start,self.end,T+3*3600],[11,12,13,14],['99','100','100','100'])
         with self.assertRaises(MemoryUnavailable):self.b.run('BTC/USD',self.start,self.end,fetch=lambda *_:p,clock=lambda:NOW)

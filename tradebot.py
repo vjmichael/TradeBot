@@ -26,6 +26,8 @@ from historical_readiness import historical_report
 from data_preparation import Preparation
 from data_scheduler import Schedule
 from gap_schedule import recovery_progress
+from recovery_budget import recovery_budget_status
+from storage_telemetry import storage_growth
 from storage_management import status as maintenance_status
 from market_stream import StreamJournal
 
@@ -451,6 +453,7 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
             result["streams"] = StreamJournal(app.state.market_memory, app.state.market_directory.selected_symbols()).status()
             result["schedule"] = app.state.schedule.public_status()
             result["recovery"] = recovery_progress(app.state.market_memory)
+            result["recovery_budget"] = recovery_budget_status(app.state.market_memory)
             return result
         except (DirectoryUnavailable, MemoryUnavailable, sqlite3.Error, OSError, ValueError):
             raise HTTPException(503, "Data preparation status unavailable") from None
@@ -498,8 +501,8 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         try:
             with app.state.market_memory.tx() as db:
                 samples=db.execute('SELECT count(*) FROM quality_attempts').fetchone()[0]
-            return app.state.market_lake.status() | {"maintenance":maintenance_status(directory),"sample_receipts":samples,"sample_limit":MAX_SAMPLES}
-        except (MemoryUnavailable, sqlite3.Error, OSError):
+            return app.state.market_lake.status() | {"maintenance":maintenance_status(directory),"sample_receipts":samples,"sample_limit":MAX_SAMPLES,"growth":storage_growth(directory,app.state.market_directory.selected_symbols())}
+        except (DirectoryUnavailable, MemoryUnavailable, sqlite3.Error, OSError, ValueError):
             raise HTTPException(503, "Historical storage status unavailable") from None
 
     @app.get("/api/markets/{asset}/candles", dependencies=[Depends(authorize)])

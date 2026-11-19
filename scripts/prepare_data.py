@@ -1,6 +1,7 @@
 """Fixed public data worker; no credentials or trading commands."""
 import asyncio
 import os
+import sqlite3
 import sys
 import time
 import threading
@@ -12,7 +13,8 @@ from market_memory import MarketMemory
 from market_archive import RemoteParts,public_client,import_members,RELEASE
 from market_stream import StreamJournal,run_stream,exact_closed
 from market_quality import QualityMemory
-from gap_schedule import repair_due
+from recovery_budget import recover_batch
+from storage_telemetry import sample_storage
 from market_lake import HistoricalLake
 from economic_memory import EconomicMemory,SOURCES
 from storage_management import run as run_maintenance
@@ -82,7 +84,7 @@ def run(directory,mode,job):
             try:journal.repair(pair)
             except Exception:failed=True
         mark('repairing_gaps')
-        outcomes=repair_due(m,journal.gap_reports())
+        outcomes=recover_batch(m,journal.gap_reports(),scope_check=check_scope,max_pages=64,total_pages=192)
         for pair in symbols:
             check_scope()
             try:journal.repair(pair)
@@ -102,10 +104,27 @@ def run(directory,mode,job):
                 while True:
                     await asyncio.sleep(30)
                     await asyncio.to_thread(check_scope)
+            async def telemetry():
+                # Separate from refresh/recovery: a transient WAL or staging
+                # file race must never stop collection or cost a whole sample.
+                await asyncio.sleep(20)
+                while True:
+                    try:saved=await asyncio.to_thread(sample_storage,m,symbols)
+                    except (OSError,RuntimeError,ValueError,sqlite3.Error):saved=False
+                    await asyncio.sleep(300 if saved else 15)
+            async def historical_recovery():
+                # Let the initial stream reconciliation publish its gap report.
+                await asyncio.sleep(90)
+                while True:
+                    await asyncio.to_thread(check_scope)
+                    await asyncio.to_thread(recover_batch,m,journal.gap_reports(),scope_check=check_scope)
+                    await asyncio.sleep(120)
             async with asyncio.TaskGroup() as group:
                 group.create_task(run_stream(m,symbols=symbols))
                 group.create_task(periodic())
                 group.create_task(scope_guard())
+                group.create_task(historical_recovery())
+                group.create_task(telemetry())
         asyncio.run(collect())
     else:raise ValueError('unsupported mode')
 

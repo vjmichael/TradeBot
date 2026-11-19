@@ -14,6 +14,7 @@ from economic_memory import EconomicMemory,SOURCES
 from engine import SYMBOLS
 from market_gap import GapBridge,MAX_SPAN
 from gap_schedule import repair_due,recovery_progress
+from recovery_budget import recover_batch,recovery_budget_status
 
 
 def wait(controller, timeout, predicate):
@@ -68,6 +69,21 @@ def main():
                 assert len(pages)==8 and pages[4]['old_cursor']==first['cursor'] and all(a['new_cursor']==b['old_cursor'] for a,b in zip(pages,pages[1:]))
             assert recovery_progress(reopened)[0]['pages']==8 and reopened.query(pair,60,start,end,int(time.time()))['coverage']==0
             print(f'RECEIPT: actual SOL archive-to-REST gap {((end-start)//3600)} hours; eight durable public trade pages across two reopened batches, cursor advanced; no premature publication; remaining recovery unfinished',flush=True)
+            # Exercise the production budget across two genuine large gaps.
+            reports=[]
+            for asset in ('BTC/USD','ETH/USD'):
+                source=next(r for r in StreamJournal(m).gap_reports() if r['pair']==asset)
+                targets=[r for r in source['ranges'] if r['reason']=='outside_rest_window' and 48*3600<=r['end']-r['start']<=MAX_SPAN]
+                assert targets,asset
+                reports.append({'pair':asset,'ranges':[max(targets,key=lambda r:r['end']-r['start'])]})
+            before=recovery_budget_status(m)['total_requests']
+            actual=recover_batch(m,reports,max_pages=2,total_pages=4)
+            assert len(actual)==2 and all(r['outcome']=='checkpointed' and r['pages']==2 for r in actual),actual
+            budget=recovery_budget_status(MarketMemory(directory))
+            assert budget['total_requests']==before+4,budget
+            for r in actual:
+                assert m.query(r['pair'],60,r['start'],r['end'],int(time.time()))['coverage']==0
+            print('RECEIPT: genuine two-market extended recovery under shared four-request budget; restart preserves counts and both durable cursors; no incomplete candles published',actual,budget,flush=True)
             receipt=backup(directory,root/'snapshot');restore(root/'snapshot',root/'restored',receipt['manifest_sha256'])
             restored=MarketMemory(root/'restored');restored_lake=HistoricalLake(restored);restored_e=EconomicMemory(root/'restored')
             now=int(time.time());end=now//3600*3600

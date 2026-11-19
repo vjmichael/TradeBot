@@ -29,6 +29,10 @@ on:
       - 'deploy/maj-vaj-data.service'
       - 'scripts/qualify_data_service.py'
       - 'gap_schedule.py'
+      - 'recovery_budget.py'
+      - 'storage_telemetry.py'
+      - 'tests/test_recovery_budget.py'
+      - 'scripts/qualify_sustained_storage.py'
       - 'data_retention.py'
       - 'scripts/schedule_data.py'
       - 'tests/test_data_scheduler.py'
@@ -64,3 +68,4 @@ jobs:
 
       - run: python scripts/qualify_data_lifecycle.py
       - run: python scripts/qualify_data_service.py
+      - run: python scripts/qualify_sustained_storage.py
