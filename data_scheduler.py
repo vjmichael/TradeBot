@@ -4,11 +4,14 @@ try:
 except ImportError:
     fcntl=None
 import os
+import sqlite3
 import time
 import sys
 from contextlib import closing, contextmanager
 from data_preparation import Preparation, _db
 from market_memory import MemoryUnavailable
+from market_directory import MarketDirectory, DirectoryUnavailable, DEFAULTS
+from market_archive import RELEASE
 
 REPAIR_INTERVAL=6*3600
 RETRY=300
@@ -81,6 +84,19 @@ class Schedule:
             except BlockingIOError:raise MemoryUnavailable('scheduler already owned') from None
             yield
         finally:os.close(fd)
+    def needs_selected_archive(self):
+        directory=self.controller.directory
+        if not (directory/'market-directory'/'directory.sqlite3').is_file():return False
+        registry=MarketDirectory(directory)
+        pending=set(registry.selected_symbols())-set(DEFAULTS)
+        if not pending:return False
+        catalog=directory/'market-memory'/'catalog.sqlite3'
+        if not catalog.is_file():return True
+        with closing(sqlite3.connect(catalog)) as db:
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='market_archive_status'").fetchone():return True
+            done={r[0] for r in db.execute("SELECT pair FROM market_archive_status WHERE release=? AND state IN ('imported','not_in_pinned_archive')",(RELEASE,))}
+        return bool(pending-done)
+
     def tick(self,now=None):
         """Caller holds scheduler lease; serialize admissions with manual work."""
         with self.command():return self._tick(now)
@@ -91,7 +107,7 @@ class Schedule:
         if s['active_job'] and state.get('id')==s['active_job'] and state['state']!='running':
             outcome=state['state']; mode=s['active_mode']
             with self.tx() as db:
-                db.execute('UPDATE schedule SET active_job=NULL,active_mode=NULL,last_outcome=?,retry_at=?,next_repair=CASE WHEN ? THEN ? ELSE next_repair END WHERE id=1',(outcome,now+(RESTART_RETRY if outcome=='interrupted' else RETRY) if mode=='collect' and outcome!='cancelled' else 0,mode=='repair',now+REPAIR_INTERVAL if outcome=='complete' else now+3600))
+                db.execute('UPDATE schedule SET active_job=NULL,active_mode=NULL,last_outcome=?,retry_at=?,next_repair=CASE WHEN ? THEN ? ELSE next_repair END WHERE id=1',(outcome,now+(RESTART_RETRY if outcome=='interrupted' else RETRY) if (mode=='collect' and outcome!='cancelled') or (mode=='prepare' and outcome not in ('complete','cancelled')) else 0,mode=='repair',now+REPAIR_INTERVAL if outcome=='complete' else now+3600))
             s=self.status()
         elif s['active_job'] and state.get('id')!=s['active_job']:
             # A manual job may have superseded an old terminal row. Never adopt it.
@@ -105,7 +121,11 @@ class Schedule:
                 self.controller.cancel()
             return self.status()
         if now<s['retry_at']:return s
-        mode='repair' if now>=s['next_repair'] else 'collect'
+        try:needs_archive=self.needs_selected_archive()
+        except (DirectoryUnavailable, sqlite3.Error, OSError, ValueError):
+            with self.tx() as db:db.execute("UPDATE schedule SET last_outcome='market_directory_unavailable',retry_at=? WHERE id=1",(now+RETRY,))
+            return self.status()
+        mode='prepare' if needs_archive else 'repair' if now>=s['next_repair'] else 'collect'
         try:job=self.controller.start(mode)
         except MemoryUnavailable:return self.status()
         with self.tx() as db:

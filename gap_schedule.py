@@ -13,7 +13,13 @@ def repair_due(memory,reports,*,now=None,bridge=None,max_pages=64):
     with memory.tx() as db:
         db.execute('CREATE TABLE IF NOT EXISTS gap_attempts(pair TEXT NOT NULL,start INTEGER NOT NULL,end INTEGER NOT NULL,attempted INTEGER NOT NULL,outcome TEXT NOT NULL,PRIMARY KEY(pair,start,end))')
     result=[]
+    # Rotate across markets by least-recent attempt; cap work across the whole
+    # job rather than multiplying 64 pages by the number of selected markets.
+    with memory.tx() as db:
+        latest=dict(db.execute('SELECT pair,MAX(attempted) FROM gap_attempts GROUP BY pair'))
+    reports=sorted(reports,key=lambda r:latest.get(r['pair'],-1))
     for report in reports:
+        if len(result)>=3:break
         pair=report['pair'];rs=[r for r in report['ranges'] if r['reason']=='outside_rest_window' and 0<r['end']-r['start']<=MAX_SPAN]
         with memory.tx() as db:
             known={(r['start'],r['end']):dict(r) for r in db.execute('SELECT * FROM gap_attempts WHERE pair=?',(pair,))}

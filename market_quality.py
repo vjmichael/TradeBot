@@ -26,12 +26,12 @@ RESERVE = 256*1024**2
 NOTIONALS = (100, 500, 1000)
 
 
-def parse_depth(pair, payload, observed):
-    if pair not in SYMBOLS or type(observed) is not int or not 0 < observed < MAX_TIME:
+def parse_depth(pair, payload, observed, symbols=SYMBOLS):
+    if pair not in symbols or type(observed) is not int or not 0 < observed < MAX_TIME:
         raise ValueError('invalid market or time')
     if not isinstance(payload, dict) or payload.get('error') != []:
         raise MemoryUnavailable('order book unavailable')
-    result = payload.get('result'); alias = SYMBOLS[pair][1]
+    result = payload.get('result'); alias = symbols[pair][1]
     if not isinstance(result, dict) or set(result) != {alias}:
         raise ValueError('incorrect market identity')
     book = result[alias]
@@ -58,11 +58,11 @@ def parse_depth(pair, payload, observed):
     return clean
 
 
-def fetch_depth(pair):
-    if pair not in SYMBOLS: raise ValueError('unsupported market')
+def fetch_depth(pair, symbols=SYMBOLS):
+    if pair not in symbols: raise ValueError('unsupported market')
     start = time.monotonic()
     with httpx.Client(timeout=12, follow_redirects=False, trust_env=False) as c:
-        with c.stream('GET',DEPTH_URL,params={'pair':SYMBOLS[pair][0],'count':LEVELS},headers=PUBLIC_HEADERS) as r:
+        with c.stream('GET',DEPTH_URL,params={'pair':symbols[pair][0],'count':LEVELS},headers=PUBLIC_HEADERS) as r:
             if r.status_code!=200: raise MemoryUnavailable('order book HTTP unavailable')
             body=bytearray()
             for chunk in r.iter_bytes(chunk_size=16384):
@@ -122,7 +122,7 @@ class QualityMemory:
             db.execute('''CREATE TABLE IF NOT EXISTS quality_attempts(pair TEXT NOT NULL, slot INTEGER NOT NULL, attempted INTEGER NOT NULL, finished INTEGER, state TEXT NOT NULL, PRIMARY KEY(pair,slot))''')
 
     def sample(self,pair,*,fetch=fetch_depth,clock=lambda:int(time.time())):
-        if pair not in SYMBOLS:raise ValueError('unsupported market')
+        if pair not in self.memory.symbols:raise ValueError('unsupported market')
         with exclusive_job(self.memory.root,'quality-book'):
             now=clock(); slot=now//SLOT*SLOT
             with self.memory.tx() as db:
@@ -132,9 +132,9 @@ class QualityMemory:
                     raise MemoryUnavailable('liquidity sample capacity reached')
                 db.execute('INSERT INTO quality_attempts VALUES(?,?,?,?,?)',(pair,slot,now,None,'pending'))
             try:
-                raw,observed,source_digest=fetch(pair); published=clock()
+                raw,observed,source_digest=fetch_depth(pair,self.memory.symbols) if fetch is fetch_depth else fetch(pair); published=clock()
                 if type(observed) is not int or not now<=observed<=published<MAX_TIME or published-now>30 or observed//SLOT*SLOT!=slot or not isinstance(source_digest,str) or len(source_digest)!=64 or any(c not in '0123456789abcdef' for c in source_digest):raise ValueError('invalid sample receipt')
-                body=json.dumps(parse_depth(pair,raw,observed),sort_keys=True,separators=(',',':'));digest=hashlib.sha256(body.encode()).hexdigest()
+                body=json.dumps(parse_depth(pair,raw,observed,self.memory.symbols),sort_keys=True,separators=(',',':'));digest=hashlib.sha256(body.encode()).hexdigest()
                 with self.memory.tx() as db:
                     db.execute('INSERT INTO quality_books VALUES(?,?,?,?,?,?,?)',(pair,observed//SLOT*SLOT,observed,published,body,digest,source_digest))
                     db.execute('UPDATE quality_attempts SET state=?,finished=? WHERE pair=? AND slot=?',('observed',published,pair,slot))
@@ -144,7 +144,7 @@ class QualityMemory:
             return 'observed'
 
     def profile(self,pair,start,end,as_of,zone='UTC',fee_bps=None):
-        if pair not in SYMBOLS or zone not in ZONES or any(type(x) is not int for x in (start,end,as_of)) or not SLOT<=start<end<=as_of<MAX_TIME or start%3600 or end%3600 or end-start>MAX_DAYS*86400 or (fee_bps is not None and (type(fee_bps) is not int or not 0<=fee_bps<=100)):
+        if pair not in self.memory.symbols or zone not in ZONES or any(type(x) is not int for x in (start,end,as_of)) or not SLOT<=start<end<=as_of<MAX_TIME or start%3600 or end%3600 or end-start>MAX_DAYS*86400 or (fee_bps is not None and (type(fee_bps) is not int or not 0<=fee_bps<=100)):
             raise ValueError('invalid quality window')
         fine=self.memory.query(pair,5,start-SLOT,end,as_of);hours=realized_hours(fine)
         tz=ZoneInfo(zone)
@@ -165,7 +165,7 @@ class QualityMemory:
         source_state = (attempt['state'] if attempt['finished'] is not None and attempt['finished']<=as_of else 'pending') if attempt else 'not_observed'
         def checked(row):
             if hashlib.sha256(row['body'].encode()).hexdigest()!=row['digest']:raise MemoryUnavailable('order book integrity failure')
-            return measure(parse_depth(pair,{'error':[],'result':{SYMBOLS[pair][1]:json.loads(row['body'])}},row['observed']),fee_bps)
+            return measure(parse_depth(pair,{'error':[],'result':{self.memory.symbols[pair][1]:json.loads(row['body'])}},row['observed'],self.memory.symbols),fee_bps)
         for r in samples:
             m=checked(r); b=cell(r['slot']);b['books']+=1;b['spread_sum']+=m['spread_bps'];b['bid_sum']+=m['bid_depth_1pct_usd'];b['ask_sum']+=m['ask_depth_1pct_usd']
             scenario=m['scenarios'][0]

@@ -11,6 +11,7 @@ window.fetch=async (path,request)=>{
   if(path==='/api/calendar')return response(f.calendar);
   if(path.startsWith('/api/economic/statistics?'))return response({state:'observed',rows:[{period:'2026-04',title:'Fixture unemployment rate',value:'4.2',unit:'percent',evidence_id:'fixture'}],next_offset:null});
   if(path.startsWith('/api/economic/monetary?'))return response({state:'unavailable',rows:[],next_offset:null});
+  if(path.startsWith('/api/market-directory?'))return response({state:'unavailable',version:null,observed_at:null,total:0,markets:[],selected:['BTC/USD','ETH/USD','SOL/USD'].map(pair=>({pair,preparation:'baseline_only',directory_status:'unverified',mapping_changed:false})),next_offset:null});
   if(path==='/api/data-preparation')return response({state:'review_required',training_ready:false,markets:[{pair:'BTC/USD',expected:43800,coverage:0,missing:43800,conflicts:0}],job:f.job||{state:'idle'},streams:[],schedule:f.schedule||{enabled:false,service:'stopped',next_repair:null},recovery:[]});
   if(path==='/api/data-preparation/collect'){f.job={id:'fixture',state:'running',mode:'collect',stage:'continuous_public_data'};return response(f.job);}
   if(path==='/api/data-preparation/cancel'){f.job={id:'fixture',state:'cancelled',mode:'collect',stage:'stopping'};return response(f.job);}

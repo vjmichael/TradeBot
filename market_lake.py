@@ -50,8 +50,8 @@ def blocks(interval, start, end):
     return values
 
 
-def window(pair, interval, start, end, as_of):
-    step = identity(pair, interval)
+def window(pair, interval, start, end, as_of, symbols=None):
+    step = identity(pair, interval) if symbols is None else identity(pair, interval, symbols)
     if any(type(v) is not int for v in (start, end, as_of)) or not 0 <= start < end <= MAX_TIME or not 0 < as_of < MAX_TIME or start % step or end % step or (end-start)//step > MAX_QUERY_ROWS:
         raise ValueError('invalid or unbounded lake window')
     return max(start, min(end, as_of//step*step)), step
@@ -173,7 +173,7 @@ class HistoricalLake:
         source rows remain authoritative; old manifests are retired, never
         implicitly destroyed. Each block commits independently for restart.
         """
-        end,_ = window(pair,interval,start,end,MAX_TIME-1)
+        end,_ = window(pair,interval,start,end,MAX_TIME-1,self.memory.symbols)
         output=[]
         for block in blocks(interval,start,end):
             output.append(self._compact_block(pair,interval,block))
@@ -236,7 +236,7 @@ class HistoricalLake:
         Read from one catalog transaction. Do not silently fallback for corrupt
         active files. Late conflicts and as-of visibility match SQLite rules.
         """
-        end,step=window(pair,interval,start,end,as_of)
+        end,step=window(pair,interval,start,end,as_of,self.memory.symbols)
         raw=[]; used=0; tail=0; checked_bytes=0
         with self.memory.tx() as db:
             con=None

@@ -48,6 +48,26 @@ class ScheduleTests(unittest.TestCase):
             db.execute("UPDATE schedule SET active_job='old',active_mode='collect' WHERE id=1")
         self.s.tick(T);self.assertEqual(self.s.status()['last_outcome'],'interrupted');self.assertIsNone(self.s.controller.child)
         with patch('data_preparation.SCRIPT',self.script),self.s.lease():self.s.tick(T+301);self.assertEqual(self.s.controller.status()['mode'],'collect')
+    def test_new_selected_market_prepared_before_scheduled_collection(self):
+        from market_directory import MarketDirectory, parse_directory
+        from market_archive import RELEASE
+        from test_market_directory import payload
+        registry=MarketDirectory(self.root)
+        result=registry.refresh(now=T,fetch=lambda:parse_directory(payload()))
+        registry.select('ADA/USD',True,result['version'],now=T)
+        m=MarketMemory(self.root)
+        self.assertTrue(self.s.needs_selected_archive())
+        self.s.enable(True,T)
+        with patch('data_preparation.SCRIPT',self.script),self.s.lease():
+            self.s.tick(T)
+            self.assertEqual(self.s.controller.status()['mode'],'prepare')
+            self.s.controller.cancel();self.wait('cancelled')
+            with m.tx() as db:
+                db.execute('CREATE TABLE market_archive_status(pair TEXT PRIMARY KEY,checked INTEGER,state TEXT,release TEXT)')
+                db.execute('INSERT INTO market_archive_status VALUES(?,?,?,?)',('ADA/USD',T,'imported',RELEASE))
+            self.s.tick(T+1)
+            self.assertEqual(self.s.controller.status()['mode'],'collect')
+            self.s.enable(False,T+2);self.s.tick(T+2);self.wait('cancelled')
     def test_no_cancel_foreign_manual_worker(self):
         other=Schedule(self.root);self.addCleanup(other.close)
         with patch('data_preparation.SCRIPT',self.script):

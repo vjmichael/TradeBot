@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from engine import candles, MarketUnavailable
+from market_directory import MarketDirectory, DirectoryUnavailable
 from market_memory import MarketMemory, MemoryUnavailable, session_profile
 from market_lake import HistoricalLake
 from market_quality import QualityMemory, MAX_SAMPLES
@@ -230,6 +231,7 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     @asynccontextmanager
     async def lifespan(app):
         store.boot()
+        app.state.market_directory = MarketDirectory(directory)
         app.state.market_memory = MarketMemory(directory)
         app.state.market_lake = HistoricalLake(app.state.market_memory)
         app.state.market_quality = QualityMemory(app.state.market_memory)
@@ -273,6 +275,45 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
             raise HTTPException(401, "Unauthorized")
 
+    class ResearchSelection(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+        pair: str = Field(max_length=49)
+        enabled: bool
+        version: int | None
+
+    @app.get("/api/market-directory", dependencies=[Depends(authorize)])
+    def market_directory(query: str = "", offset: int = 0):
+        try:
+            return app.state.market_directory.browse(query, offset)
+        except ValueError:
+            raise HTTPException(422, "Invalid market search") from None
+        except DirectoryUnavailable:
+            raise HTTPException(503, "Stored market directory unavailable") from None
+
+    @app.post("/api/market-directory/refresh", dependencies=[Depends(authorize)])
+    def refresh_market_directory():
+        try:
+            with app.state.schedule.command(),market_lock:
+                if app.state.schedule.status()['enabled'] or app.state.preparation.status()['state']=='running':
+                    raise DirectoryUnavailable('Stop data collection and disable scheduling before refreshing manually')
+                return app.state.market_directory.refresh()
+        except DirectoryUnavailable as exc:
+            raise HTTPException(503, str(exc)) from None
+
+    @app.post("/api/market-directory/selection", dependencies=[Depends(authorize)])
+    def select_research_market(spec: ResearchSelection):
+        try:
+            with app.state.schedule.command(),market_lock:
+                if app.state.schedule.status()['enabled'] or app.state.preparation.status()['state']=='running':
+                    raise ValueError('Stop data collection and disable scheduling before changing markets')
+                if not spec.enabled and any(x['pair']==spec.pair for x in store.instances()):
+                    raise ValueError('A registered paper instance still references this market')
+                return app.state.market_directory.select(spec.pair, spec.enabled, spec.version)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+        except DirectoryUnavailable:
+            raise HTTPException(503, "Stored market directory unavailable") from None
+
     @app.get("/", include_in_schema=False)
     def dashboard():
         if not (dashboard_dir / "index.html").is_file():
@@ -301,8 +342,11 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     @app.post("/api/instances", status_code=201, dependencies=[Depends(authorize)])
     def add(spec: InstanceSpec):
         try:
-            return store.add(spec)
-        except (ValueError, sqlite3.IntegrityError):
+            with app.state.schedule.command():
+                if spec.pair not in app.state.market_directory.selected_symbols():
+                    raise ValueError('Market not selected')
+                return store.add(spec)
+        except (ValueError, sqlite3.IntegrityError, DirectoryUnavailable):
             raise HTTPException(409, "Instance conflicts with name or virtual capital limit") from None
 
     @app.post("/api/pause", dependencies=[Depends(authorize)])
@@ -364,24 +408,25 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         return result
 
     @app.get("/api/markets/{asset}/session-profile", dependencies=[Depends(authorize)])
-    def market_profile(asset: Literal["BTC", "ETH", "SOL"], days: Literal["30", "90", "365", "1825"] = "90", zone: Literal["UTC", "America/Phoenix", "America/New_York", "Europe/London", "Asia/Tokyo", "Asia/Hong_Kong"] = "UTC"):
+    def market_profile(asset: str, days: Literal["30", "90", "365", "1825"] = "90", zone: Literal["UTC", "America/Phoenix", "America/New_York", "Europe/London", "Asia/Tokyo", "Asia/Hong_Kong"] = "UTC"):
         now = int(time.time())
         end = now // 3600 * 3600
         try:
+            if asset+"/USD" not in app.state.market_memory.symbols:raise HTTPException(422,'Unknown market')
             profile = session_profile(app.state.market_lake.query(asset + "/USD", 60, end-int(days)*86400, end, now), zone)
-        except (MemoryUnavailable, sqlite3.Error, ValueError, OSError):
+        except (DirectoryUnavailable, MemoryUnavailable, sqlite3.Error, ValueError, OSError):
             raise HTTPException(503, "Historical market memory unavailable") from None
         profile["state"] = "observed" if profile["coverage"] else "awaiting_history"
         return profile
 
     @app.get("/api/markets/{asset}/quality", dependencies=[Depends(authorize)])
-    def market_quality(asset: Literal["BTC", "ETH", "SOL"], days: Literal["1", "3", "7"] = "3", zone: Literal["UTC", "America/Phoenix", "America/New_York", "Europe/London", "Asia/Tokyo", "Asia/Hong_Kong"] = "UTC", fee_bps: int | None = None):
+    def market_quality(asset: str, days: Literal["1", "3", "7"] = "3", zone: Literal["UTC", "America/Phoenix", "America/New_York", "Europe/London", "Asia/Tokyo", "Asia/Hong_Kong"] = "UTC", fee_bps: int | None = None):
         now = int(time.time()); end = now // 3600 * 3600
         try:
             return app.state.market_quality.profile(asset+"/USD", end-int(days)*86400, end, now, zone, fee_bps)
         except ValueError:
             raise HTTPException(422, "Invalid market quality settings") from None
-        except (MemoryUnavailable, sqlite3.Error, OSError):
+        except (DirectoryUnavailable, MemoryUnavailable, sqlite3.Error, OSError):
             raise HTTPException(503, "Market quality data unavailable") from None
 
     @app.get("/api/data-preparation", dependencies=[Depends(authorize)])
@@ -389,11 +434,11 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         try:
             result = coverage(app.state.market_memory)
             result["job"] = app.state.preparation.status()
-            result["streams"] = StreamJournal(app.state.market_memory).status()
+            result["streams"] = StreamJournal(app.state.market_memory, app.state.market_directory.selected_symbols()).status()
             result["schedule"] = app.state.schedule.public_status()
             result["recovery"] = recovery_progress(app.state.market_memory)
             return result
-        except (MemoryUnavailable, sqlite3.Error, OSError, ValueError):
+        except (DirectoryUnavailable, MemoryUnavailable, sqlite3.Error, OSError, ValueError):
             raise HTTPException(503, "Data preparation status unavailable") from None
 
     @app.post("/api/data-preparation/{mode}", dependencies=[Depends(authorize)])
@@ -444,17 +489,25 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
             raise HTTPException(503, "Historical storage status unavailable") from None
 
     @app.get("/api/markets/{asset}/candles", dependencies=[Depends(authorize)])
-    def market(asset: Literal["BTC", "ETH", "SOL"], minutes: Literal["5", "15", "60", "240", "1440"] = "60"):
-        # Bounded cache and one in-flight upstream call across the three markets.
-        key = (asset, minutes)
+    def market(asset: str, minutes: Literal["5", "15", "60", "240", "1440"] = "60"):
+        # Reject unknown, disabled or stale markets before using a cached response.
+        pair=asset+"/USD"
         with market_lock:
+            try:
+                if pair not in app.state.market_directory.selected_symbols():
+                    raise HTTPException(422,"Market not selected")
+                symbols=app.state.market_directory.active_symbols()
+            except DirectoryUnavailable:
+                raise HTTPException(503,"Market directory requires review") from None
+            key=(pair,minutes,symbols[pair])
             cached = market_cache.get(key)
             if cached is not None and time.monotonic() - cached[0] < 30:
                 return cached[1]
             try:
-                data = candles(asset + "/USD", int(minutes))
-            except MarketUnavailable:
+                data = candles(pair, int(minutes)) if pair in PAIRS else candles(pair,int(minutes),symbols=symbols)
+            except (MarketUnavailable,ValueError):
                 raise HTTPException(503, "Market data unavailable") from None
+            if len(market_cache)>=160:market_cache.clear()
             market_cache[key] = (time.monotonic(), data)
             return data
 

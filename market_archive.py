@@ -203,14 +203,16 @@ def verified_reader(directory):
         cleanup();raise
 
 
-def _import_members(memory, reader, *, intervals=(60,), verified=False, fixture=False, now=None):
+def _import_members(memory, reader, *, intervals=(60,), verified=False, fixture=False, now=None, symbols=None):
     """Only allowlisted members; ZIP CRC verified by reading to EOF; import cursor durable.
 
     Record the validation mode explicitly, never imply full SHA from selective bytes.
     """
     intervals=tuple(intervals)
     if not intervals or len(intervals)>7 or len(set(intervals))!=len(intervals): raise ValueError('invalid intervals')
-    for interval in intervals: identity('BTC/USD',interval)
+    symbols = dict(SYMBOLS if symbols is None else symbols)
+    if not symbols or not symbols.keys() <= memory.symbols.keys() or any(memory.symbols[p]!=v for p,v in symbols.items()):raise ArchiveError('invalid archive scope')
+    for interval in intervals: identity(next(iter(symbols)),interval,symbols)
     mode='publisher_full_sha256' if verified else 'https_range_member_crc32'
     if fixture: mode='fixture'
     root=memory.root/'archive-intake';root.mkdir(mode=0o700,exist_ok=True)
@@ -220,12 +222,18 @@ def _import_members(memory, reader, *, intervals=(60,), verified=False, fixture=
         infos=z.infolist()
         if len(infos)>MAX_ENTRIES: raise ArchiveError('archive directory exceeds limit')
         selected=[]
-        for pair,(base,alias) in SYMBOLS.items():
+        used_members=set()
+        for pair,(base,alias) in symbols.items():
             for interval in intervals:
                 valid={f'{code}_{interval}.csv' for code in (base,alias,pair.replace('/',''))}
                 matches=[i for i in infos if i.filename.rsplit('/',1)[-1] in valid and not i.is_dir()]
+                if not matches and pair not in SYMBOLS:
+                    results.append({'pair':pair,'interval':interval,'state':'not_in_pinned_archive'})
+                    continue
                 if len(matches)!=1: raise ArchiveError('missing or ambiguous requested archive member')
                 i=matches[0]
+                if i.filename in used_members:raise ArchiveError('archive member shared by multiple market identities')
+                used_members.add(i.filename)
                 if i.flag_bits&1 or i.file_size<=0 or i.file_size>MAX_CSV_BYTES: raise ArchiveError('invalid archive member')
                 selected.append((pair,interval,i))
         for pair,interval,i in selected:

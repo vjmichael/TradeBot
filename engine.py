@@ -71,14 +71,14 @@ def _public_ohlc(client, symbol, minutes):
     raise AssertionError("unreachable")
 
 
-def candles(pair: str, minutes: int = 60, *, client=None, now=None):
+def candles(pair: str, minutes: int = 60, *, client=None, now=None, symbols=SYMBOLS):
     """Public GET only; never send the vault, API keys, cookies or private requests."""
-    if pair not in SYMBOLS or type(minutes) is not int or minutes not in INTERVALS:
+    if pair not in symbols or type(minutes) is not int or minutes not in INTERVALS:
         raise ValueError("unsupported market or interval")
-    symbol, result_key = SYMBOLS[pair]
+    symbol, result_key = symbols[pair]
     if client is None:
         with httpx.Client(timeout=12, follow_redirects=False, trust_env=False) as transport:
-            return candles(pair, minutes, client=transport, now=now)
+            return candles(pair, minutes, client=transport, now=now, symbols=symbols)
     payload = _public_ohlc(client, symbol, minutes)
     try:
         result = payload["result"]

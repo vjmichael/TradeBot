@@ -88,3 +88,52 @@ class DashboardTests(unittest.TestCase):
             self.assertTrue(c.get('/api/status',headers=AUTH).json()['human_pause'])
         with closing(sqlite3.connect(self.directory/'desk.sqlite3')) as db:
             self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],2)
+
+    def test_market_directory_auth_and_selection(self):
+        from market_directory import MarketDirectory, parse_directory
+        import time
+        def item(base, alt, status="online"):
+            return dict(wsname=base+"/USD", altname=alt, base=base, quote="ZUSD",
+                        aclass_base="currency", aclass_quote="currency", status=status,
+                        pair_decimals=5, lot_decimals=8, cost_decimals=5,
+                        ordermin="0.001", costmin="0.5", tick_size="0.00001")
+        markets = parse_directory({"error":[], "result":{
+            "XXBTZUSD":item("XBT","XBTUSD"),"XETHZUSD":item("ETH","ETHUSD"),
+            "SOLUSD":item("SOL","SOLUSD"),"ADAUSD":item("ADA","ADAUSD")}})
+        with self.app() as c:
+            path = "/api/market-directory"
+            self.assertEqual(c.get(path).status_code,401)
+            self.assertEqual(c.post(path+"/refresh",json={}).status_code,401)
+            self.assertEqual(c.post(path+"/selection",json={}).status_code,401)
+            start = MarketDirectory(self.directory).refresh(fetch=lambda:markets,now=int(time.time()))
+            body={"pair":"ADA/USD","enabled":True,"version":start["version"]}
+            self.assertEqual(c.post(path+"/selection",headers=AUTH,json=body|{"enabled":"true"}).status_code,422)
+            self.assertEqual(c.post(path+"/selection",headers=AUTH,json=body).status_code,200)
+            self.assertEqual(c.get(path+"?query=ADA",headers=AUTH).json()["markets"][0]["pair"],"ADA/USD")
+            self.assertEqual(c.get("/api/instances",headers=AUTH).json(),[])
+            self.assertEqual(c.get("/api/status",headers=AUTH).json()["mode"],"PAPER")
+        with self.app() as c:
+            result=c.get("/api/market-directory",headers=AUTH).json()
+            self.assertIn("ADA/USD",[x["pair"] for x in result["selected"]])
+
+    def test_selected_market_routing_and_schedule_admission(self):
+        from market_directory import MarketDirectory, parse_directory
+        from test_market_directory import payload
+        from unittest.mock import patch
+        import time
+        now=int(time.time())
+        directory=MarketDirectory(self.directory)
+        result=directory.refresh(now=now,fetch=lambda:parse_directory(payload()))
+        selection={"pair":"ADA/USD","enabled":True,"version":result["version"]}
+        with self.app() as c, patch("tradebot.candles",return_value={"pair":"ADA/USD","candles":[]}) as fetch:
+            self.assertEqual(c.get("/api/markets/ADA/candles",headers=AUTH).status_code,422)
+            self.assertEqual(c.post("/api/market-directory/selection",json=selection,headers=AUTH).status_code,200)
+            self.assertEqual(c.get("/api/markets/ADA/candles",headers=AUTH).status_code,200)
+            self.assertEqual(fetch.call_args.kwargs["symbols"]["ADA/USD"],("ADAUSD","ADAUSD"))
+            self.assertEqual(c.post("/api/data-schedule",json={"enabled":True},headers=AUTH).status_code,200)
+            self.assertEqual(c.post("/api/market-directory/selection",json=selection|{"enabled":False},headers=AUTH).status_code,409)
+            self.assertEqual(c.post("/api/data-schedule",json={"enabled":False},headers=AUTH).status_code,200)
+            self.assertEqual(c.post("/api/market-directory/selection",json=selection|{"enabled":False},headers=AUTH).status_code,200)
+            self.assertEqual(c.get("/api/markets/ADA/candles",headers=AUTH).status_code,422)
+            self.assertIn("ADA/USD",directory.retained_symbols())
+            self.assertEqual(fetch.call_count,1)

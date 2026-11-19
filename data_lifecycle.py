@@ -14,11 +14,14 @@ from contextlib import closing
 from pathlib import Path
 
 from engine import SYMBOLS
+from market_directory import MarketDirectory, DirectoryUnavailable
+from contextlib import nullcontext
 from market_memory import MarketMemory, MemoryUnavailable, sha256_file
 from economic_memory import EconomicMemory
 from market_lake import syncdir
 
 DATABASES = ('market-memory/catalog.sqlite3', 'economic-memory/evidence.sqlite3')
+DIRECTORY_DB = 'market-directory/directory.sqlite3'
 MAX_BYTES = 8 * 1024**3
 MAX_FILES = 100000
 RESERVE = 256 * 1024**2
@@ -30,9 +33,17 @@ def coverage(memory, now=None):
     end = now // 3600 * 3600
     start = end - 1825 * 86400
     result = []
-    for pair in SYMBOLS:
+    registry_path=memory.directory/'market-directory'
+    selected=MarketDirectory(memory.directory).selected_symbols() if registry_path.exists() else memory.symbols
+    for pair in selected:
         view = memory.query(pair, 60, start, end, now)
-        result.append({k: view[k] for k in ('pair','start','end','expected','coverage','missing','conflicts')})
+        item={k: view[k] for k in ('pair','start','end','expected','coverage','missing','conflicts')}
+        with memory.tx() as db:
+            archive=db.execute("SELECT count(*) FROM sources WHERE pair=? AND interval=60 AND kind='archive' AND state='complete'",(pair,)).fetchone()[0]
+            checked=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='market_archive_status'").fetchone()
+            status=db.execute('SELECT checked,state FROM market_archive_status WHERE pair=?',(pair,)).fetchone() if checked else None
+        item.update(archive_state=status['state'] if status else 'imported' if archive else 'not_checked',archive_checked=status['checked'] if status else None,last_recent=view['collector']['last_success'] if view['collector'] else None,training_ready=False)
+        result.append(item)
     # Missing can include legitimate no-trade hours. Never infer readiness.
     return {'as_of': now, 'markets': result, 'state': 'review_required', 'training_ready': False}
 
@@ -48,17 +59,22 @@ def _safe(root, rel):
     return dest
 
 
-def _catalog_files(db):
+def _catalog_files(db, symbols=SYMBOLS):
     """Only catalog-bound files, including retired generations and import checkpoints."""
     def ident(s):
         if not isinstance(s,str) or not HEX.fullmatch(s): raise MemoryUnavailable('invalid catalog identity')
         return s
+    # Registry identity must also cover rows that have no exported asset yet.
+    for table in ('sources','candles','collector','exports','lake_files','stream_health','stream_gap_reports','quality_books','quality_attempts','gap_jobs','gap_attempts'):
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():
+            if any(pair not in symbols for (pair,) in db.execute('SELECT DISTINCT pair FROM '+table)):
+                raise MemoryUnavailable('catalog contains an unbound market identity')
     files = {}
     for source, digest in db.execute("SELECT id,sha256 FROM sources WHERE kind IN ('archive','fixture')"):
         files['market-memory/'+ident(source)+'.csv'] = ident(digest)
     for path,digest,pair,interval,key in db.execute('SELECT path,sha256,pair,interval,id FROM exports'):
         expected = f'parquet/{pair.replace("/","_")}/{interval}/{ident(key)}.parquet'
-        if pair not in SYMBOLS or path != expected or type(interval) is not int or interval not in (1,5,15,60,240,720,1440):
+        if pair not in symbols or path != expected or type(interval) is not int or interval not in (1,5,15,60,240,720,1440):
             raise MemoryUnavailable('invalid export reference')
         files['market-memory/'+expected] = ident(digest)
     if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lake_files'").fetchone():
@@ -123,11 +139,14 @@ def backup(directory, destination):
     if directory in destination.parents or destination==directory or destination.exists() or destination.is_symlink():
         raise MemoryUnavailable('backup requires a new directory outside the data store')
     m=MarketMemory(directory);e=EconomicMemory(directory)
+    registry=MarketDirectory(directory) if _safe(directory,DIRECTORY_DB).is_file() else None
+    databases=DATABASES+(DIRECTORY_DB,) if registry else DATABASES
     stage=Path(tempfile.mkdtemp(prefix='.snapshot-',dir=destination.parent));entries={};used=0
     try:
-        with m.tx() as market_db,e.tx(write=True):
-            files=_catalog_files(market_db);cut=int(time.time())
-            for rel in DATABASES:
+        with (registry.tx() if registry else nullcontext()) as registry_db,m.tx() as market_db,e.tx(write=True):
+            symbols=registry._retained(registry_db) if registry else SYMBOLS
+            files=_catalog_files(market_db,symbols);cut=int(time.time())
+            for rel in databases:
                 src=_safe(directory,rel);target=_safe(stage,rel);target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
                 if not src.is_file():raise MemoryUnavailable('database missing')
                 with closing(sqlite3.connect(src.as_uri()+'?mode=ro',uri=True)) as reader,closing(sqlite3.connect(target)) as writer:
@@ -172,10 +191,12 @@ def restore(snapshot, destination, expected_manifest_sha256):
             if type(entry['bytes']) is not int or not 0<=entry['bytes']<=MAX_BYTES-used or src.stat().st_size!=entry['bytes']:raise MemoryUnavailable('invalid snapshot file size')
             used+=_copy(src,dst,MAX_BYTES-used)
             if _entry(dst)!=entry:raise MemoryUnavailable('snapshot file checksum mismatch')
-        for rel in DATABASES:copy(rel);_check_db(stage/rel)
+        databases=DATABASES+(DIRECTORY_DB,) if DIRECTORY_DB in files else DATABASES
+        for rel in databases:copy(rel);_check_db(stage/rel)
+        symbols=MarketDirectory(stage).retained_symbols() if DIRECTORY_DB in files else SYMBOLS
         with closing(sqlite3.connect(stage/DATABASES[0])) as db:
-            bound=_catalog_files(db)
-            if set(files)!=set(DATABASES)|set(bound):raise MemoryUnavailable('snapshot asset inventory mismatch')
+            bound=_catalog_files(db,symbols)
+            if set(files)!=set(databases)|set(bound):raise MemoryUnavailable('snapshot asset inventory mismatch')
             for rel,digest in bound.items():
                 if files[rel]['sha256']!=digest:raise MemoryUnavailable('snapshot catalog checksum mismatch')
                 copy(rel)

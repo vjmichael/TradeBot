@@ -28,9 +28,9 @@ MIN_FREE_BYTES=256*1024**2
 MAX_JOB_PAGES=200000
 
 
-def fetch_page(pair,cursor):
+def fetch_page(pair,cursor,symbols=SYMBOLS):
     with httpx.Client(timeout=15,follow_redirects=False,trust_env=False) as c:
-        with c.stream('GET',URL,params={'pair':SYMBOLS[pair][0],'since':str(cursor),'count':1000},headers=PUBLIC_HEADERS) as response:
+        with c.stream('GET',URL,params={'pair':symbols[pair][0],'since':str(cursor),'count':1000},headers=PUBLIC_HEADERS) as response:
             if response.status_code!=200:raise MemoryUnavailable('trade recovery HTTP unavailable')
             data=bytearray()
             for block in response.iter_bytes(chunk_size=65536):
@@ -39,9 +39,9 @@ def fetch_page(pair,cursor):
     return json.loads(data,parse_float=Decimal)
 
 
-def parse_page(pair,cursor,payload):
+def parse_page(pair,cursor,payload,symbols=SYMBOLS):
     if not isinstance(payload,dict) or payload.get('error')!=[]:raise MemoryUnavailable('trade recovery exchange unavailable')
-    data=payload.get('result');alias=SYMBOLS[pair][1]
+    data=payload.get('result');alias=symbols[pair][1]
     if not isinstance(data,dict) or set(data)!={alias,'last'}:raise ValueError('incorrect trade market identity')
     value=data['last']
     if not isinstance(value,str) or not re.fullmatch(r'\d{1,20}',value):raise ValueError('invalid trade cursor')
@@ -111,7 +111,7 @@ class GapBridge:
         return left['rows'][0]['digest'],right['rows'][0]['digest']
     def run(self,pair,start,end,*,max_pages=64,fetch=fetch_page,pace=time.sleep,clock=time.time):
         now=int(clock())
-        if pair not in SYMBOLS or any(type(x) is not int for x in (start,end,max_pages)) or not 0<start-STEP<end+STEP<=now or start%STEP or end%STEP or not 0<end-start<=MAX_SPAN or not 1<=max_pages<=MAX_PAGES:
+        if pair not in self.memory.symbols or any(type(x) is not int for x in (start,end,max_pages)) or not 0<start-STEP<end+STEP<=now or start%STEP or end%STEP or not 0<end-start<=MAX_SPAN or not 1<=max_pages<=MAX_PAGES:
             raise ValueError('invalid gap recovery bounds')
         with exclusive_job(self.memory.root,'trade-gap'):
             first,last=self.anchors(pair,start,end,now)
@@ -131,7 +131,7 @@ class GapBridge:
                 if job['state']=='ready':return self.publish(key,pair,start,end,first,last,int(clock()))
                 if job['pages']>=MAX_JOB_PAGES or shutil.disk_usage(self.memory.root).free<MIN_FREE_BYTES:
                     raise MemoryUnavailable('trade recovery storage or page budget reached; checkpoint retained')
-                cursor=int(job['cursor']); nxt,rows=parse_page(pair,cursor,fetch(pair,cursor)); observed=int(clock())
+                cursor=int(job['cursor']); nxt,rows=parse_page(pair,cursor,fetch_page(pair,cursor,self.memory.symbols) if fetch is fetch_page else fetch(pair,cursor),self.memory.symbols); observed=int(clock())
                 if rows[0][0]<(start-STEP)*NS or rows[-1][0]>observed*NS+NS:raise ValueError('trade response outside observation boundary')
                 prior_id=job['last_trade'];prior_stamp=int(job['last_stamp'])
                 digest=hashlib.sha256(json.dumps([cursor,nxt,rows],separators=(',',':')).encode()).hexdigest()

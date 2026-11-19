@@ -42,8 +42,8 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def identity(pair, interval):
-    if pair not in SYMBOLS or type(interval) is not int or interval not in ARCHIVE_INTERVALS:
+def identity(pair, interval, symbols=SYMBOLS):
+    if pair not in symbols or type(interval) is not int or interval not in ARCHIVE_INTERVALS:
         raise ValueError('unsupported Kraken spot pair or interval')
     return interval * 60
 
@@ -86,9 +86,9 @@ def normalize(row, interval, observed_at):
     return (stamp, *values, trades, digest)
 
 
-def archive_identity(path, pair, interval):
-    identity(pair, interval)
-    base, alias = SYMBOLS[pair]
+def archive_identity(path, pair, interval, symbols=SYMBOLS):
+    identity(pair, interval, symbols)
+    base, alias = symbols[pair]
     if Path(path).name not in {f'{code}_{interval}.csv' for code in (base, alias, pair.replace('/', ''))}:
         raise ValueError('archive filename does not match pair and timeframe')
 
@@ -116,7 +116,9 @@ def csv_batches(path, interval, observed_at, *, offset=0, previous=0):
 
 
 class MarketMemory:
-    def __init__(self, directory):
+    def __init__(self, directory, *, symbols=None):
+        self.directory = Path(directory)
+        self._symbols = dict(symbols) if symbols is not None else None
         self.root = Path(directory) / 'market-memory'
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         if self.root.is_symlink() or (os.name == 'posix' and self.root.stat().st_mode & 0o077):
@@ -135,6 +137,14 @@ CREATE TABLE IF NOT EXISTS exports(id TEXT PRIMARY KEY,path TEXT NOT NULL UNIQUE
 PRAGMA user_version=1;'''
             for statement in schema.split(';'):
                 if statement.strip(): db.execute(statement)
+
+    @property
+    def symbols(self):
+        if self._symbols is not None:
+            return self._symbols
+        from market_directory import MarketDirectory
+        path = self.directory / 'market-directory'
+        return MarketDirectory(self.directory).retained_symbols() if path.exists() else dict(SYMBOLS)
 
     @contextmanager
     def tx(self):
@@ -170,7 +180,7 @@ PRAGMA user_version=1;'''
         queries. Resume committed batches only. Fixture data never enters real views.
         """
         path = Path(path)
-        archive_identity(path, pair, interval)
+        archive_identity(path, pair, interval, self.symbols)
         if max_batches is not None and (type(max_batches) is not int or max_batches < 1):
             raise ValueError('invalid batch limit')
         if not re.fullmatch(r'[0-9a-f]{64}', sha256) or not path.is_file() or path.stat().st_size > MAX_CSV_BYTES:
@@ -250,7 +260,7 @@ PRAGMA user_version=1;'''
             return dict(db.execute('SELECT * FROM sources WHERE id=?', (source,)).fetchone())
 
     def record_recent(self, pair, interval, snapshot, *, now=None):
-        step = identity(pair, interval)
+        step = identity(pair, interval, self.symbols)
         observed = snapshot.get('observed_at')
         if (snapshot.get('exchange'), snapshot.get('product'), snapshot.get('pair'),snapshot.get('interval_minutes')) != ('kraken','spot',pair,interval) or type(observed) is not int or not 0 < observed < MAX_TIME:
             raise ValueError('invalid market identity')
@@ -275,10 +285,10 @@ PRAGMA user_version=1;'''
         return count
 
     def poll(self, pair, interval=60, *, fetch=candles):
-        identity(pair, interval)
+        identity(pair, interval, self.symbols)
         if interval not in INTERVALS: raise ValueError('unsupported REST interval')
         try:
-            result = fetch(pair, interval)
+            result = candles(pair, interval, symbols=self.symbols) if fetch is candles else fetch(pair, interval)
             return self.record_recent(pair,interval,result)
         except Exception:
             with self.tx() as db:
@@ -286,7 +296,7 @@ PRAGMA user_version=1;'''
             raise
 
     def query(self, pair, interval, start, end, as_of, *, fixture=False):
-        step = identity(pair, interval)
+        step = identity(pair, interval, self.symbols)
         if any(type(x) is not int for x in (start,end,as_of)) or not 0 <= start < end <= MAX_TIME or not 0 < as_of < MAX_TIME or start % step or end % step or (end-start)//step > MAX_QUERY_ROWS:
             raise ValueError('invalid or unbounded query window')
         end = max(start, min(end, as_of//step*step))

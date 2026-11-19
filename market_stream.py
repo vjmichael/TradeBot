@@ -25,13 +25,13 @@ MAX_GAPS=MAX_QUERY_ROWS
 RECONNECT=(5,10,20,40,60)
 
 
-def exact_closed(pair, interval=60, *, client=None, now=None):
+def exact_closed(pair, interval=60, *, client=None, now=None, symbols=SYMBOLS):
     """Same qualified public endpoint, but retain exact source decimals/count."""
-    if pair not in SYMBOLS or interval not in (5,60): raise ValueError('unsupported repair market')
+    if pair not in symbols or interval not in (5,60): raise ValueError('unsupported repair market')
     if client is None:
         with httpx.Client(timeout=12,follow_redirects=False,trust_env=False) as c:
-            return exact_closed(pair,interval,client=c,now=now)
-    step=interval*60; symbol,alias=SYMBOLS[pair]; payload=_public_ohlc(client,symbol,interval)
+            return exact_closed(pair,interval,client=c,now=now,symbols=symbols)
+    step=interval*60; symbol,alias=symbols[pair]; payload=_public_ohlc(client,symbol,interval)
     observed=int(time.time()) if now is None else now
     data=payload.get('result')
     if not isinstance(data,dict) or set(data)!={alias,'last'}: raise ValueError('incorrect REST identity')
@@ -52,16 +52,19 @@ def exact_closed(pair, interval=60, *, client=None, now=None):
 
 
 class StreamJournal:
-    def __init__(self,memory):
+    def __init__(self,memory, symbols=None):
         self.memory=memory
+        self.symbols = dict(memory.symbols if symbols is None else symbols)
+        if any(memory.symbols.get(p)!=v for p,v in self.symbols.items()):raise ValueError('invalid stream scope')
         with memory.tx() as db:
             db.execute('''CREATE TABLE IF NOT EXISTS stream_health(pair TEXT PRIMARY KEY,connected INTEGER NOT NULL DEFAULT 0,acked INTEGER NOT NULL DEFAULT 0,last_message INTEGER,last_update INTEGER,last_repair INTEGER,state TEXT NOT NULL DEFAULT 'offline',repair_state TEXT NOT NULL DEFAULT 'pending')''')
             db.execute('''CREATE TABLE IF NOT EXISTS stream_latest(pair TEXT PRIMARY KEY,ts INTEGER NOT NULL,observed_at INTEGER NOT NULL,payload TEXT NOT NULL)''')
             db.execute('''CREATE TABLE IF NOT EXISTS stream_gap_reports(pair TEXT PRIMARY KEY,start_ts INTEGER NOT NULL,end_ts INTEGER NOT NULL,as_of INTEGER NOT NULL,expected INTEGER NOT NULL,covered INTEGER NOT NULL,conflicts INTEGER NOT NULL,missing INTEGER NOT NULL,older_than_rest INTEGER NOT NULL,ranges TEXT NOT NULL)''')
-            for pair in SYMBOLS: db.execute('INSERT OR IGNORE INTO stream_health(pair) VALUES(?)',(pair,))
+            for pair in self.symbols: db.execute('INSERT OR IGNORE INTO stream_health(pair) VALUES(?)',(pair,))
     def start(self):
         with self.memory.tx() as db:
-            db.execute("UPDATE stream_health SET connected=1,acked=0,last_message=NULL,state='subscribing',repair_state='pending'")
+            db.execute("UPDATE stream_health SET connected=0,acked=0,state='offline'")
+            db.executemany("UPDATE stream_health SET connected=1,acked=0,last_message=NULL,state='subscribing',repair_state='pending' WHERE pair=?", [(p,) for p in self.symbols])
     def stop(self):
         with self.memory.tx() as db:
             db.execute("UPDATE stream_health SET connected=0,acked=0,state='offline'")
@@ -94,7 +97,8 @@ class StreamJournal:
         coverage before a market listed. Report includes unresolved recent gaps.
         """
         try:
-            snapshot=fetch(pair,60)
+            if pair not in self.symbols:raise ValueError('market outside stream scope')
+            snapshot=exact_closed(pair,60,symbols=self.symbols) if fetch is exact_closed else fetch(pair,60)
             observed=snapshot['observed_at'];published=int(time.time()) if now is None else now
             count=self.memory.record_recent(pair,60,snapshot,now=published)
             end=observed//STEP*STEP
@@ -119,7 +123,7 @@ class StreamJournal:
     def status(self):
         with closing(sqlite3.connect(self.memory.db)) as db:
             db.row_factory=sqlite3.Row
-            rows=[dict(r) for r in db.execute('SELECT h.*,l.ts AS latest_interval FROM stream_health h LEFT JOIN stream_latest l ON l.pair=h.pair ORDER BY h.pair')]
+            rows=[dict(r) for r in db.execute('SELECT h.*,l.ts AS latest_interval FROM stream_health h LEFT JOIN stream_latest l ON l.pair=h.pair ORDER BY h.pair') if r['pair'] in self.symbols]
             now=int(time.time())
             for r in rows:
                 r['transport_fresh']=bool(r['connected'] and r['acked'] and r['last_message'] is not None and 0<=now-r['last_message']<=30)
@@ -129,16 +133,16 @@ class StreamJournal:
     def gap_reports(self):
         with closing(sqlite3.connect(self.memory.db)) as db:
             db.row_factory=sqlite3.Row
-            return [dict(r)|{'ranges':json.loads(r['ranges'])} for r in db.execute('SELECT * FROM stream_gap_reports ORDER BY pair')]
+            return [dict(r)|{'ranges':json.loads(r['ranges'])} for r in db.execute('SELECT * FROM stream_gap_reports ORDER BY pair') if r['pair'] in self.symbols]
 
 
-def decode_message(text,now):
+def decode_message(text,now,symbols=SYMBOLS):
     if not isinstance(text,str) or len(text)>1024*1024: raise ValueError('invalid WS message size')
     m=json.loads(text,parse_float=Decimal)
     if not isinstance(m,dict):raise ValueError('invalid WS message')
     if m.get('method')=='subscribe':
         r=m.get('result')
-        if m.get('success') is not True or not isinstance(r,dict) or r.get('channel')!='ohlc' or r.get('symbol') not in SYMBOLS or r.get('interval')!=60: raise ValueError('subscription rejected')
+        if m.get('success') is not True or not isinstance(r,dict) or r.get('channel')!='ohlc' or r.get('symbol') not in symbols or r.get('interval')!=60: raise ValueError('subscription rejected')
         return 'ack',r['symbol']
     if m.get('channel') in ('heartbeat','status'): return 'transport',None
     if m.get('channel')!='ohlc' or m.get('type') not in ('snapshot','update'): raise ValueError('unexpected WS channel')
@@ -146,7 +150,7 @@ def decode_message(text,now):
     if not isinstance(data,list) or not 1<=len(data)<=100:raise ValueError('invalid WS candle count')
     rows=[]
     for r in data:
-        if not isinstance(r,dict) or r.get('symbol') not in SYMBOLS or r.get('interval')!=60:raise ValueError('invalid stream identity')
+        if not isinstance(r,dict) or r.get('symbol') not in symbols or r.get('interval')!=60:raise ValueError('invalid stream identity')
         stamp=r.get('interval_begin')
         if not isinstance(stamp,str) or not re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.0{1,9})?Z',stamp):raise ValueError('invalid stream timestamp')
         ts=int(datetime.fromisoformat(stamp.replace('Z','+00:00')).timestamp())
@@ -162,17 +166,17 @@ async def session(journal,ws,*,duration=None,fetch=exact_closed,repair_interval=
     journal.start();started=time.monotonic();last_repair=None;last_hour=None;acks=set();seen=set();task=None;task_pairs=set();last_touch=0
     async def repair_all():
         out=[]
-        for pair in SYMBOLS:
+        for pair in journal.symbols:
             try:out.append(await asyncio.to_thread(journal.repair,pair,fetch=fetch))
             except Exception as exc:out.append({'pair':pair,'error_type':type(exc).__name__})
         return out
     try:
-        await ws.send(json.dumps({'method':'subscribe','params':{'channel':'ohlc','symbol':list(SYMBOLS),'interval':60,'snapshot':True},'req_id':1}))
+        await ws.send(json.dumps({'method':'subscribe','params':{'channel':'ohlc','symbol':list(journal.symbols),'interval':60,'snapshot':True},'req_id':1}))
         while duration is None or time.monotonic()-started<duration:
-            if len(acks)<len(SYMBOLS) and time.monotonic()-started>20: raise TimeoutError('missing subscription acknowledgements')
+            if len(acks)<len(journal.symbols) and time.monotonic()-started>20: raise TimeoutError('missing subscription acknowledgements')
             try:raw=await asyncio.wait_for(ws.recv(),timeout=15)
             except asyncio.TimeoutError:raise TimeoutError('no WS messages; reconnect') from None
-            now=int(time.time());typ,payload=decode_message(raw,now)
+            now=int(time.time());typ,payload=decode_message(raw,now,journal.symbols)
             if typ=='ack':journal.ack(payload,now);acks.add(payload)
             elif typ=='updates':journal.updates(payload,now);seen.update(r[0] for r in payload)
             if now-last_touch>=5:journal.touch(now);last_touch=now
@@ -180,7 +184,7 @@ async def session(journal,ws,*,duration=None,fetch=exact_closed,repair_interval=
                 result=await task;task_pairs.update(r['pair'] for r in result if 'error_type' not in r);task=None
             # One bounded batch per connection start, hourly rollover, or periodic repair.
             mono=time.monotonic();hour=now//STEP
-            if len(acks)==len(SYMBOLS) and task is None and (last_repair is None or (mono-last_repair>=MIN_REPAIR_SECONDS and (hour!=last_hour or mono-last_repair>=repair_interval))):
+            if len(acks)==len(journal.symbols) and task is None and (last_repair is None or (mono-last_repair>=MIN_REPAIR_SECONDS and (hour!=last_hour or mono-last_repair>=repair_interval))):
                 task=asyncio.create_task(repair_all());last_repair=mono;last_hour=hour
         if task is not None:
             result=await task;task_pairs.update(r['pair'] for r in result if 'error_type' not in r);task=None
@@ -194,10 +198,10 @@ async def session(journal,ws,*,duration=None,fetch=exact_closed,repair_interval=
         else:journal.stop()
 
 
-async def _run_stream(memory,*,duration=None):
+async def _run_stream(memory,*,duration=None,symbols=None):
     """Native public connection; finite mode for qualification, continuous for developer use."""
     from websockets.asyncio.client import connect
-    journal=StreamJournal(memory);journal.stop();failures=0
+    journal=StreamJournal(memory,symbols);journal.stop();failures=0
     while True:
         try:
             async with connect(WS_URL,proxy=None,open_timeout=15,close_timeout=5,ping_interval=20,ping_timeout=15,max_size=1024*1024,max_queue=16) as ws:
@@ -210,7 +214,7 @@ async def _run_stream(memory,*,duration=None):
             await asyncio.sleep(RECONNECT[min(failures,len(RECONNECT)-1)]);failures+=1
 
 
-async def run_stream(memory,*,duration=None):
+async def run_stream(memory,*,duration=None,symbols=None):
     from market_archive import exclusive_job
     with exclusive_job(memory.root,'market-stream'):
-        return await _run_stream(memory,duration=duration)
+        return await _run_stream(memory,duration=duration,symbols=symbols)
