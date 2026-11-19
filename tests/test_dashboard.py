@@ -87,7 +87,24 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual((r['id'],r['provider'],r['history_years']),('old','grok',5))
             self.assertTrue(c.get('/api/status',headers=AUTH).json()['human_pause'])
         with closing(sqlite3.connect(self.directory/'desk.sqlite3')) as db:
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],2)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],3)
+            self.assertEqual(db.execute("SELECT id,pair,virtual_cents,mode,state FROM instances").fetchall(),
+                             [('old','BTC/USD',100,'PAPER','PAUSED')])
+            self.assertEqual(db.execute("SELECT paused,human_pause FROM desk WHERE id=1").fetchone(),(1,1))
+            tables={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            self.assertTrue({'gate_clock','gate_inputs','gate_current','gate_decisions','gate_intents','gate_events'} <= tables)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM gate_clock").fetchone()[0],1)
+            for table in ('gate_inputs','gate_current','gate_decisions','gate_intents','gate_events'):
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM "+table).fetchone()[0],0)
+        with self.app() as c:
+            self.assertEqual(c.get('/api/instances',headers=AUTH).json()[0]['id'],'old')
+            status=c.get('/api/status',headers=AUTH).json()
+            self.assertTrue(status['paused'] and status['human_pause'])
+            self.assertFalse(status['live_available'])
+            self.assertEqual(status['allocated_cents'],100)
+        with closing(sqlite3.connect(self.directory/'desk.sqlite3')) as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],3)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM gate_intents").fetchone()[0],0)
 
     def test_market_directory_auth_and_selection(self):
         from market_directory import MarketDirectory, parse_directory

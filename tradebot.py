@@ -133,9 +133,12 @@ class Store:
                 present = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 if not required.issubset(present) or db.execute("SELECT 1 FROM gate_clock WHERE id=1").fetchone() is None:
                     raise RuntimeError("risk ledger incomplete")
-            initialize_gate(db)
+            else:
+                # Initialize only as an atomic versioned migration; established
+                # ledgers are never recreated during ordinary startup.
+                initialize_gate(db)
+                db.execute("PRAGMA user_version=3")
             restrict_gate(db, "startup", int(time.time()))
-            db.execute("PRAGMA user_version=3")
 
     def status(self):
         with self.transaction() as db:
