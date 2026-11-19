@@ -71,3 +71,7 @@ AI_Pirate is a reference, not a restricted pair universe. BTC/USD, ETH/USD and S
 ## Product naming and market discovery
 
 Approved public name: Maj Vaj Trade Bot (formerly TradeBot). Rename displayed application brand, title and current README/ledger; preserve internal repository, module, package, environment, API and database identifiers. Freqtrade executes strategies only under independent Gate, FreqAI supplies numerical models, optional Grok supplies research. TB-04F3 fetches/version-stores the Kraken public market directory directly for user browsing and fresh selected-pair validation, without starting an execution engine or requiring a key. No new financial authority.
+
+## TB-R01 independent data discovery research
+
+Document [Cognitum experiments](cognitum-research.md) for after Maj Vaj core acceptance: trading-data mining, learned representations/derived features, historical replay, isolated crypto or equity simulated venues. One-way/read-only data custody; independent virtual portfolios and risk limits, no Maj Vaj control, no production writes or live keys/orders. Generated data stays labeled as derived/synthetic. Separate authorization required before implementation; no changes to core sequence, forward paper gate or financial authority.
