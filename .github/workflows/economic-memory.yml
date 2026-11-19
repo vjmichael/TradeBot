@@ -1,0 +1,30 @@
+name: TB-04D official economic evidence acceptance
+on:
+  push:
+    paths:
+      - 'economic_memory.py'
+      - 'scripts/ingest_economic.py'
+      - 'scripts/qualify_economic.py'
+      - 'tests/test_economic_memory.py'
+      - '.github/workflows/economic-memory.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  official-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [bls_calendar, bls_statistics, fed_monetary]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt -r requirements-market.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/qualify_economic.py ${{ matrix.source }}

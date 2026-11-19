@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from engine import candles, MarketUnavailable
 from market_memory import MarketMemory, MemoryUnavailable, session_profile
 from market_lake import HistoricalLake
+from economic_memory import EconomicMemory, CALENDAR, MACRO, FED
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
 SLOTS = frozenset({"grok", "telegram_desk", "telegram_recovery", "kraken_read_key", "kraken_read_secret"})
@@ -214,6 +215,7 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         store.boot()
         app.state.market_memory = MarketMemory(directory)
         app.state.market_lake = HistoricalLake(app.state.market_memory)
+        app.state.economic_memory = EconomicMemory(directory)
         yield
 
     market_lock = Lock()
@@ -309,8 +311,33 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
             raise HTTPException(409, "Paper capital cannot be less than existing allocations") from None
 
     @app.get("/api/calendar", dependencies=[Depends(authorize)])
-    def calendar():
-        return {"state": "not_connected", "events": [], "source": None}
+    def calendar(as_of: int | None = None, offset: int = 0):
+        if (as_of is not None and not 0<as_of<=int(time.time())) or not 0<=offset<=1500:
+            raise HTTPException(422,"Invalid evidence window")
+        try:
+            result=app.state.economic_memory.calendar(now=as_of,offset=offset)
+            return result | {"events":result["rows"]}
+        except (MemoryUnavailable, sqlite3.Error, ValueError, OSError):
+            raise HTTPException(503, "Economic calendar unavailable") from None
+
+    @app.get("/api/economic/{source}", dependencies=[Depends(authorize)])
+    def economic(source: Literal["statistics", "monetary"], as_of: int | None = None, offset: int = 0):
+        now=int(time.time())
+        if (as_of is not None and not 0<as_of<=now) or not 0<=offset<=1500:
+            raise HTTPException(422, "Invalid evidence window")
+        try:
+            return app.state.economic_memory.view(MACRO if source=="statistics" else FED,as_of=as_of,offset=offset,limit=100)
+        except (MemoryUnavailable, sqlite3.Error, ValueError, OSError):
+            raise HTTPException(503,"Economic evidence unavailable") from None
+
+    @app.get("/api/evidence/{evidence_id}", dependencies=[Depends(authorize)])
+    def evidence(evidence_id: str, as_of: int | None = None):
+        if as_of is not None and not 0<as_of<=int(time.time()):raise HTTPException(422,"Invalid evidence window")
+        try:result=app.state.economic_memory.evidence(evidence_id,as_of=as_of)
+        except ValueError:raise HTTPException(422,"Invalid evidence ID") from None
+        except (MemoryUnavailable, sqlite3.Error,OSError):raise HTTPException(503,"Economic evidence unavailable") from None
+        if result is None:raise HTTPException(404,"Evidence unavailable at requested time")
+        return result
 
     @app.get("/api/markets/{asset}/session-profile", dependencies=[Depends(authorize)])
     def market_profile(asset: Literal["BTC", "ETH", "SOL"], days: Literal["30", "90", "365", "1825"] = "90", zone: Literal["UTC", "America/Phoenix", "America/New_York", "Europe/London", "Asia/Tokyo", "Asia/Hong_Kong"] = "UTC"):

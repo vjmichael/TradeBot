@@ -32,7 +32,8 @@ class DashboardTests(unittest.TestCase):
                 self.assertEqual(c.post(path,json=body).status_code,401)
                 self.assertEqual(c.post(path,json=body,headers=AUTH|{'Origin':'https://evil.invalid'}).status_code,403)
             self.assertEqual(c.get('/api/setup',headers=AUTH|{'Host':'evil.invalid'}).status_code,400)
-            self.assertEqual(c.get('/api/calendar',headers=AUTH).json(),{'state':'not_connected','events':[],'source':None})
+            calendar=c.get('/api/calendar',headers=AUTH).json()
+            self.assertEqual((calendar['state'],calendar['events']),('not_connected',[]))
 
     def test_credentials_write_only_atomic_and_wrong_key(self):
         values={'grok':'synthetic-grok','kraken_read_key':'synthetic-key','kraken_read_secret':'synthetic-secret'}
