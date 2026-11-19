@@ -39,6 +39,26 @@ class EconomicTests(unittest.TestCase):
         self.assertEqual([r['key'] for r in self.m.view(e.CALENDAR,as_of=T+1)['rows']],['another'])
         self.put(e.CALENDAR,cal(),T+2);new=self.m.view(e.CALENDAR,as_of=T+2)['rows'][0]
         self.assertNotEqual(old['evidence_id'],new['evidence_id']);self.assertEqual(new['observed_at'],T+2)
+    def test_rolling_feed_history_retains_disappeared_records_at_observation_cut(self):
+        self.put(e.CALENDAR,cal());self.put(e.CALENDAR,cal(uid='later'),T+1)
+        current=self.m.view(e.CALENDAR,as_of=T+1)
+        self.assertEqual([r['key'] for r in current['rows']],['later'])
+        self.assertEqual(self.m.history(e.CALENDAR,as_of=T)['total'],1)
+        history=self.m.history(e.CALENDAR,as_of=T+1,limit=1)
+        self.assertEqual((history['total'],history['distinct_records'],history['next_offset']),(2,2,1))
+        self.assertEqual(self.m.history(e.CALENDAR,as_of=T+1,offset=1)['rows'][0]['key'],'test-1')
+        self.assertFalse(history['release_time_vintages_verified'])
+        self.put(e.CALENDAR,cal(uid='fixture'),T+2,fixture=True)
+        self.assertEqual(self.m.history(e.CALENDAR,as_of=T+2)['total'],2)
+    def test_extended_series_are_separate_and_current_vintage(self):
+        raw=json.dumps({'status':'REQUEST_SUCCEEDED','Results':{'series':[{'seriesID':s,'data':[{'year':'2026','period':'M04','value':'100','footnotes':[]}]} for s in e.EXT_SERIES]}}).encode()
+        self.put(e.MACRO_EXT,raw)
+        rows=self.m.view(e.MACRO_EXT,as_of=T)['rows']
+        self.assertEqual({r['series'] for r in rows},set(e.EXT_SERIES))
+        self.assertTrue(all(r['vintage']=='current_at_observation' and r['published_at'] is None for r in rows))
+        self.assertFalse(self.m.view(e.MACRO,as_of=T)['rows'])
+        self.assertFalse(self.m.history(e.MACRO_EXT,as_of=T-1)['rows'])
+        with self.assertRaises(ValueError):self.put(e.MACRO_EXT,macro(),T+1)
     def test_calendar_malformed_rejected_atomic(self):
         self.put(e.CALENDAR,cal())
         for b in (cal(zone='Mars/Nowhere'),cal(date='20261101T013000'),cal(date='20260308T023000'),cal().replace(b'END:VEVENT',b'RRULE:FREQ=DAILY\r\nEND:VEVENT'),cal()[:-20]):
@@ -87,5 +107,7 @@ class EconomicTests(unittest.TestCase):
             self.assertEqual(c.get('/api/economic/statistics').status_code,401);self.assertEqual(c.post('/api/economic/statistics',headers=auth,json={}).status_code,405)
             self.assertEqual(c.get('/api/economic/statistics',headers=auth,params={'as_of':T-1}).json()['rows'],[])
             self.assertEqual(c.get('/api/economic/statistics',headers=auth,params={'as_of':T}).json()['total'],6)
+            self.assertEqual(c.get('/api/economic/statistics/history').status_code,401)
+            self.assertEqual(c.get('/api/economic/statistics/history',headers=auth,params={'as_of':T}).json()['total'],6)
             self.assertEqual(c.get('/api/economic/statistics',headers=auth,params={'offset':-1}).status_code,422)
             self.assertEqual(c.get('/api/calendar',headers=auth).status_code,200)

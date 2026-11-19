@@ -179,7 +179,8 @@ def historical_report(memory,economic,pair,*,as_of=None,offset=0,report_id=None,
     evidence=[]
     for source in SOURCES:
         view=economic.view(source,as_of=as_of,limit=1)
-        evidence.append({k:view[k] for k in ('source','source_url','state','last_success','snapshot_sha256','total')})
+        saved=economic.history(source,as_of=as_of,limit=1)
+        evidence.append({k:view[k] for k in ('source','source_url','state','last_success','snapshot_sha256','total')}|{'retained_revisions':saved['total'],'retained_distinct_records':saved['distinct_records'],'first_observed':saved['first_observed'],'release_time_vintages_verified':False})
     conflicts=counts['conflicting_observations'];trade_conflicts=counts['conflicting_trade_counts']
     coverage=len(clean);missing=HOURS-coverage
     if sum(n for label,n in counts.items() if label!='conflicting_trade_counts')!=missing:

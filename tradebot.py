@@ -19,8 +19,8 @@ from engine import candles, MarketUnavailable
 from market_directory import MarketDirectory, DirectoryUnavailable
 from market_memory import MarketMemory, MemoryUnavailable, session_profile
 from market_lake import HistoricalLake
-from market_quality import QualityMemory, MAX_SAMPLES
-from economic_memory import EconomicMemory, CALENDAR, MACRO, FED
+from market_quality import QualityMemory, MAX_SAMPLES, SAMPLES_PER_MARKET, MAX_CATALOG_BYTES
+from economic_memory import EconomicMemory, CALENDAR, MACRO, FED, MACRO_EXT
 from data_lifecycle import coverage
 from historical_readiness import historical_report
 from data_preparation import Preparation
@@ -391,13 +391,22 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         except (MemoryUnavailable, sqlite3.Error, ValueError, OSError):
             raise HTTPException(503, "Economic calendar unavailable") from None
 
+    @app.get("/api/economic/{source}/history", dependencies=[Depends(authorize)])
+    def economic_history(source: Literal["statistics","extended","monetary","calendar"], as_of: int | None = None, offset: int = 0):
+        try:
+            return app.state.economic_memory.history({"statistics":MACRO,"extended":MACRO_EXT,"monetary":FED,"calendar":CALENDAR}[source],as_of=as_of,offset=offset)
+        except ValueError:
+            raise HTTPException(422,"Invalid historical evidence query") from None
+        except (MemoryUnavailable,sqlite3.Error,OSError):
+            raise HTTPException(503,"Retained historical evidence unavailable") from None
+
     @app.get("/api/economic/{source}", dependencies=[Depends(authorize)])
-    def economic(source: Literal["statistics", "monetary"], as_of: int | None = None, offset: int = 0):
+    def economic(source: Literal["statistics", "monetary", "extended"], as_of: int | None = None, offset: int = 0):
         now=int(time.time())
         if (as_of is not None and not 0<as_of<=now) or not 0<=offset<=1500:
             raise HTTPException(422, "Invalid evidence window")
         try:
-            return app.state.economic_memory.view(MACRO if source=="statistics" else FED,as_of=as_of,offset=offset,limit=100)
+            return app.state.economic_memory.view({"statistics":MACRO,"monetary":FED,"extended":MACRO_EXT}[source],as_of=as_of,offset=offset,limit=100)
         except (MemoryUnavailable, sqlite3.Error, ValueError, OSError):
             raise HTTPException(503,"Economic evidence unavailable") from None
 
@@ -499,9 +508,12 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     @app.get("/api/market-storage", dependencies=[Depends(authorize)])
     def market_storage():
         try:
+            scope=app.state.market_directory.selected_symbols()
             with app.state.market_memory.tx() as db:
                 samples=db.execute('SELECT count(*) FROM quality_attempts').fetchone()[0]
-            return app.state.market_lake.status() | {"maintenance":maintenance_status(directory),"sample_receipts":samples,"sample_limit":MAX_SAMPLES,"growth":storage_growth(directory,app.state.market_directory.selected_symbols())}
+                counts=dict(db.execute('SELECT pair,count(*) FROM quality_attempts GROUP BY pair'))
+                catalog_bytes=sum(p.stat().st_size for p in app.state.market_memory.root.glob('catalog.sqlite3*'))
+            return app.state.market_lake.status() | {"maintenance":maintenance_status(directory),"sample_receipts":samples,"sample_limit":MAX_SAMPLES,"market_sample_capacity":[{"pair":p,"receipts":counts.get(p,0),"limit":SAMPLES_PER_MARKET} for p in scope],"sample_catalog_bytes":catalog_bytes,"sample_catalog_watermark":MAX_CATALOG_BYTES,"growth":storage_growth(directory,scope)}
         except (DirectoryUnavailable, MemoryUnavailable, sqlite3.Error, OSError, ValueError):
             raise HTTPException(503, "Historical storage status unavailable") from None
 

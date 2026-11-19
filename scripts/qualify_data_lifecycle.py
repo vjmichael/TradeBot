@@ -93,6 +93,7 @@ def main():
             for source in SOURCES:
                 a=e.view(source,as_of=now);b=restored_e.view(source,as_of=now)
                 assert a==b and a['rows']
+                assert e.history(source,as_of=now)==restored_e.history(source,as_of=now)
             assert all(not r['connected'] for r in StreamJournal(restored).status())
             print('RECEIPT: verified data-only backup and fresh restore; actual observations, Parquet and economic evidence preserved; '+str(receipt),flush=True)
         finally:controller.close()

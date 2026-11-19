@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        source: [bls_calendar, bls_statistics, fed_monetary]
+        source: [bls_calendar, bls_statistics, bls_extended_statistics, fed_monetary]
     steps:
       - uses: actions/checkout@v4
         with:

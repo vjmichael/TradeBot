@@ -65,7 +65,7 @@ def _catalog_files(db, symbols=SYMBOLS):
         if not isinstance(s,str) or not HEX.fullmatch(s): raise MemoryUnavailable('invalid catalog identity')
         return s
     # Registry identity must also cover rows that have no exported asset yet.
-    for table in ('sources','candles','collector','exports','lake_files','stream_health','stream_gap_reports','quality_books','quality_attempts','gap_jobs','gap_attempts','recovery_admission','recovery_request_totals'):
+    for table in ('sources','candles','collector','exports','lake_files','stream_health','stream_gap_reports','quality_books','quality_attempts','quality_retired','gap_jobs','gap_attempts','recovery_admission','recovery_request_totals'):
         if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():
             if any(pair not in symbols for (pair,) in db.execute('SELECT DISTINCT pair FROM '+table)):
                 raise MemoryUnavailable('catalog contains an unbound market identity')

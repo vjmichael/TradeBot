@@ -20,7 +20,9 @@ DEPTH_URL = 'https://api.kraken.com/0/public/Depth'
 LEVELS = 25
 SLOT = 300
 MAX_DAYS = 7
-MAX_SAMPLES = 3*288*30
+SAMPLES_PER_MARKET = 288*35  # 30-day minimum plus five-day maintenance margin
+MAX_SAMPLES = 32*SAMPLES_PER_MARKET
+MAX_CATALOG_BYTES = 4*1024**3  # shared DB admission watermark, not a filesystem quota
 MAX_BODY = 128*1024
 RESERVE = 256*1024**2
 NOTIONALS = (100, 500, 1000)
@@ -124,12 +126,25 @@ class QualityMemory:
     def sample(self,pair,*,fetch=fetch_depth,clock=lambda:int(time.time())):
         if pair not in self.memory.symbols:raise ValueError('unsupported market')
         with exclusive_job(self.memory.root,'quality-book'):
-            now=clock(); slot=now//SLOT*SLOT
+            now=clock()
+            if type(now) is not int or not SLOT<=now<MAX_TIME:raise ValueError('invalid sample clock')
+            slot=now//SLOT*SLOT
+            with self.memory.tx() as db:
+                # Exclusive worker custody means unfinished attempts from an
+                # earlier process cannot still be in flight. Preserve them as
+                # interrupted observations, never as successful samples.
+                db.execute("UPDATE quality_attempts SET finished=?,state='unavailable' WHERE state='pending' AND finished IS NULL AND attempted<?",(now,slot))
+            # Commit interruption reconciliation even if capacity denies the
+            # next sample. Reviewed cleanup can now retire the old receipt.
             with self.memory.tx() as db:
                 prior=db.execute('SELECT MAX(attempted) FROM quality_attempts WHERE pair=?',(pair,)).fetchone()
                 if prior and prior[0] is not None and prior[0]//SLOT>=slot//SLOT:return 'paced'
-                if db.execute('SELECT count(*) FROM quality_attempts').fetchone()[0]>=MAX_SAMPLES or shutil.disk_usage(self.memory.root).free<RESERVE:
+                if (db.execute('SELECT count(*) FROM quality_attempts WHERE pair=?',(pair,)).fetchone()[0]>=SAMPLES_PER_MARKET
+                        or db.execute('SELECT count(*) FROM quality_attempts').fetchone()[0]>=MAX_SAMPLES
+                        or sum(p.stat().st_size for p in self.memory.root.glob('catalog.sqlite3*'))>=MAX_CATALOG_BYTES
+                        or shutil.disk_usage(self.memory.root).free<RESERVE):
                     raise MemoryUnavailable('liquidity sample capacity reached')
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quality_retired'").fetchone() and db.execute('SELECT 1 FROM quality_retired WHERE pair=? AND slot=?',(pair,slot)).fetchone():raise MemoryUnavailable('retired sample slot cannot be reused')
                 db.execute('INSERT INTO quality_attempts VALUES(?,?,?,?,?)',(pair,slot,now,None,'pending'))
             try:
                 raw,observed,source_digest=fetch_depth(pair,self.memory.symbols) if fetch is fetch_depth else fetch(pair); published=clock()

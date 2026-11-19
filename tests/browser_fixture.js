@@ -9,6 +9,8 @@ window.fetch=async (path,request)=>{
   if(path==='/api/instances'&&request.method==='GET')return response(f.instances);
   if(path==='/api/setup')return response(f.setup);
   if(path==='/api/calendar')return response(f.calendar);
+  if(path.startsWith('/api/economic/statistics/history?'))return response({state:'retained_history',total:1,distinct_records:1,rows:[{observed_at:1779500000,period:'2026-04',title:'Fixture unemployment rate',value:'4.2',unit:'percent'}],next_offset:null});
+  if(path.startsWith('/api/economic/extended?'))return response({state:'observed',rows:[{period:'2026-04',title:'Fixture producer prices',value:'150',unit:'index'}],next_offset:null});
   if(path.startsWith('/api/economic/statistics?'))return response({state:'observed',rows:[{period:'2026-04',title:'Fixture unemployment rate',value:'4.2',unit:'percent',evidence_id:'fixture'}],next_offset:null});
   if(path.startsWith('/api/economic/monetary?'))return response({state:'unavailable',rows:[],next_offset:null});
   if(path.startsWith('/api/market-directory?'))return response({state:'unavailable',version:null,observed_at:null,total:0,markets:[],selected:['BTC/USD','ETH/USD','SOL/USD'].map(pair=>({pair,preparation:'baseline_only',directory_status:'unverified',mapping_changed:false})),next_offset:null});

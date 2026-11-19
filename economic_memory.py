@@ -24,12 +24,16 @@ from market_archive import exclusive_job
 CALENDAR='bls_calendar'
 MACRO='bls_statistics'
 FED='fed_monetary'
+MACRO_EXT='bls_extended_statistics'
 SOURCES={CALENDAR:('https://www.bls.gov/schedule/news_release/bls.ics',3600,36*3600,'Bureau of Labor Statistics','BLS public-domain text/data; attribution'),
          MACRO:('https://api.bls.gov/publicAPI/v1/timeseries/data/',21600,48*3600,'Bureau of Labor Statistics','BLS public API v1; attribution'),
+         MACRO_EXT:('https://api.bls.gov/publicAPI/v1/timeseries/data/',21600,48*3600,'BLS producer prices and earnings','BLS public API v1; attribution'),
          FED:('https://www.federalreserve.gov/feeds/press_monetary.xml',3600,36*3600,'Federal Reserve','Official RSS headline and link reference only')}
 SERIES={'CUUR0000SA0':('Consumer price index (not seasonally adjusted)','index'),
         'LNS14000000':('Unemployment rate (seasonally adjusted)','percent'),
         'CES0000000001':('Nonfarm payroll employment (seasonally adjusted)','thousands of jobs')}
+EXT_SERIES={'WPUFD4':('Producer price index, final demand (not seasonally adjusted)','index'),
+            'CES0500000003':('Average hourly earnings, total private (seasonally adjusted)','USD/hour')}
 MAX_BYTES=2*1024**2
 MAX_ROWS=1500
 MAX_QUERY=500
@@ -101,12 +105,12 @@ def parse_calendar(raw,now):
     return out
 
 
-def parse_macro(raw,now):
+def parse_macro(raw,now,series_map=SERIES,source=MACRO):
     obj=json.loads(raw);out=[];seen=set();today=datetime.fromtimestamp(now,timezone.utc)
     if obj.get('status')!='REQUEST_SUCCEEDED':raise ValueError('BLS request failed')
     for series in obj['Results']['series']:
         sid=series['seriesID']
-        if sid not in SERIES or sid in seen:raise ValueError('unexpected series')
+        if sid not in series_map or sid in seen:raise ValueError('unexpected series')
         seen.add(sid);count=0
         for r in series['data']:
             period=r['period'];year=int(r['year'])
@@ -118,9 +122,9 @@ def parse_macro(raw,now):
             if value is not None and float(value)<0:raise ValueError('invalid negative level')
             if sid=='LNS14000000' and value is not None and float(value)>100:raise ValueError('invalid unemployment rate')
             footnotes=[text(f['text'],512) for f in r.get('footnotes',[]) if f.get('text')]
-            out.append({'key':f'{sid}:{year:04d}-{month:02d}','series':sid,'title':SERIES[sid][0],'unit':SERIES[sid][1],'period':f'{year:04d}-{month:02d}','event_at':int(date.timestamp()),'value':value,'published_at':None,'footnotes':footnotes,'vintage':'current_at_observation','url':SOURCES[MACRO][0]});count+=1
+            out.append({'key':f'{sid}:{year:04d}-{month:02d}','series':sid,'title':series_map[sid][0],'unit':series_map[sid][1],'period':f'{year:04d}-{month:02d}','event_at':int(date.timestamp()),'value':value,'published_at':None,'footnotes':footnotes,'vintage':'current_at_observation','url':SOURCES[source][0]});count+=1
         if not count:raise ValueError('missing series data')
-    if seen!=set(SERIES):raise ValueError('incomplete macro response')
+    if seen!=set(series_map):raise ValueError('incomplete macro response')
     return out
 
 
@@ -141,7 +145,8 @@ def parse_fed(raw,now):
     return out
 
 
-PARSERS={CALENDAR:parse_calendar,MACRO:parse_macro,FED:parse_fed}
+PARSERS={CALENDAR:parse_calendar,MACRO:parse_macro,FED:parse_fed,
+         MACRO_EXT:lambda raw,now:parse_macro(raw,now,EXT_SERIES,MACRO_EXT)}
 
 class EconomicMemory:
     def __init__(self,directory):
@@ -154,6 +159,7 @@ class EconomicMemory:
             db.executescript('''CREATE TABLE IF NOT EXISTS snapshots(id INTEGER PRIMARY KEY,source TEXT NOT NULL,fixture INTEGER NOT NULL,observed_at INTEGER NOT NULL,sha256 TEXT NOT NULL,row_count INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS economic_snapshot_cutoff ON snapshots(source,fixture,observed_at,id);
 CREATE TABLE IF NOT EXISTS revisions(id TEXT PRIMARY KEY,source TEXT NOT NULL,fixture INTEGER NOT NULL,record_key TEXT NOT NULL,observed_at INTEGER NOT NULL,content_sha256 TEXT NOT NULL,body TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS economic_revision_history ON revisions(source,fixture,observed_at,id);
 CREATE TABLE IF NOT EXISTS members(snapshot INTEGER NOT NULL REFERENCES snapshots(id),record_key TEXT NOT NULL,revision TEXT NOT NULL REFERENCES revisions(id),event_at INTEGER NOT NULL,PRIMARY KEY(snapshot,record_key));
 CREATE INDEX IF NOT EXISTS economic_member_time ON members(snapshot,event_at,record_key);
 CREATE TABLE IF NOT EXISTS attempts(id INTEGER PRIMARY KEY,source TEXT NOT NULL,fixture INTEGER NOT NULL,attempted_at INTEGER NOT NULL,state TEXT NOT NULL);
@@ -215,8 +221,8 @@ CREATE INDEX IF NOT EXISTS economic_attempt_cutoff ON attempts(source,fixture,at
             if own:client=httpx.Client(timeout=httpx.Timeout(20,connect=8),follow_redirects=False,trust_env=False,headers={'User-Agent':'TradeBot-public-economic-research/1.0','Accept-Encoding':'identity'})
             try:
                 args={};method='GET'
-                if source==MACRO:
-                    year=datetime.fromtimestamp(now,timezone.utc).year;method='POST';args={'json':{'seriesid':list(SERIES),'startyear':str(year-9),'endyear':str(year)}}
+                if source in (MACRO,MACRO_EXT):
+                    year=datetime.fromtimestamp(now,timezone.utc).year;method='POST';args={'json':{'seriesid':list(SERIES if source==MACRO else EXT_SERIES),'startyear':str(year-9),'endyear':str(year)}}
                 with client.stream(method,url,**args) as response:
                     if response.status_code!=200 or response.url!=httpx.URL(url):raise ValueError('official feed unavailable/redirected')
                     if response.headers.get('Content-Encoding','identity').lower()!='identity':raise ValueError('unexpected feed encoding')
@@ -245,6 +251,31 @@ CREATE INDEX IF NOT EXISTS economic_attempt_cutoff ON attempts(source,fixture,at
                     if digest(r['body'].encode())!=r['content_sha256']:raise MemoryUnavailable('evidence revision checksum mismatch')
                     out.append(json.loads(r['body'])|{'evidence_id':r['id'],'observed_at':r['observed_at'],'ingested_at':r['observed_at'],'content_sha256':r['content_sha256'],'source':name,'reliability':'official_primary','data_use':terms})
             return {'state':state,'source':name,'source_url':url,'as_of':now,'last_success':success,'snapshot':shot['id'] if shot else None,'snapshot_sha256':shot['sha256'] if shot else None,'total':total,'next_offset':offset+len(out) if offset+len(out)<total else None,'rows':out}
+
+    def history(self,source,*,as_of=None,limit=100,offset=0):
+        """Retained immutable revisions, including items absent from current feeds.
+        As-of is local observation time, never inferred from publication dates.
+        A disappeared schedule is not evidence of cancellation.
+        """
+        now=stamp(int(time.time()) if as_of is None else as_of)
+        if now>int(time.time()):raise ValueError('future historical observation cutoff')
+        if source not in SOURCES or type(limit) is not int or not 1<=limit<=100 or type(offset) is not int or not 0<=offset<=100000:
+            raise ValueError('invalid retained history query')
+        url,_,_,name,terms=SOURCES[source]
+        with self.tx() as db:
+            scope=(source,now)
+            summary=db.execute("SELECT count(*),count(DISTINCT record_key),min(observed_at),max(observed_at) FROM revisions WHERE source=? AND fixture=0 AND observed_at<=?",scope).fetchone()
+            total,unique,first,last=tuple(summary)
+            out=[]
+            for r in db.execute("SELECT * FROM revisions WHERE source=? AND fixture=0 AND observed_at<=? ORDER BY observed_at DESC,id DESC LIMIT ? OFFSET ?",scope+(limit,offset)):
+                if digest(r['body'].encode())!=r['content_sha256']:raise MemoryUnavailable('history revision checksum mismatch')
+                body=json.loads(r['body'])
+                out.append(body|{'evidence_id':r['id'],'observed_at':r['observed_at'],'ingested_at':r['observed_at'],'content_sha256':r['content_sha256'],'source':name,'reliability':'official_primary','data_use':terms})
+            return {'state':'retained_history' if total else 'not_observed','source':name,'source_url':url,'as_of':now,
+                    'total':total,'distinct_records':unique,'first_observed':first,'last_observed':last,
+                    'next_offset':offset+len(out) if offset+len(out)<total and offset+len(out)<=100000 else None,
+                    'rows':out,'scope':'locally observed revisions, not a complete historical release archive',
+                    'release_time_vintages_verified':False}
 
     def evidence(self,evidence_id,*,as_of=None):
         now=stamp(int(time.time()) if as_of is None else as_of)

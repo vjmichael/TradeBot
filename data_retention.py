@@ -27,7 +27,7 @@ def retire_books(directory,snapshot,digest,*,apply=False,limit=MAX_BATCH,now=Non
         target=Path(tmp)/'verified';restore(snapshot,target,digest)
         with closing(sqlite3.connect(target/'market-memory/catalog.sqlite3')) as old,exclusive_job(m.root,'quality-book'),m.tx() as db:
             old.row_factory=sqlite3.Row
-            rows=db.execute("SELECT a.* FROM quality_attempts a WHERE a.slot<? AND a.finished IS NOT NULL AND a.state IN ('observed','unavailable') AND a.slot<(SELECT MAX(b.slot) FROM quality_attempts b WHERE b.pair=a.pair) ORDER BY a.slot,a.pair LIMIT ?",(now-MIN_AGE,limit)).fetchall()
+            rows=db.execute("SELECT a.* FROM quality_attempts a WHERE a.slot<? AND a.finished IS NOT NULL AND a.state IN ('observed','unavailable') AND a.slot<(SELECT MAX(b.slot) FROM quality_attempts b WHERE b.pair=a.pair) AND NOT EXISTS (SELECT 1 FROM quality_books latest WHERE latest.pair=a.pair AND latest.slot=a.slot AND latest.slot=(SELECT MAX(k.slot) FROM quality_books k WHERE k.pair=a.pair)) ORDER BY a.slot,a.pair LIMIT ?",(now-MIN_AGE,limit)).fetchall()
             victims=[]
             for a in rows:
                 key=(a['pair'],a['slot']);prior=old.execute('SELECT * FROM quality_attempts WHERE pair=? AND slot=?',key).fetchone();b=db.execute('SELECT * FROM quality_books WHERE pair=? AND slot=?',key).fetchone();saved=old.execute('SELECT * FROM quality_books WHERE pair=? AND slot=?',key).fetchone()
