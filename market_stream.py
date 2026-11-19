@@ -161,8 +161,18 @@ def decode_message(text,now,symbols=SYMBOLS):
     return 'updates',rows
 
 
-async def session(journal,ws,*,duration=None,fetch=exact_closed,repair_interval=MAX_REPAIR_SECONDS):
+async def session(journal,ws,*,duration=None,fetch=exact_closed,repair_interval=MAX_REPAIR_SECONDS,until_observed=False):
+    """Run collection; optional finite qualification ends on actual evidence.
+    
+    Qualification succeeds early only after every scoped market has an ack,
+    a validated stream update and a successful closed-candle reconciliation.
+    At the observation deadline return the evidence actually obtained; the
+    admitted bounded REST repair is still joined before releasing custody.
+    Continuous collection never uses the early completion condition.
+    """
     if not MIN_REPAIR_SECONDS<=repair_interval<=MAX_REPAIR_SECONDS:raise ValueError('invalid repair cadence')
+    if until_observed and (duration is None or not 0<duration<=300):raise ValueError('bounded qualification duration required')
+    expected=set(journal.symbols)
     journal.start();started=time.monotonic();last_repair=None;last_hour=None;acks=set();seen=set();task=None;task_pairs=set();last_touch=0
     async def repair_all():
         out=[]
@@ -172,16 +182,27 @@ async def session(journal,ws,*,duration=None,fetch=exact_closed,repair_interval=
         return out
     try:
         await ws.send(json.dumps({'method':'subscribe','params':{'channel':'ohlc','symbol':list(journal.symbols),'interval':60,'snapshot':True},'req_id':1}))
-        while duration is None or time.monotonic()-started<duration:
-            if len(acks)<len(journal.symbols) and time.monotonic()-started>20: raise TimeoutError('missing subscription acknowledgements')
-            try:raw=await asyncio.wait_for(ws.recv(),timeout=15)
-            except asyncio.TimeoutError:raise TimeoutError('no WS messages; reconnect') from None
+        while True:
+            elapsed=time.monotonic()-started
+            if len(acks)<len(journal.symbols) and elapsed>20: raise TimeoutError('missing subscription acknowledgements')
+            remaining=None if duration is None else duration-elapsed
+            if remaining is not None and remaining<=0:break
+            # A finite observation window must not wait an additional full
+            # receive timeout after its deadline. Continuous behavior stays
+            # unchanged, including reconnect on a transport timeout.
+            timeout=15 if remaining is None else min(15,remaining)
+            try:raw=await asyncio.wait_for(ws.recv(),timeout=timeout)
+            except asyncio.TimeoutError:
+                if remaining is not None and remaining<=15:break
+                raise TimeoutError('no WS messages; reconnect') from None
             now=int(time.time());typ,payload=decode_message(raw,now,journal.symbols)
             if typ=='ack':journal.ack(payload,now);acks.add(payload)
             elif typ=='updates':journal.updates(payload,now);seen.update(r[0] for r in payload)
             if now-last_touch>=5:journal.touch(now);last_touch=now
             if task is not None and task.done():
                 result=await task;task_pairs.update(r['pair'] for r in result if 'error_type' not in r);task=None
+            if until_observed and acks==expected and seen==expected and task_pairs==expected:
+                break
             # One bounded batch per connection start, hourly rollover, or periodic repair.
             mono=time.monotonic();hour=now//STEP
             if len(acks)==len(journal.symbols) and task is None and (last_repair is None or (mono-last_repair>=MIN_REPAIR_SECONDS and (hour!=last_hour or mono-last_repair>=repair_interval))):

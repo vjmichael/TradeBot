@@ -48,3 +48,5 @@ TB-04B-R1 mechanism, TB-04C and TB-04D initial US-official sources accepted. TB-
 | ID | Scope | State |
 |---|---|---|
 | TB-R01 | After core Maj Vaj acceptance, separately authorize [Cognitum research](cognitum-research.md): A read-only trading-data mining and derived-feature discovery; B matched historical replay and model comparisons; C independent crypto/equity simulated-market experiments. No Maj Vaj control, production mutations, credentials or live orders. | Deferred — no implementation or core dependency |
+
+TB-04F3-R1: Foundation run 44493501958 on 3e61abde failed only the reconnect observation test (SOL/USD update missing before the 0.18-second observation deadline; 116 passed, 10 dependency-skipped). Historical ingestion 44493502105, engine 44493501963 and dashboard 44493501968 passed. Candidate replaces sub-second timing assumptions with bounded evidence-driven qualification, retains exact all-market assertions across two reconnects, deliberately delays the final observation, and checks that deadline expiry never manufactures a missing observation. Native directory qualification step passed in 44493501983; full same-head repair acceptance pending.

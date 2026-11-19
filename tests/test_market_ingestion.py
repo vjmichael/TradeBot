@@ -120,7 +120,11 @@ class StreamTests(unittest.TestCase):
             def __init__(s):s.n=0;s.sent=[]
             async def send(s,m):s.sent.append(json.loads(m))
             async def recv(s):
-                await asyncio.sleep(.01);n=s.n;s.n+=1
+                n=s.n;s.n+=1
+                # Explicitly reproduce a valid last market arriving later than
+                # the old 180 ms observation window; acknowledgement alone
+                # must not satisfy qualification.
+                await asyncio.sleep(.25 if n==5 else .01)
                 if n<3:return json.dumps({'method':'subscribe','success':True,'result':{'channel':'ohlc','symbol':list(SYMBOLS)[n],'interval':60}})
                 if n<6:return self.message(list(SYMBOLS)[n-3],stamp=NOW)
                 return '{"channel":"heartbeat"}'
@@ -128,7 +132,7 @@ class StreamTests(unittest.TestCase):
         def fetch(p,i):calls.append(p);return rest(p,[NOW-3600],NOW)
         # Current real clock is after fixture, so repair publishing is legal.
         for _ in range(2):
-            ws=WS();r=asyncio.run(session(self.journal,ws,duration=.18,fetch=fetch))
+            ws=WS();r=asyncio.run(session(self.journal,ws,duration=10,fetch=fetch,until_observed=True))
             self.assertEqual(set(r['acknowledged']),set(SYMBOLS));self.assertEqual(set(r['stream_observed']),set(SYMBOLS));self.assertEqual(set(r['rest_repaired']),set(SYMBOLS));self.assertEqual(ws.sent[0]['params']['symbol'],list(SYMBOLS))
         self.assertEqual(calls,list(SYMBOLS)*2)
         self.assertFalse(any(x['connected'] for x in self.journal.status()))
@@ -152,9 +156,34 @@ class StreamTests(unittest.TestCase):
             async with serve(sender,'127.0.0.1',0) as server:
                 port=server.sockets[0].getsockname()[1]
                 async with connect(f'ws://127.0.0.1:{port}',proxy=None) as ws:
-                    receipt=await session(self.journal,ws,duration=.3,fetch=lambda p,i:rest(p,[NOW-3600],NOW))
+                    receipt=await session(self.journal,ws,duration=10,fetch=lambda p,i:rest(p,[NOW-3600],NOW),until_observed=True)
                 self.assertEqual(set(receipt['stream_observed']),set(SYMBOLS));self.assertEqual(set(receipt['rest_repaired']),set(SYMBOLS))
                 self.assertFalse(any(r['connected'] for r in self.journal.status()))
+        asyncio.run(exercise())
+
+    def test_qualification_deadline_never_fabricates_missing_observation(self):
+        pair='BTC/USD'
+        journal=StreamJournal(self.mem,{pair:SYMBOLS[pair]})
+        class WS:
+            async def send(s,m):s.sent=json.loads(m)
+            async def recv(s):
+                if not getattr(s,'sent_ack',False):
+                    s.sent_ack=True
+                    return json.dumps({'method':'subscribe','success':True,'result':{'channel':'ohlc','symbol':pair,'interval':60}})
+                # Transport remains quiet: no qualifying market update ever arrives.
+                await asyncio.Future()
+        async def exercise():
+            with self.assertRaises(ValueError):
+                await session(journal,WS(),until_observed=True)
+            ws=WS()
+            calls=[]
+            def fetch(p,i):
+                calls.append(p);return rest(p,[NOW-3600],NOW)
+            receipt=await asyncio.wait_for(session(journal,ws,duration=1,fetch=fetch,until_observed=True),timeout=5)
+            self.assertEqual(ws.sent['params']['symbol'],[pair])
+            self.assertEqual(receipt,{'acknowledged':[pair],'stream_observed':[],'rest_repaired':[pair]})
+            self.assertEqual(calls,[pair])
+            self.assertFalse(any(r['connected'] for r in journal.status()))
         asyncio.run(exercise())
 
     def test_stale_snapshot_does_not_report_market_fresh(self):
