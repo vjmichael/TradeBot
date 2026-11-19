@@ -118,7 +118,15 @@ class Preparation:
             except ProcessLookupError:pass
             # Do not claim cancellation until the actual worker has exited.
             progress(self.root,self.job,'stopping')
+            threading.Thread(target=self._cancel_deadline,args=(child,),daemon=True).start()
             return self.status()
+
+    @staticmethod
+    def _cancel_deadline(child):
+        try:child.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:child.kill();child.wait()
+            except ProcessLookupError:pass
 
     def close(self):
         with self.lock:

@@ -11,7 +11,7 @@ from market_memory import MarketMemory
 from market_archive import RemoteParts,public_client,import_members
 from market_stream import StreamJournal,run_stream,exact_closed
 from market_quality import QualityMemory
-from market_gap import GapBridge,MAX_SPAN
+from gap_schedule import repair_due
 from market_lake import HistoricalLake
 from economic_memory import EconomicMemory,SOURCES
 
@@ -42,23 +42,13 @@ def run(directory,mode,job):
         for pair in SYMBOLS:HistoricalLake(m).compact(pair,60,end-1825*86400,end)
         mark('review_coverage')
     elif mode=='repair':
-        # One largest bounded candidate range per market per explicit job.
         mark('checking_gaps')
         for pair in SYMBOLS:journal.repair(pair)
-        mark('repairing_gaps');failed=False
-        for report in journal.gap_reports():
-            candidates=[r for r in report['ranges'] if r['reason']=='outside_rest_window' and 0<r['end']-r['start']<=MAX_SPAN]
-            # Skip isolated smaller archive omissions with no reliable anchor or no trades;
-            # prioritize the largest bridge and leave all other gaps explicit.
-            if not candidates:continue
-            r=max(candidates,key=lambda r:r['end']-r['start'])
-            try:
-                result=GapBridge(m).run(report['pair'],r['start'],r['end'],max_pages=64)
-                if result['state']!='complete':failed=True
-            except Exception:failed=True
+        mark('repairing_gaps')
+        outcomes=repair_due(m,journal.gap_reports())
         for pair in SYMBOLS:journal.repair(pair)
         mark('review_coverage')
-        if failed:raise RuntimeError('gap recovery incomplete; checkpoint retained')
+        if any(r['outcome']!='complete' for r in outcomes):raise RuntimeError('gap recovery incomplete; checkpoint retained')
     elif mode=='collect':
         mark('continuous_public_data')
         async def collect():

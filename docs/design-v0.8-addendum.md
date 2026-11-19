@@ -110,3 +110,7 @@ TB-FIN-01C explicitly allows a human to authorize a bounded expiring recurring p
 ### Guided reinvestment widget
 
 Approved Experiment → Apply/Update → Reinvestment ON/OFF layout. Gray locked current policy when OFF, separate always-editable non-mutating preview; save inactive version without changing active authority. Bottom red OFF/green ON dedicated authorization switch, explicit strongly authenticated approval for activation or replacement, revocation without stopping protection. See TB-FIN-01 guided control; all original financial risk and paper-first gates remain binding.
+
+### User-selected markets
+
+The initial BTC/USD, ETH/USD and SOL/USD Kraken Spot set is a qualification baseline, not a permanent limit. AI_Pirate is a design reference only. TB-04F3 adds durable validated market registry, canonical symbol mappings, graphical user selection, market-specific coverage and preparation, lifecycle and financial admission boundaries. No arbitrary symbols/URLs, no leverage, no implicit live permissions; unsupported or insufficient-history markets remain unready. Preserve paper-first, cost, ownership and risk gates. Non-USD quote support and additional exchanges require separate accounting and venue qualification.

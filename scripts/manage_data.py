@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from data_lifecycle import backup,restore,coverage
 from market_memory import MarketMemory
+from data_retention import retire_books
 
 
 def main():
@@ -14,9 +15,11 @@ def main():
     b=sub.add_parser('backup');b.add_argument('directory',type=Path);b.add_argument('destination',type=Path)
     r=sub.add_parser('restore');r.add_argument('snapshot',type=Path);r.add_argument('destination',type=Path);r.add_argument('manifest_sha256')
     c=sub.add_parser('coverage');c.add_argument('directory',type=Path)
+    q=sub.add_parser('retire-books');q.add_argument('directory',type=Path);q.add_argument('snapshot',type=Path);q.add_argument('manifest_sha256');q.add_argument('--apply',action='store_true')
     a=p.parse_args()
     if a.mode=='backup':result=backup(a.directory,a.destination)
     elif a.mode=='restore':result=restore(a.snapshot,a.destination,a.manifest_sha256)
+    elif a.mode=='retire-books':result=retire_books(a.directory,a.snapshot,a.manifest_sha256,apply=a.apply)
     else:result=coverage(MarketMemory(a.directory))
     print(json.dumps(result,sort_keys=True))
 

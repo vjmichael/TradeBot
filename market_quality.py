@@ -159,6 +159,9 @@ class QualityMemory:
             samples=db.execute('SELECT * FROM quality_books WHERE pair=? AND slot>=? AND slot<? AND published<=? ORDER BY slot',(pair,start,end,as_of)).fetchall()
             last=db.execute('SELECT * FROM quality_books WHERE pair=? AND published<=? ORDER BY observed DESC LIMIT 1',(pair,as_of)).fetchone()
             attempt=db.execute('SELECT * FROM quality_attempts WHERE pair=? AND attempted<=? ORDER BY attempted DESC LIMIT 1',(pair,as_of)).fetchone()
+            retired=0
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quality_retired'").fetchone():
+                retired=db.execute('SELECT count(*) FROM quality_retired WHERE pair=? AND slot>=? AND slot<? AND had_book=1',(pair,start,end)).fetchone()[0]
         source_state = (attempt['state'] if attempt['finished'] is not None and attempt['finished']<=as_of else 'pending') if attempt else 'not_observed'
         def checked(row):
             if hashlib.sha256(row['body'].encode()).hexdigest()!=row['digest']:raise MemoryUnavailable('order book integrity failure')
@@ -175,4 +178,4 @@ class QualityMemory:
         latest=None
         if last:
             latest=checked(last)|{'observed_at':last['observed'],'age_seconds':as_of-last['observed'],'state':'recent' if as_of-last['observed']<=2*SLOT and source_state=='observed' else 'stale','source_digest':last['source_digest']}
-        return {'pair':pair,'zone':zone,'as_of':as_of,'start':start,'end':end,'expected_hours':(end-start)//3600,'rv_hours':len(hours),'book_samples':len(samples),'expected_books':(end-start)//SLOT,'fine_missing':fine['missing'],'fine_conflicts':fine['conflicts'],'bins':bins,'latest':latest,'fee_bps_per_side':fee_bps,'source_state':source_state}
+        return {'pair':pair,'zone':zone,'as_of':as_of,'start':start,'end':end,'expected_hours':(end-start)//3600,'rv_hours':len(hours),'book_samples':len(samples),'retired_book_samples':retired,'expected_books':(end-start)//SLOT,'fine_missing':fine['missing'],'fine_conflicts':fine['conflicts'],'bins':bins,'latest':latest,'fee_bps_per_side':fee_bps,'source_state':source_state}
