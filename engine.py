@@ -12,6 +12,7 @@ IMAGE = "docker.io/freqtradeorg/freqtrade@sha256:deb1853f454761058b75251d4b5d6f6
 PLATFORM = "linux/amd64"
 SYMBOLS = {"BTC/USD": ("XBTUSD", "XXBTZUSD"), "ETH/USD": ("ETHUSD", "XETHZUSD"), "SOL/USD": ("SOLUSD", "SOLUSD")}
 INTERVALS = (5, 15, 60, 240, 1440)
+MAX_CLOSED_CANDLES = 720
 
 
 class MarketUnavailable(RuntimeError):
@@ -84,8 +85,11 @@ def candles(pair: str, minutes: int = 60, *, client=None, now=None):
         if not isinstance(result, dict) or set(result) != {result_key, "last"}:
             raise MarketUnavailable("unexpected_market_response")
         rows = result[result_key]
-        if not isinstance(rows, list) or not 2 <= len(rows) <= 720:
-            raise MarketUnavailable("invalid_candles_length")
+        if not isinstance(rows, list):
+            raise MarketUnavailable("invalid_candles_type")
+        # The current uncommitted interval can be additional to 720 closed rows.
+        if not 2 <= len(rows) <= MAX_CLOSED_CANDLES + 1:
+            raise MarketUnavailable(f"invalid_candles_length_{len(rows)}")
         observed = int(time.time()) if now is None else now
         step = minutes * 60
         clean = []
@@ -106,7 +110,7 @@ def candles(pair: str, minutes: int = 60, *, client=None, now=None):
         if closed[-1][0] // 1000 + step > observed or observed - closed[-1][0] // 1000 > 2 * step:
             raise MarketUnavailable("stale_or_unfinished_candles")
         gaps = sum(b[0] - a[0] != step * 1000 for a, b in zip(closed, closed[1:]))
-        return {"exchange": "kraken", "product": "spot", "pair": pair, "interval_minutes": minutes, "observed_at": observed, "gap_count": gaps, "candles": closed, "coverage": "recent_only"}
+        return {"exchange": "kraken", "product": "spot", "pair": pair, "interval_minutes": minutes, "observed_at": observed, "gap_count": gaps, "candles": closed, "raw_candle_count": len(rows), "coverage": "recent_only"}
     except (ValueError, KeyError, TypeError, OverflowError, IndexError):
         raise MarketUnavailable("invalid_market_payload") from None
 

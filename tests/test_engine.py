@@ -38,6 +38,25 @@ class EngineTests(unittest.TestCase):
             self.assertEqual(result["coverage"], "recent_only")
             self.assertEqual([row[0] for row in result["candles"]], [10800000, 14400000])
 
+    def test_closed_candle_capacity_and_rejection(self):
+        for count in (720, 721, 722, 1):
+            now = 800 * 3600
+            p = payload()
+            p["result"]["XXBTZUSD"] = [[now - (count - 1 - i) * 3600, "100", "102", "99", "101", "100", "12", 10] for i in range(count)]
+            with self.subTest(count=count), client(p) as c:
+                if 2 <= count <= 721:
+                    result = candles("BTC/USD", client=c, now=now)
+                    self.assertEqual(result["raw_candle_count"], count)
+                    self.assertEqual(len(result["candles"]), count - 1)
+                    self.assertEqual(result["candles"][-1][0], (now - 3600) * 1000)
+                else:
+                    with self.assertRaisesRegex(MarketUnavailable, f"^invalid_candles_length_{count}$"):
+                        candles("BTC/USD", client=c, now=now)
+        p = payload()
+        p["result"]["XXBTZUSD"] = {}
+        with client(p) as c, self.assertRaisesRegex(MarketUnavailable, "^invalid_candles_type$"):
+            candles("BTC/USD", client=c, now=NOW)
+
     def test_fail_closed(self):
         variants = [payload("wrong"), {"error": ["EGeneral:bad"]}, payload(), payload(), payload(), payload()]
         variants[2]["result"]["XXBTZUSD"][0][1] = "nan"
@@ -125,6 +144,22 @@ class EngineTests(unittest.TestCase):
         args = docker(Path("/tmp/tb-test"), "tb-test", ["--version"])
         self.assertEqual(args[args.index("--platform") + 1], PLATFORM)
         self.assertIn(IMAGE, args)
+        self.assertEqual(args[args.index("--user") + 1], "1000:1000")
+        self.assertEqual(args[args.index("--entrypoint") + 1], "/home/ftuser/.local/bin/freqtrade")
+        self.assertIn("HOME=/home/ftuser", args)
+        self.assertIn("--pull=never", args)
+        self.assertIn("--cap-drop=ALL", args)
+        self.assertNotIn("--privileged", args)
+
+    def test_private_workspace_acl(self):
+        from scripts.qualify_engine import workspace_acl
+        with patch("scripts.qualify_engine.os.getuid", return_value=1001):
+            command = workspace_acl(Path("/tmp/tb-test"))
+        self.assertEqual(command[:2], ["setfacl", "-m"])
+        self.assertEqual(command[-1], "/tmp/tb-test")
+        self.assertTrue({"u:1000:rwx", "d:u:1000:rwx", "d:u:1001:rwx", "g::---", "o::---", "d:g::---", "d:o::---"}.issubset(command[2].split(",")))
+        with patch("scripts.qualify_engine.os.getuid", return_value=1000):
+            self.assertNotIn("u:1000:rwx", workspace_acl(Path("/tmp/tb-test"))[2].split(","))
 
     def test_safe_config(self):
         spec = InstanceSpec(name="Test", pair="SOL/USD", virtual_cents=12500)

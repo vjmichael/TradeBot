@@ -18,12 +18,31 @@ from engine import IMAGE, PLATFORM, candles, write_config
 from tradebot import InstanceSpec, PAIRS
 
 ROOT = Path(__file__).resolve().parents[1]
+# Freqtrade 2026.10 installs its entrypoint and dependencies as ftuser.
+ENGINE_UID = 1000
+ENGINE_GID = 1000
+ENGINE_HOME = "/home/ftuser"
+ENGINE_ENTRYPOINT = ENGINE_HOME + "/.local/bin/freqtrade"
+
+
+def workspace_acl(work):
+    """Share only the isolated scratch tree with upstream ftuser and the host operator."""
+    host = os.getuid()
+    rules = ["g::---", "o::---", "m::rwx", "d:u::rwx", "d:g::---", "d:o::---", "d:m::rwx"]
+    if host != ENGINE_UID:
+        rules.extend([f"u:{ENGINE_UID}:rwx", f"d:u:{ENGINE_UID}:rwx", f"d:u:{host}:rwx"])
+    return ["setfacl", "-m", ",".join(rules), str(work)]
+
+
+def prepare_workspace(work):
+    subprocess.run(workspace_acl(work), check=True, timeout=15)
 
 
 def docker(work, name, args):
-    return ["docker", "run", "--rm", "--platform", PLATFORM, "--name", name, "--user", f"{os.getuid()}:{os.getgid()}",
+    return ["docker", "run", "--rm", "--platform", PLATFORM, "--name", name, "--pull=never", "--user", f"{ENGINE_UID}:{ENGINE_GID}",
+            "--entrypoint", ENGINE_ENTRYPOINT,
             "--cap-drop=ALL", "--security-opt=no-new-privileges", "--cpus=2", "--memory=3g", "--pids-limit=256",
-            "--env", "HOME=/tmp", "--mount", f"type=bind,source={work},target=/work", IMAGE, *args]
+            "--env", f"HOME={ENGINE_HOME}", "--mount", f"type=bind,source={work},target=/work", IMAGE, *args]
 
 
 def cleanup(name):
@@ -129,7 +148,14 @@ def qualify_stages(stages):
 
 def public_market(pair):
     snapshot = candles(pair)
-    print(f"RECEIPT: Kraken public {pair}: {len(snapshot['candles'])} closed candles, {snapshot['gap_count']} gaps", flush=True)
+    print(f"RECEIPT: Kraken public {pair}: {snapshot['raw_candle_count']} raw rows, {len(snapshot['candles'])} closed candles, {snapshot['gap_count']} gaps", flush=True)
+
+
+def runtime_version(base):
+    version = run(base, ["--version"])
+    print(version, flush=True)
+    if "2026.10" not in version:
+        raise AssertionError("unexpected Freqtrade version")
 
 
 def market_listing(base):
@@ -148,6 +174,8 @@ def main():
         replay = base / "backtest"
         for work in (stopped, replay):
             work.mkdir(mode=0o700)
+        for work in (base, stopped, replay):
+            prepare_workspace(work)
         image_ready = False
 
         def pull():
@@ -163,6 +191,7 @@ def main():
         qualify_stages([
             ("pinned image", pull),
             *((f"Kraken public {pair}", lambda pair=pair: public_market(pair)) for pair in PAIRS),
+            ("Freqtrade runtime version", lambda: native(runtime_version, base)),
             ("Freqtrade market listing", lambda: native(market_listing, base)),
             ("Freqtrade stopped runtime", lambda: native(stopped_runtime, stopped)),
             ("FreqAI synthetic backtest", lambda: native(backtest, replay)),

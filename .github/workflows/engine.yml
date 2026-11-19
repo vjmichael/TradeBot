@@ -21,4 +21,6 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
+      - name: Ensure private scratch ACL support
+        run: command -v setfacl || (sudo apt-get update && sudo apt-get install -y acl)
       - run: python scripts/qualify_engine.py
