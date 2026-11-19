@@ -25,7 +25,7 @@ from economic_memory import EconomicMemory,SOURCES
 from historical_readiness import historical_report,HOURS
 from vintage_memory import coverage as vintage_coverage,URL as VINTAGE_URL
 from market_archive import exclusive_job
-from market_lake import syncdir
+from market_lake import syncdir,lake_trigger_definitions
 
 FORMAT=1
 COMPATIBILITY='maj-vaj-data-v1'
@@ -120,6 +120,33 @@ def rights_inventory():
             *[{'id':source,'references':[info[0]],'state':'review_required'} for source,info in sorted(SOURCES.items())],
             {'id':'alfred','references':[VINTAGE_URL],'state':'review_required'}]
 
+LAKE_TABLES={'lake_epoch','lake_files','lake_active','lake_pins','lake_policy'}
+
+def _schema_objects(rel,rows):
+    """Check the stored SQLite schema before any restoration or migration.
+
+    The five built-in lake triggers are required as a complete set whenever
+    the lake catalog exists. Name/owner/SQL must match, not just the name.
+    Older data-only catalogs with no lake remain valid.
+    """
+    tables={n for t,n,_,_ in rows if t=='table'}
+    if not REQUIRED[rel]<=tables<=TABLES[rel]:
+        _reject('unrecognized seed database schema: table inventory '+rel)
+    expected={}
+    if rel==DATABASES[0] and tables & LAKE_TABLES:
+        if not LAKE_TABLES<=tables:_reject('incomplete seed lake catalog')
+        expected={name:(table,ddl.replace('CREATE TRIGGER IF NOT EXISTS ','CREATE TRIGGER ',1))
+                  for name,(table,ddl) in lake_trigger_definitions().items()}
+    triggers={}
+    for kind,name,table,sql in rows:
+        if kind in ('table','index') and table in tables:continue
+        if kind=='trigger' and name in expected and table in tables:
+            triggers[name]=(table,sql)
+            continue
+        _reject('unrecognized seed database schema: object type '+kind+' in '+rel)
+    if triggers!=expected:_reject('missing or altered seed lake consistency trigger')
+
+
 def _schema_inventory(snapshot,files):
     """Reject unexpected schema objects and fixture content; not a sandbox
     for untrusted arbitrary SQLite files. Only owner-controlled snapshots."""
@@ -129,10 +156,8 @@ def _schema_inventory(snapshot,files):
         if not _asset_matches(db_path,files[rel]):_reject('seed database bytes do not match manifest')
         with closing(sqlite3.connect(db_path.as_uri()+'?mode=ro',uri=True)) as db:
             db.execute('PRAGMA trusted_schema=OFF')
-            rows=db.execute("SELECT type,name,tbl_name FROM sqlite_master").fetchall()
-            tables={n for t,n,_ in rows if t=='table'}
-            if not REQUIRED[rel]<=tables<=TABLES[rel] or any(t not in ('table','index') or table not in tables for t,n,table in rows):
-                _reject('unrecognized seed database schema')
+            rows=db.execute("SELECT type,name,tbl_name,sql FROM sqlite_master").fetchall()
+            _schema_objects(rel,rows)
             if rel==DATABASES[0]:
                 if db.execute("SELECT 1 FROM sources WHERE kind='fixture' LIMIT 1").fetchone():_reject('fixture market data cannot enter release seed')
                 from market_memory import ARCHIVE_DOC,REST_DOC

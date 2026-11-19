@@ -7,6 +7,8 @@ from market_memory import MarketMemory,MemoryUnavailable,sha256_file
 from economic_memory import EconomicMemory
 from release_seed import init,capture,verify,materialize,status,restore_bundle
 from training_handoff import export
+from market_lake import HistoricalLake,lake_trigger_definitions
+from data_lifecycle import backup
 
 class ReleaseSeedTests(unittest.TestCase):
     def setUp(self):
@@ -86,3 +88,55 @@ class ReleaseSeedTests(unittest.TestCase):
         (package/'snapshot/market-memory/unexpected').mkdir()
         with self.assertRaises(MemoryUnavailable):restore_bundle(package,a['manifest_sha256'],self.root/'fresh')
         self.assertFalse((self.root/'fresh').exists())
+
+    def test_lake_triggers_survive_seed_roundtrip(self):
+        lake=HistoricalLake(self.m);self.append(self.ts)
+        try:
+            import duckdb
+        except ImportError:
+            duckdb=None
+        if duckdb is not None:
+            self.assertEqual(lake.compact('BTC/USD',60,self.ts,self.ts+3600)[0]['state'],'published')
+        as_of=int(time.time());before=lake.query('BTC/USD',60,self.ts,self.ts+3600,as_of)
+        with self.m.tx() as db:
+            expected=[tuple(row) for row in db.execute("SELECT name,tbl_name,sql FROM sqlite_master WHERE type='trigger' ORDER BY name")]
+        self.assertEqual(len(expected),5)
+        receipt=backup(self.workspace,self.root/'native-shape')
+        seeded=self.root/'imported-seed';init(seeded,snapshot=self.root/'native-shape',snapshot_sha256=receipt['manifest_sha256'])
+        a=capture(seeded,'lake-v1')
+        verified=verify(seeded,'lake-v1',a['manifest_sha256'])
+        self.assertEqual(verified['review'],a['review'])
+        bundle=self.root/'lake-bundle';materialize(seeded,'lake-v1',a['manifest_sha256'],bundle,bundle=True)
+        fresh=self.root/'lake-fresh';restore_bundle(bundle,a['manifest_sha256'],fresh)
+        restored=MarketMemory(fresh)
+        # Inspect actual restored DDL BEFORE HistoricalLake can repair it.
+        with restored.tx() as db:
+            self.assertEqual(expected,[tuple(row) for row in db.execute("SELECT name,tbl_name,sql FROM sqlite_master WHERE type='trigger' ORDER BY name")])
+            epoch_before=db.execute("SELECT coalesce(sum(epoch),0) FROM lake_epoch").fetchone()[0]
+        self.assertEqual(HistoricalLake(restored).query('BTC/USD',60,self.ts,self.ts+3600,as_of),before)
+        ts=self.ts+3600
+        restored.record_recent('BTC/USD',60,{'exchange':'kraken','product':'spot','pair':'BTC/USD','interval_minutes':60,
+            'observed_at':ts+3600,'candles':[[ts*1000,'100','101','99','100','2',4]]},now=ts+3600)
+        with restored.tx() as db:
+            self.assertGreater(db.execute("SELECT coalesce(sum(epoch),0) FROM lake_epoch").fetchone()[0],epoch_before)
+        self.assertEqual(restored.query('BTC/USD',60,self.ts,ts+3600,int(time.time()))['coverage'],2)
+
+    def test_missing_replaced_and_extra_lake_triggers_refused(self):
+        HistoricalLake(self.m);self.append(self.ts)
+        name='lake_candle_insert_new'
+        with self.m.tx() as db:db.execute('DROP TRIGGER '+name)
+        with self.assertRaisesRegex(MemoryUnavailable,'missing or altered'):capture(self.repo,'missing')
+        with self.m.tx() as db:db.execute('CREATE TRIGGER '+name+' AFTER INSERT ON candles BEGIN SELECT 1; END')
+        with self.assertRaisesRegex(MemoryUnavailable,'missing or altered'):capture(self.repo,'replaced')
+        with self.m.tx() as db:
+            db.execute('DROP TRIGGER '+name)
+            db.execute(lake_trigger_definitions()[name][1])
+            db.execute('CREATE TRIGGER unexpected AFTER INSERT ON candles BEGIN SELECT 1; END')
+        with self.assertRaisesRegex(MemoryUnavailable,'object type trigger'):capture(self.repo,'extra')
+        self.assertEqual(status(self.repo)['version_count'],0)
+
+    def test_unknown_schema_refused_without_fixture(self):
+        self.append(self.ts)
+        with self.m.tx() as db:db.execute('CREATE TABLE private_account(secret TEXT)')
+        with self.assertRaisesRegex(MemoryUnavailable,'table inventory'):capture(self.repo,'unknown')
+        self.assertEqual(status(self.repo)['version_count'],0)

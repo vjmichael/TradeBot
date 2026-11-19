@@ -73,6 +73,28 @@ def syncdir(path):
         os.close(fd)
 
 
+def lake_trigger_definitions():
+    """The exact persisted DDL is part of the data-only seed compatibility ABI.
+
+    Keep the SQL bytes identical to the original HistoricalLake constructor:
+    SQLite removes the IF NOT EXISTS prefix when storing the statement.
+    """
+    definitions={}
+    for action, alias in [('INSERT','NEW'),('DELETE','OLD'),('UPDATE','OLD'),('UPDATE','NEW')]:
+        p = f'{alias}.interval'; b = f'{alias}.ts / (CASE WHEN {p}<60 THEN 86400 ELSE 2592000 END) * (CASE WHEN {p}<60 THEN 86400 ELSE 2592000 END)'
+        definitions[f'lake_candle_{action.lower()}_{alias.lower()}']=('candles',f'''CREATE TRIGGER IF NOT EXISTS lake_candle_{action.lower()}_{alias.lower()} AFTER {action} ON candles
+                    WHEN EXISTS(SELECT 1 FROM sources WHERE id={alias}.source_id AND kind!='fixture' AND state='complete')
+                    BEGIN INSERT INTO lake_epoch VALUES({alias}.pair,{p},{b},1)
+                    ON CONFLICT(pair,interval,block) DO UPDATE SET epoch=epoch+1; END''')
+    definitions['lake_source_publish']=('sources','''CREATE TRIGGER IF NOT EXISTS lake_source_publish AFTER UPDATE OF state,published_at,kind ON sources
+                WHEN OLD.state IS NOT NEW.state OR OLD.published_at IS NOT NEW.published_at OR OLD.kind IS NOT NEW.kind
+                BEGIN INSERT INTO lake_epoch SELECT DISTINCT c.pair,c.interval,
+                c.ts/(CASE WHEN c.interval<60 THEN 86400 ELSE 2592000 END)*(CASE WHEN c.interval<60 THEN 86400 ELSE 2592000 END),1
+                FROM candles c WHERE c.source_id=NEW.id AND (OLD.kind!='fixture' OR NEW.kind!='fixture')
+                ON CONFLICT(pair,interval,block) DO UPDATE SET epoch=epoch+1; END''')
+    return definitions
+
+
 class HistoricalLake:
     def __init__(self, memory):
         self.memory = memory
@@ -94,19 +116,8 @@ class HistoricalLake:
                 PRIMARY KEY(id,label))''')
             db.execute('CREATE TABLE IF NOT EXISTS lake_policy(singleton INTEGER PRIMARY KEY CHECK(singleton=1),quota INTEGER NOT NULL,reserve INTEGER NOT NULL)')
             db.execute('INSERT OR IGNORE INTO lake_policy VALUES(1,?,?)',(DEFAULT_QUOTA,DEFAULT_RESERVE))
-            for action, alias in [('INSERT','NEW'),('DELETE','OLD'),('UPDATE','OLD'),('UPDATE','NEW')]:
-                p = f'{alias}.interval'; b = f'{alias}.ts / (CASE WHEN {p}<60 THEN 86400 ELSE 2592000 END) * (CASE WHEN {p}<60 THEN 86400 ELSE 2592000 END)'
-                db.execute(f'''CREATE TRIGGER IF NOT EXISTS lake_candle_{action.lower()}_{alias.lower()} AFTER {action} ON candles
-                    WHEN EXISTS(SELECT 1 FROM sources WHERE id={alias}.source_id AND kind!='fixture' AND state='complete')
-                    BEGIN INSERT INTO lake_epoch VALUES({alias}.pair,{p},{b},1)
-                    ON CONFLICT(pair,interval,block) DO UPDATE SET epoch=epoch+1; END''')
-            # Source visibility/kind/availability changes affect all its blocks.
-            db.execute('''CREATE TRIGGER IF NOT EXISTS lake_source_publish AFTER UPDATE OF state,published_at,kind ON sources
-                WHEN OLD.state IS NOT NEW.state OR OLD.published_at IS NOT NEW.published_at OR OLD.kind IS NOT NEW.kind
-                BEGIN INSERT INTO lake_epoch SELECT DISTINCT c.pair,c.interval,
-                c.ts/(CASE WHEN c.interval<60 THEN 86400 ELSE 2592000 END)*(CASE WHEN c.interval<60 THEN 86400 ELSE 2592000 END),1
-                FROM candles c WHERE c.source_id=NEW.id AND (OLD.kind!='fixture' OR NEW.kind!='fixture')
-                ON CONFLICT(pair,interval,block) DO UPDATE SET epoch=epoch+1; END''')
+            for _,ddl in lake_trigger_definitions().values():
+                db.execute(ddl)
             db.execute('CREATE INDEX IF NOT EXISTS lake_source_rows ON candles(source_id,ts)')
 
     @staticmethod

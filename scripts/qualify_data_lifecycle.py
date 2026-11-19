@@ -125,8 +125,12 @@ def main():
             # Exercise a private persistent repository with genuine data; CI
             # itself is temporary and is not the distributable seed store.
             seed=root/'seed';init_seed(seed,snapshot=root/'snapshot',snapshot_sha256=receipt['manifest_sha256'])
+            # Compare the genuine imported DDL before any constructor can recreate triggers.
+            from market_lake import lake_trigger_definitions
+            with MarketMemory(seed/'workspace').tx() as db:
+                assert {r[0]:(r[1],r[2]) for r in db.execute("SELECT name,tbl_name,sql FROM sqlite_master WHERE type='trigger'")}=={name:(table,ddl.replace('CREATE TRIGGER IF NOT EXISTS ','CREATE TRIGGER ',1)) for name,(table,ddl) in lake_trigger_definitions().items()}
             a=capture_seed(seed,'native-v1')
-            epoch=run_epoch(seed,'native-v2',90)
+            epoch=run_epoch(seed,'native-v2',180)
             assert epoch['worker_outcome']=='cancelled',epoch['worker_outcome']
             b=epoch['receipt']
             assert epoch['state']=='checkpoint_saved_incomplete' and population_status(seed)['epochs'][0]['manifest_sha256']==b['manifest_sha256']
