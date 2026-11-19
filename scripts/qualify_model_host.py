@@ -5,6 +5,7 @@ Only privately staged, independently verified data and output are mounted.
 Ownership changes are limited to those disposable staging trees.
 """
 import os
+import json
 import shutil
 import subprocess
 import sys
@@ -15,6 +16,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from engine import IMAGE,PLATFORM
 from qualify_numerical import main as qualify
 from numerical_dataset import verify
+from strategy_comparison import compare,verify_comparison,read_pinned,MAX_MANIFEST
+from market_memory import sha256_file
 
 ENGINE_UID=1000
 ENGINE_GID=1000
@@ -82,6 +85,15 @@ def worker(out,sha):
                 ownership(dest,host_uid,host_gid)
         if verify(data,sha)!=manifest or verify(out,sha)!=manifest:raise RuntimeError('dataset changed during native qualification')
         print('RECEIPT: original and staged datasets unchanged after offline ftuser qualification',sha,flush=True)
+        index_path=dest/'evaluation-index.json';index_sha=sha256_file(index_path)
+        index=json.loads(read_pinned(index_path,index_sha,MAX_MANIFEST))
+        if index['dataset_sha256']!=sha:raise RuntimeError('native evaluation index dataset mismatch')
+        refs=index['evaluations'];snapshot=out.parent/'snapshot';replay=stage/'comparison'
+        result=compare(snapshot,out,sha,dest,refs,replay,3000000)
+        assert verify_comparison(replay,result['manifest_sha256'],snapshot,out,sha,dest,refs,3000000)==result
+        for scenario,cohorts in result['results'].items():
+            print('RECEIPT: genuine historical matched hypothetical replay',scenario,{k:v['portfolio'] for k,v in cohorts.items()},flush=True)
+        print('RECEIPT: immutable comparison reproduces',result['manifest_sha256'],result['common_decisions'],flush=True)
 if __name__=='__main__':
     probe()
     if sys.argv[1:]==['--probe-only']:sys.exit(0)
