@@ -43,3 +43,7 @@ Partition published raw market revisions by pair/timeframe and UTC daily (fine) 
 ## TB-FIN-01C approved reinvestment refinement
 
 Default OFF, rate 0%; 10% was illustrative only. A strongly authenticated human may explicitly approve a specific release or a scoped, expiring, capped recurring profit-only policy; never apply to account balance. Require user-defined fixed dollar floor, percent-of-profit floor or both, explicit maximum trading capital, rate, per-cycle and total authorization limits. Protect every settled gain immediately. Evaluate at most once per approved anchored 24-hour cycle, deduct already evaluated surplus, enforce verified reserve floor/earmarks and all risk caps, no historical reuse/catch-up, no loss refill. Revocation/expiry stops future releases. Trading/protection 24/7 independently inside authorized risk and capital bounds; session analysis never grants new bankroll. See [TB-FIN-01](tb-fin-01.md). No live authorization or financial code yet.
+
+## TB-FIN-01 guided reinvestment UI refinement
+
+Default red OFF, gray/frozen settings, accessible bottom switch. Guided non-mutating before/after money preview uses the production evaluator with verified inputs; sample mode labeled. Clicking OFF enters draft setup, not approval; green ON only after explicit authenticated policy confirmation. Revocation relocks settings without stopping market monitoring or protection; report pending/unknown accurately. Test interaction and server enforcement at TB-08/11. See [financial design](tb-fin-01.md). No application code or live financial changes.

@@ -106,3 +106,7 @@ See binding [TB-FIN-01](tb-fin-01.md). Profit harvesting defaults to immediate p
 ### Optional reinvestment refinement
 
 TB-FIN-01C explicitly allows a human to authorize a bounded expiring recurring profit-only policy through a separate widget, default disabled and rate 0%; never a percentage of account value. Fixed-dollar/percentage/combined protected-profit floor and hard trading bankroll ceiling are required. Profit protected immediately, release evaluated once per anchored 24 hours using only new eligible surplus, no repeat/catch-up or automatic loss refill; continuous market sessions share the same capital limit. See [financial design](tb-fin-01.md) for details. The existing prohibition on unauthorized compounding remains binding.
+
+### Guided reinvestment widget
+
+See TB-FIN-01's guided control. Default gray locked OFF, bottom red OFF / green ON switch, legible plain-language dynamic hypothetical money split and protected reserve preview; actual ON requires a separately authenticated, valid human authorization. Preview cannot release money. Preserve all risk and paper-first gates.

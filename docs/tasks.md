@@ -25,9 +25,9 @@ The design's Phase 0 secure deployment gate precedes operational Phase 1 researc
 |---|---|---|
 | TB-FIN-01A | Daily USD and normalized return points, household/monthly targets, calendar/DST, planning-only goal progress | Pending — TB-08 UI |
 | TB-FIN-01B | Decimal durable balanced fill/fee/settlement/transfer ledger, unique events, corrections, reconciliation | Pending — TB-07 |
-| TB-FIN-01C | Immediate default profit protection; default OFF/0%; amount-specific or bounded human-approved recurring policy; profit-only fixed/percent/combined floor, bankroll ceiling, 24-hour idempotent surplus release, expiry/revocation, no catch-up or loss refill, reserve isolation | Pending — TB-07/08 |
-| TB-FIN-01D | Paper acceptance: gain/loss/fee/partial fills, no double allocation, daily baseline, profit-only cycle/floor/ceiling, repeated and skipped cycles, DST, failure/restart, stale/revoked approval, optional entry pause | Pending — TB-08/11/12 |
-| TB-FIN-01E | Financial reports, reserve UI, verified security/custody/backup and gated live integration | Pending — TB-08/09/10/11/12 |
+| TB-FIN-01C | Immediate default profit protection; default OFF/0%; amount-specific or bounded human-approved recurring policy; profit-only fixed/percent/combined floor, bankroll ceiling, 24-hour idempotent surplus release; guided interactive before/after preview, gray locked OFF panel, bottom red OFF/green ON activation with explicit confirmation; expiry/revocation, no catch-up or loss refill, reserve isolation | Pending — TB-07/08 |
+| TB-FIN-01D | Paper acceptance: gain/loss/fee/partial fills, no double allocation, daily baseline, profit-only cycle/floor/ceiling, repeated and skipped cycles, DST, failure/restart, stale/revoked approval, UI preview without ledger effects, locked input and accessible switch behavior, optional entry pause | Pending — TB-08/11/12 |
+| TB-FIN-01E | Financial reports, guided reserve UI with exact policy preview and bottom activation switch, verified security/custody/backup and gated live integration | Pending — TB-08/09/10/11/12 |
 
 TB-04C accepted; TB-04B-R1 native closeout remains the immediate work; TB-04D independent macro/evidence ingestion follows or may proceed locally while connectivity acceptance runs. All financial subtasks require evidence; no change to live authority.
 
