@@ -57,7 +57,7 @@ def verify_schema(db):
 def fresh():
     return dict(active=0, inventory=0, pending=0, protected=0, capital=0, pl=0,
                 lots=[], sales={}, used={}, fees=0, settled_pl=0, gains=0, losses=0,
-                reconciled=False, reconciled_at=None, matched_reserve=None, matched_boot=None, mark=None, pair=None)
+                reconciled=False, reconciled_at=None, matched_reserve=None, matched_boot=None, mark=None, pair=None, history=[], correction_locked=False, correction_reason=None)
 
 
 def balances(s):
@@ -150,9 +150,19 @@ def observed(s):
 
 
 def apply(states, last, instance, kind, event_id, body):
+    if kind == 'desk_reconcile':
+        return  # desk observation is not an instance or an economic event
     s = states.setdefault(instance,fresh())
     require(kind == 'fund' or s['capital'] < 0, 'unfunded_instance')
-    if kind == 'reconcile':
+    if kind == 'late_correct':
+        s, accepted, reason = review_correction(s, body)
+        if not accepted:
+            s['correction_locked'] = True
+            s['correction_reason'] = reason
+            s['reconciled'] = False
+        states[instance] = s
+        last[instance] = (event_id,kind,body,None)
+    elif kind == 'reconcile':
         s['reconciled'] = body['balances'] == observed(s) and body['reported_reserved'] == body['expected_reserved']
         s['reconciled_at'] = body['at']
         s['matched_reserve'] = body['expected_reserved']
@@ -167,11 +177,13 @@ def apply(states, last, instance, kind, event_id, body):
         s = copy.deepcopy(before)
         revised = p | {'gross':body['gross'],'fee':body['fee']}
         economic(s,prior_kind,original,revised)
+        s['history'].append((prior_kind,original,revised))
         states[instance] = s
         last[instance] = (event_id,'correct',body,None)
     else:
         before = copy.deepcopy(s) if kind in ('buy','sell') else None
         economic(s,kind,event_id,body)
+        s['history'].append((kind,event_id,body))
         last[instance] = (event_id,kind,body,before)
     invariants(s)
 
@@ -224,9 +236,10 @@ class FinancialLedger:
             else:
                 require(count < LIMIT, 'journal_capacity')
                 row = db.execute('SELECT pair,virtual_cents,mode FROM instances WHERE id=?',(instance,)).fetchone()
-                require(row is not None and row[2] == 'PAPER','unknown_or_nonpaper_instance')
+                if kind != 'desk_reconcile':
+                    require(row is not None and row[2] == 'PAPER','unknown_or_nonpaper_instance')
                 p = dict(payload)
-                if instance in states and states[instance]['capital'] < 0:
+                if kind != 'desk_reconcile' and instance in states and states[instance]['capital'] < 0:
                     require(states[instance]['pair'] == row[0].replace('/','-') and -states[instance]['capital'] == row[1]*CENT,'instance_scope_changed')
                 if kind == 'fund':
                     cap = db.execute('SELECT virtual_cap_cents FROM desk WHERE id=1').fetchone()[0]
@@ -241,6 +254,12 @@ class FinancialLedger:
                     p = {'balances':{k:p[k] for k in ('active','protected','pending','qty')},
                          'reported_reserved':p['reserved'],'expected_reserved':gate_reserve(db,instance),
                          'at':int(self.clock()),'boot':db.execute('SELECT boot FROM fin_head WHERE id=1').fetchone()[0]}
+                elif kind == 'desk_reconcile':
+                    p |= {'boot':db.execute('SELECT boot FROM fin_head WHERE id=1').fetchone()[0],
+                          'execution_anchor':execution_anchor(db)}
+                    require(p['observed'] <= int(self.clock()),'future_observation')
+                    prior=db.execute("SELECT body FROM fin_events WHERE kind='desk_reconcile' ORDER BY seq DESC LIMIT 1").fetchone()
+                    require(prior is None or p['observed']>=json.loads(prior[0])['payload']['observed'],'out_of_order_desk_observation')
                 elif kind == 'mark':
                     require(p['observed'] <= int(self.clock()),'future_mark')
                 apply(states,last,instance,kind,event_id,p)
@@ -266,6 +285,27 @@ class FinancialLedger:
 
     def correct_last_fill(self, receipt, instance, fill, gross, fee):
         return self._append(receipt,instance,'correct',dict(fill=ident(fill),gross=amount(gross,True),fee=amount(fee)))
+
+    def late_correct(self, receipt, instance, fill, gross, fee, *, settlement_received, expected, evidence_digest):
+        validate_digest(evidence_digest)
+        require(type(expected) is dict and set(expected)=={'active','protected','pending','qty'},'invalid_observed_balances')
+        return self._append(receipt,instance,'late_correct',dict(fill=ident(fill),gross=amount(gross,True),fee=amount(fee),
+            settlement_received=None if settlement_received is None else amount(settlement_received),
+            expected={k:amount(v) for k,v in expected.items()},evidence_digest=evidence_digest))
+
+    def reconcile_desk(self, receipt, *, observed_at, evidence_digest, accounts, open_orders):
+        validate_digest(evidence_digest)
+        require(type(accounts) is dict and len(accounts) <= 1000,'invalid_desk_scope')
+        clean={}
+        for key,row in accounts.items():
+            ident(key)
+            require(type(row) is dict and set(row)=={'active','protected','pending','qty','covered_qty'},'invalid_account_observation')
+            clean[key]={k:amount(v) for k,v in row.items()}
+        require(type(open_orders) is list and len(open_orders)<=1000,'invalid_open_orders')
+        orders=sorted(ident(x) for x in open_orders)
+        require(len(set(orders))==len(orders),'duplicate_open_order')
+        return self._append(receipt,'desk','desk_reconcile',dict(observed=amount(observed_at,True),
+            evidence_digest=evidence_digest,accounts=clean,open_orders=orders))
 
     def reconcile(self, receipt, instance, *, active, protected, pending, quantity, reserved):
         return self._append(receipt,instance,'reconcile',dict(active=amount(active),protected=amount(protected),pending=amount(pending),qty=amount(quantity),reserved=amount(reserved)))
@@ -295,5 +335,104 @@ class FinancialLedger:
                 'settled_gains':s['gains'],'settled_losses':s['losses'],'fees':s['fees'],
                 'unrealized_pl':None if value is None else value-s['inventory'],
                 'gate_reserved':reserved,'unencumbered_upper_bound':max(0,s['active']-reserved),
-                'reconciled':bool(s['reconciled'] and scope_ok and not conflicts and s['matched_reserve']==reserved and s['matched_boot']==boot and 0 <= now-s['reconciled_at'] <= 60),'conflicts':conflicts,
-                'pending_settlements':len(s['sales']),'journal_count':count,'journal_head':head,'execution_ready':False}
+                'reconciled':bool(s['reconciled'] and scope_ok and not conflicts and not s['correction_locked'] and s['matched_reserve']==reserved and s['matched_boot']==boot and 0 <= now-s['reconciled_at'] <= 60),'conflicts':conflicts,
+                'correction_locked':s['correction_locked'],'correction_reason':s['correction_reason'],'pending_settlements':len(s['sales']),'journal_count':count,'journal_head':head,'execution_ready':False}
+
+
+def validate_digest(value):
+    require(isinstance(value,str) and re.fullmatch(r'[0-9a-f]{64}',value),'invalid_evidence_digest')
+
+
+def review_correction(old, body):
+    """Rebuild FIFO history from original events with one revised gross/fee.
+
+    A failed review remains journaled and locks the account. Evidence is an
+    independently supplied observation, not an assertion of venue authenticity.
+    """
+    try:
+        revised=fresh()
+        found=False
+        settled=False
+        for kind,event_id,p in old['history']:
+            if event_id==body['fill'] and kind in ('buy','sell'):
+                require(not found,'duplicate_fill_history')
+                found=True
+                p=p | {'gross':body['gross'],'fee':body['fee']}
+            if kind=='settle' and p['sale']==body['fill']:
+                settled=True
+                require(body['settlement_received'] is not None,'missing_revised_settlement')
+                p=p | {'received':body['settlement_received']}
+            economic(revised,kind,event_id,p)
+            revised['history'].append((kind,event_id,p))
+        require(found and settled==(body['settlement_received'] is not None),'invalid_correction_scope')
+        require(observed(revised)==body['expected'],'independent_balance_mismatch')
+        # Don't automatically reclassify a protected profit as active capital,
+        # or restore depleted active capital through a historical correction.
+        require(revised['active']<=old['active'],'correction_would_expand_active_cash')
+        revised['correction_locked']=old['correction_locked']
+        revised['correction_reason']=old['correction_reason']
+        return revised,True,None
+    except AccountingError as exc:
+        return old,False,str(exc)
+
+
+def execution_anchor(db):
+    # Exclude unsubmitted reservations: Gate must be able to claim its own
+    # authorized intent without treating reservation as an external trade.
+    return sha([list(r) for r in db.execute("SELECT id,state FROM gate_intents WHERE state IN ('CLAIMED','UNKNOWN','FILLED_HELD','NO_FILL') ORDER BY id")])
+
+
+def projection_values(db, now):
+    """Fail closed unless the latest whole-desk receipt still matches.
+
+    Return integer cents for Gate; reservations remain owned by Gate itself.
+    Lifetime gross settled losses conservatively bound day/week/drawdown until
+    calendar loss accounting and authenticated execution integration qualify.
+    """
+    states,_,_,head=replay(db)
+    require(not db.execute('SELECT 1 FROM fin_conflicts LIMIT 1').fetchone(),'financial_conflict')
+    row=db.execute('SELECT id,kind,body FROM fin_events ORDER BY seq DESC LIMIT 1').fetchone()
+    require(row is not None and row[1]=='desk_reconcile','fresh_desk_reconciliation_required')
+    receipt,_,raw=row
+    p=json.loads(raw)['payload']
+    validate_digest(p['evidence_digest'])
+    require(0<=now-p['observed']<=60,'desk_observation_stale')
+    boot=db.execute('SELECT boot FROM fin_head WHERE id=1').fetchone()[0]
+    require(p['boot']==boot,'desk_reconciliation_restart')
+    require(p['open_orders']==[],'unresolved_open_orders')
+    require(not db.execute("SELECT 1 FROM gate_intents WHERE state IN ('CLAIMED','UNKNOWN','FILLED_HELD') LIMIT 1").fetchone(),'unresolved_execution')
+    require(p['execution_anchor']==execution_anchor(db),'desk_execution_changed')
+    scope={r[0]:r[1:] for r in db.execute('SELECT id,pair,virtual_cents,mode FROM instances')}
+    require(bool(scope) and set(scope)==set(states)==set(p['accounts']),'account_scope_mismatch')
+    cap=db.execute('SELECT virtual_cap_cents FROM desk WHERE id=1').fetchone()[0]
+    require(sum(r[1] for r in scope.values())<=cap,'desk_cap_exceeded')
+    for key,s in states.items():
+        pair,cents,mode=scope[key]
+        require(mode=='PAPER' and s['pair']==pair.replace('/','-') and -s['capital']==cents*CENT,'instance_scope_changed')
+        require(not s['correction_locked'],'unresolved_correction')
+        require(not s['sales'],'unsettled_proceeds')
+        require(p['accounts'][key]==observed(s)|{'covered_qty':qty(s)},'independent_balance_or_protection_mismatch')
+    active={key:s['active']//CENT for key,s in states.items()}
+    exposure={key:(s['inventory']+CENT-1)//CENT for key,s in states.items()}
+    cash=sum(s['active']+s['protected'] for s in states.values())//CENT
+    protected=min(cash,(sum(s['protected'] for s in states.values())+CENT-1)//CENT)
+    excess=max(0,sum(active.values())-(cash-protected))
+    for key in sorted(active):
+        take=min(active[key],excess)
+        active[key]-=take
+        excess-=take
+    loss=(sum(s['losses'] for s in states.values())+CENT-1)//CENT
+    return dict(receipt='fin:'+head,observed=p['observed'],settled_cash_cents=cash,protected_cash_cents=protected,
+                daily_loss_cents=loss,weekly_loss_cents=loss,drawdown_cents=loss,open_risk_cents=sum(exposure.values()),
+                active_by_instance=active,exposure_by_instance=exposure,reconciled=True,protection_ok=True)
+
+
+def gate_projection(db, now):
+    from dataclasses import asdict
+    from risk_gate import RiskState, GateRefusal, digest
+    try:
+        account=RiskState(**projection_values(db,now))
+        account.check(now)
+        return account,digest(asdict(account))
+    except AccountingError as exc:
+        raise GateRefusal('financial:'+str(exc)) from exc

@@ -236,9 +236,12 @@ def restrictive_transition(db, reason, now):
 class Gate:
     """Internal trusted runtime object; do not expose publisher/claim methods to AI."""
 
-    def __init__(self, transaction, *, clock=time.time):
+    def __init__(self, transaction, *, clock=time.time, account_projection=None):
         self.transaction = transaction
         self.clock = clock
+        # Store supplies the ledger projection. Direct RiskState publication is
+        # retained only for isolated Gate qualification fixtures.
+        self.account_projection = account_projection
 
     def _now(self, db):
         now = integer(int(self.clock()), 1, MAX_TIME)
@@ -301,6 +304,8 @@ class Gate:
             return result
 
     def trusted_account(self, account):
+        if self.account_projection is not None:
+            raise GateRefusal("ledger_projection_required")
         if type(account) is not RiskState:
             raise GateRefusal("invalid_account")
         with self.transaction() as db:
@@ -344,7 +349,10 @@ class Gate:
         if policy.expires <= now:
             raise GateRefusal("policy_expired")
         policy.check(now)
-        account, ah = self._current(db,"account","desk",RiskState)
+        if self.account_projection is None:
+            account, ah = self._current(db,"account","desk",RiskState)
+        else:
+            account, ah = self.account_projection(db, now)
         account.check(now)
         market, mh = self._current(db,"market",proposal.pair,MarketEvidence)
         market.check(now)

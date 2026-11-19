@@ -31,7 +31,7 @@ from storage_telemetry import storage_growth
 from storage_management import status as maintenance_status
 from market_stream import StreamJournal
 from risk_gate import Gate, initialize as initialize_gate, restrictive_transition as restrict_gate
-from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial
+from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial, gate_projection
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
 SLOTS = frozenset({"grok", "telegram_desk", "telegram_recovery", "kraken_read_key", "kraken_read_secret"})
@@ -92,7 +92,7 @@ class Store:
             raise PermissionError("data directory must be private")
         self.path = directory / "desk.sqlite3"
         self.cap = cap
-        self.gate = Gate(self.transaction)
+        self.gate = Gate(self.transaction, account_projection=gate_projection)
         self.financial = FinancialLedger(self.transaction)
 
     @contextmanager
