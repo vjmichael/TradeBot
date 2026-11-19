@@ -102,3 +102,7 @@ After completing TradeBot, an optional fun, separately scoped Cognitum research 
 ## Financial goals and profit protection amendment
 
 See binding [TB-FIN-01](tb-fin-01.md). Profit harvesting defaults to immediate protection of 100% of verified settled realized net profit after trading fees. No profits are reinvested without explicit amount-specific human authorization; no reserve replenishment of losses. Daily dollar and normalized return-point goals and monthly household planning are reporting metrics, never trade quotas. The risk Gate excludes reserves even if they remain on exchange. No bot withdrawal permissions; manual external transfer distinct from ledger protection. Financial accounting, UI, paper evaluation and release acceptance are mapped to TB-07–12. The amendment preserves all existing risk/security/AI-independence gates.
+
+### Optional reinvestment refinement
+
+TB-FIN-01C explicitly allows a human to authorize a bounded expiring recurring profit-only policy through a separate widget, default disabled and rate 0%; never a percentage of account value. Fixed-dollar/percentage/combined protected-profit floor and hard trading bankroll ceiling are required. Profit protected immediately, release evaluated once per anchored 24 hours using only new eligible surplus, no repeat/catch-up or automatic loss refill; continuous market sessions share the same capital limit. See [financial design](tb-fin-01.md) for details. The existing prohibition on unauthorized compounding remains binding.

@@ -1,6 +1,6 @@
 # Master development ledger
 
-No automatic progression to real money. Design v0.7 plus the binding [v0.8 addendum](design-v0.8-addendum.md) the binding [TB-FIN-01 financial protection amendment](tb-fin-01.md), and [decisions.md](decisions.md) govern every group. Acceptance must demonstrate behavior, not just source presence. Consolidate tests per task group. No live keys in CI; no paid resources without authorization.
+No automatic progression to real money. Design v0.7 plus the binding [v0.8 addendum](design-v0.8-addendum.md), the binding [TB-FIN-01 financial protection amendment](tb-fin-01.md), and [decisions.md](decisions.md) govern every group. Acceptance must demonstrate behavior, not just source presence. Consolidate tests per task group. No live keys in CI; no paid resources without authorization.
 
 | ID | Scope / acceptance | State |
 |---|---|---|
@@ -25,8 +25,8 @@ The design's Phase 0 secure deployment gate precedes operational Phase 1 researc
 |---|---|---|
 | TB-FIN-01A | Daily USD and normalized return points, household/monthly targets, calendar/DST, planning-only goal progress | Pending — TB-08 UI |
 | TB-FIN-01B | Decimal durable balanced fill/fee/settlement/transfer ledger, unique events, corrections, reconciliation | Pending — TB-07 |
-| TB-FIN-01C | Immediate default profit protection, no automatic reinvestment, amount-specific authenticated approval, reserve isolation | Pending — TB-07/08 |
-| TB-FIN-01D | Paper acceptance: gain/loss/fee/partial fills, no double allocation, daily baseline, failure/restart, stale approval, optional entry pause | Pending — TB-08/11/12 |
+| TB-FIN-01C | Immediate default profit protection; default OFF/0%; amount-specific or bounded human-approved recurring policy; profit-only fixed/percent/combined floor, bankroll ceiling, 24-hour idempotent surplus release, expiry/revocation, no catch-up or loss refill, reserve isolation | Pending — TB-07/08 |
+| TB-FIN-01D | Paper acceptance: gain/loss/fee/partial fills, no double allocation, daily baseline, profit-only cycle/floor/ceiling, repeated and skipped cycles, DST, failure/restart, stale/revoked approval, optional entry pause | Pending — TB-08/11/12 |
 | TB-FIN-01E | Financial reports, reserve UI, verified security/custody/backup and gated live integration | Pending — TB-08/09/10/11/12 |
 
 TB-04B-R1 and TB-04C acceptance remain the immediate work. All financial subtasks require evidence; no change to live authority.
