@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from uuid import uuid4
 from zipfile import ZipFile
 
@@ -32,7 +33,9 @@ def cleanup(name):
 def run(work, args, timeout=240):
     name = "tb02-" + uuid4().hex
     try:
-        return subprocess.run(docker(work, name, args), check=True, timeout=timeout, capture_output=True, text=True).stdout
+        result = subprocess.run(docker(work, name, args), check=True, timeout=timeout, capture_output=True, text=True)
+        print(result.stderr, file=sys.stderr, flush=True)
+        return result.stdout
     except subprocess.CalledProcessError as exc:
         print(exc.stdout, exc.stderr, file=sys.stderr)
         raise
@@ -107,21 +110,63 @@ def backtest(work):
     print(f"RECEIPT: synthetic FreqAI trained {len(models)} model artifacts, {len(trades)} completed backtest trades; not performance evidence")
 
 
+def qualify_stages(stages):
+    """Collect every independent result without converting failures to passes."""
+    failures = []
+    for label, check in stages:
+        print(f"STAGE: {label}", flush=True)
+        try:
+            check()
+        except Exception:
+            failures.append(label)
+            traceback.print_exc()
+            print(f"FAILED: {label}", flush=True)
+        else:
+            print(f"PASSED: {label}", flush=True)
+    if failures:
+        raise RuntimeError("Required acceptance stages failed: " + ", ".join(failures))
+
+
+def public_market(pair):
+    snapshot = candles(pair)
+    print(f"RECEIPT: Kraken public {pair}: {len(snapshot['candles'])} closed candles, {snapshot['gap_count']} gaps", flush=True)
+
+
+def market_listing(base):
+    listing = run(base, ["list-pairs", "--exchange", "kraken", "--base", "BTC", "ETH", "SOL", "--quote", "USD", "--print-json"])
+    if not set(PAIRS).issubset(json.loads(listing)):
+        raise AssertionError("Kraken pair qualification failed")
+    print("RECEIPT: Freqtrade Kraken market listing confirms all three pairs", flush=True)
+
+
 def main():
-    subprocess.run(["docker", "pull", "--platform", PLATFORM, IMAGE], check=True, timeout=600)
-    for pair in PAIRS:
-        snapshot = candles(pair)
-        print(f"RECEIPT: Kraken public {pair}: {len(snapshot['candles'])} closed candles, {snapshot['gap_count']} gaps")
+    # Image is a prerequisite for container tests. If it fails, still test the
+    # direct public adapter but do not implicitly pull or run a different image.
     with tempfile.TemporaryDirectory(prefix="tb02-") as tmp:
         base = Path(tmp)
-        listing = run(base, ["list-pairs", "--exchange", "kraken", "--base", "BTC", "ETH", "SOL", "--quote", "USD", "--print-json"])
-        if not set(PAIRS).issubset(json.loads(listing)):
-            raise AssertionError("Kraken pair qualification failed")
-        print("RECEIPT: Freqtrade Kraken market listing confirms all three pairs")
-        for folder, check in (("stopped", stopped_runtime), ("backtest", backtest)):
-            work = base / folder
+        stopped = base / "stopped"
+        replay = base / "backtest"
+        for work in (stopped, replay):
             work.mkdir(mode=0o700)
+        image_ready = False
+
+        def pull():
+            nonlocal image_ready
+            subprocess.run(["docker", "pull", "--platform", PLATFORM, IMAGE], check=True, timeout=600)
+            image_ready = True
+
+        def native(check, work):
+            if not image_ready:
+                raise RuntimeError("Pinned image unavailable; native stage blocked")
             check(work)
+
+        qualify_stages([
+            ("pinned image", pull),
+            *((f"Kraken public {pair}", lambda pair=pair: public_market(pair)) for pair in PAIRS),
+            ("Freqtrade market listing", lambda: native(market_listing, base)),
+            ("Freqtrade stopped runtime", lambda: native(stopped_runtime, stopped)),
+            ("FreqAI synthetic backtest", lambda: native(backtest, replay)),
+        ])
 
 
 if __name__ == "__main__":

@@ -15,7 +15,59 @@ INTERVALS = (5, 15, 60, 240, 1440)
 
 
 class MarketUnavailable(RuntimeError):
-    pass
+    """Only trusted diagnostic labels, never remote response contents."""
+
+
+PUBLIC_HEADERS = {"User-Agent": "TradeBot/0.1 (Kraken public market data)", "Accept": "application/json"}
+RETRY_DELAYS = (1, 2)
+TRANSIENT_EXCHANGE_ERRORS = {"EAPI:Rate limit exceeded", "EService:Unavailable", "EService:Busy", "EGeneral:Temporary lockout"}
+
+
+def _public_ohlc(client, symbol, minutes):
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        retry_after = None
+        try:
+            response = client.get("https://api.kraken.com/0/public/OHLC",
+                                  params={"pair": symbol, "interval": minutes}, headers=PUBLIC_HEADERS)
+        except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+            diagnostic = "transport_" + type(exc).__name__
+            retryable = True
+        except httpx.HTTPError:
+            raise MarketUnavailable("transport_error") from None
+        else:
+            status = response.status_code
+            if status != 200:
+                diagnostic = f"http_{status}"
+                retryable = status == 429 or 500 <= status <= 599
+                retry_after = response.headers.get("Retry-After")
+            else:
+                try:
+                    payload = response.json()
+                except ValueError:
+                    raise MarketUnavailable("invalid_json") from None
+                if not isinstance(payload, dict) or not isinstance(payload.get("error"), list):
+                    raise MarketUnavailable("invalid_envelope")
+                errors = payload["error"]
+                if not errors:
+                    return payload
+                if all(isinstance(e, str) and e in TRANSIENT_EXCHANGE_ERRORS for e in errors):
+                    diagnostic = "exchange_transient"
+                    retryable = True
+                else:
+                    raise MarketUnavailable("exchange_error")
+        if not retryable or attempt == len(RETRY_DELAYS):
+            raise MarketUnavailable(diagnostic)
+        delay = RETRY_DELAYS[attempt]
+        if retry_after is not None:
+            # Never retry earlier than instructed. Longer or unparseable waits
+            # are left for the next scheduled poll, not held in this request.
+            if not retry_after.isascii() or not retry_after.isdigit() or len(retry_after) > 3:
+                raise MarketUnavailable(diagnostic)
+            delay = max(delay, int(retry_after))
+            if delay > 5:
+                raise MarketUnavailable(diagnostic)
+        time.sleep(delay)
+    raise AssertionError("unreachable")
 
 
 def candles(pair: str, minutes: int = 60, *, client=None, now=None):
@@ -23,42 +75,40 @@ def candles(pair: str, minutes: int = 60, *, client=None, now=None):
     if pair not in SYMBOLS or type(minutes) is not int or minutes not in INTERVALS:
         raise ValueError("unsupported market or interval")
     symbol, result_key = SYMBOLS[pair]
+    if client is None:
+        with httpx.Client(timeout=12, follow_redirects=False, trust_env=False) as transport:
+            return candles(pair, minutes, client=transport, now=now)
+    payload = _public_ohlc(client, symbol, minutes)
     try:
-        if client is None:
-            with httpx.Client(timeout=12, follow_redirects=False, trust_env=False) as transport:
-                return candles(pair, minutes, client=transport, now=now)
-        response = client.get("https://api.kraken.com/0/public/OHLC", params={"pair": symbol, "interval": minutes})
-        response.raise_for_status()
-        payload = response.json()
-        if payload["error"]:
-            raise ValueError("exchange error")
         result = payload["result"]
-        if set(result) != {result_key, "last"}:
-            raise ValueError("unexpected market response")
+        if not isinstance(result, dict) or set(result) != {result_key, "last"}:
+            raise MarketUnavailable("unexpected_market_response")
         rows = result[result_key]
-        if not 2 <= len(rows) <= 720:
-            raise ValueError("invalid candles length")
+        if not isinstance(rows, list) or not 2 <= len(rows) <= 720:
+            raise MarketUnavailable("invalid_candles_length")
         observed = int(time.time()) if now is None else now
         step = minutes * 60
         clean = []
         previous = -1
         for row in rows:
-            if len(row) != 8 or type(row[0]) is not int:
-                raise ValueError("invalid candle shape")
+            if not isinstance(row, list) or len(row) != 8 or type(row[0]) is not int:
+                raise MarketUnavailable("invalid_candle_shape")
             ts = row[0]
             o, h, l, c, v = (float(row[i]) for i in (1, 2, 3, 4, 6))
-            if ts <= previous or ts % step or ts > observed or not all(math.isfinite(x) for x in (o, h, l, c, v)) or not (0 < l <= min(o,c) <= max(o,c) <= h and v >= 0):
-                raise ValueError("invalid candle values")
+            if ts <= previous or ts % step or ts > observed:
+                raise MarketUnavailable("invalid_candle_timestamp")
+            if not all(math.isfinite(x) for x in (o, h, l, c, v)) or not (0 < l <= min(o,c) <= max(o,c) <= h and v >= 0):
+                raise MarketUnavailable("invalid_candle_values")
             previous = ts
             clean.append([ts * 1000, o, h, l, c, v])
         # Kraken documents the final row as always uncommitted. Never use it.
         closed = clean[:-1]
         if closed[-1][0] // 1000 + step > observed or observed - closed[-1][0] // 1000 > 2 * step:
-            raise ValueError("stale or unfinished candles")
+            raise MarketUnavailable("stale_or_unfinished_candles")
         gaps = sum(b[0] - a[0] != step * 1000 for a, b in zip(closed, closed[1:]))
         return {"exchange": "kraken", "product": "spot", "pair": pair, "interval_minutes": minutes, "observed_at": observed, "gap_count": gaps, "candles": closed, "coverage": "recent_only"}
-    except (httpx.HTTPError, ValueError, KeyError, TypeError, OverflowError, IndexError) as exc:
-        raise MarketUnavailable("Kraken public market data unavailable or invalid") from None
+    except (ValueError, KeyError, TypeError, OverflowError, IndexError):
+        raise MarketUnavailable("invalid_market_payload") from None
 
 
 def paper_config(spec, *, qualification=False):

@@ -49,11 +49,68 @@ class EngineTests(unittest.TestCase):
                 candles("BTC/USD", client=c, now=NOW)
         with client(payload()) as c, self.assertRaises(MarketUnavailable):
             candles("BTC/USD", client=c, now=NOW + 7200)
-        with client(payload(), 429) as c, self.assertRaises(MarketUnavailable):
+        with client(payload(), 429) as c, patch("engine.time.sleep"), self.assertRaises(MarketUnavailable):
             candles("BTC/USD", client=c, now=NOW)
         for pair, interval in [("BTC/USDT", 60), ("BTC/USD", 7), ("BTC/USD", True)]:
             with self.assertRaises(ValueError):
                 candles(pair, interval)
+
+    def test_transient_retry_and_request_identity(self):
+        statuses = iter([429, 503, 200])
+        seen = []
+        def handler(request):
+            seen.append(request)
+            status = next(statuses)
+            return httpx.Response(status, json=payload(), headers={"Retry-After": "2"} if status == 429 else {})
+        with httpx.Client(transport=httpx.MockTransport(handler)) as c, patch("engine.time.sleep") as sleep:
+            self.assertEqual(len(candles("BTC/USD", client=c, now=NOW)["candles"]), 2)
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 2])
+        self.assertEqual(len(seen), 3)
+        for request in seen:
+            self.assertEqual(request.method, "GET")
+            self.assertEqual(request.url.params["pair"], "XBTUSD")
+            self.assertIn("TradeBot/", request.headers["User-Agent"])
+            self.assertNotIn("API-Key", request.headers)
+
+    def test_terminal_diagnostics_and_no_retry(self):
+        for status, value, expected in [(403, {"private": "untrusted response"}, "http_403"), (200, payload("wrong"), "unexpected_market_response"), (200, {"error": ["untrusted response"]}, "exchange_error")]:
+            with client(value, status) as c, patch("engine.time.sleep") as sleep, self.assertRaisesRegex(MarketUnavailable, "^" + expected + "$"):
+                try:
+                    candles("BTC/USD", client=c, now=NOW)
+                finally:
+                    sleep.assert_not_called()
+        with client(payload(), 503) as c, patch("engine.time.sleep") as sleep, self.assertRaisesRegex(MarketUnavailable, "^http_503$"):
+            try:
+                candles("BTC/USD", client=c, now=NOW)
+            finally:
+                self.assertEqual(sleep.call_count, 2)
+
+    def test_long_retry_after_is_not_ignored(self):
+        with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(429, headers={"Retry-After": "120"}))) as c, patch("engine.time.sleep") as sleep:
+            with self.assertRaisesRegex(MarketUnavailable, "^http_429$"):
+                candles("BTC/USD", client=c, now=NOW)
+            sleep.assert_not_called()
+
+    def test_transport_retry_and_invalid_json(self):
+        def handler(request):
+            raise httpx.ConnectError("untrusted internal details", request=request)
+        with httpx.Client(transport=httpx.MockTransport(handler)) as c, patch("engine.time.sleep") as sleep:
+            with self.assertRaisesRegex(MarketUnavailable, "^transport_ConnectError$"):
+                candles("BTC/USD", client=c, now=NOW)
+            self.assertEqual(sleep.call_count, 2)
+        with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, text="not JSON"))) as c:
+            with self.assertRaisesRegex(MarketUnavailable, "^invalid_json$"):
+                candles("BTC/USD", client=c, now=NOW)
+
+    def test_acceptance_continues_but_fails(self):
+        from scripts.qualify_engine import qualify_stages
+        seen = []
+        def bad():
+            raise MarketUnavailable("http_403")
+        with patch("builtins.print"), patch("scripts.qualify_engine.traceback.print_exc"):
+            with self.assertRaisesRegex(RuntimeError, "Required acceptance stages failed: bad"):
+                qualify_stages([("bad", bad), ("later", lambda: seen.append("later"))])
+        self.assertEqual(seen, ["later"])
 
     def test_gaps_visible(self):
         p = payload()
