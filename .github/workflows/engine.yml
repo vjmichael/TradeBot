@@ -3,6 +3,11 @@ on:
   push:
     paths:
       - 'engine.py'
+      - 'paper_execution.py'
+      - 'financial_ledger.py'
+      - 'risk_gate.py'
+      - 'reserve_policy.py'
+      - 'scripts/qualify_gate_native.py'
       - 'tradebot.py'
       - 'engine_strategies/**'
       - 'scripts/qualify_engine.py'

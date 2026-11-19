@@ -161,6 +161,24 @@ class EngineTests(unittest.TestCase):
         with patch("scripts.qualify_engine.os.getuid", return_value=1000):
             self.assertNotIn("u:1000:rwx", workspace_acl(Path("/tmp/tb-test"))[2].split(","))
 
+    def test_gate_paper_is_opt_in_and_networkless_probe(self):
+        from engine import gate_paper_config
+        from scripts.qualify_engine import docker
+        spec = InstanceSpec(name="Paper", pair="BTC/USD", virtual_cents=6000,
+                            provider="none", strategy_family="numerical-baseline")
+        self.assertEqual(paper_config(spec)["strategy"], "NoEntry")
+        c = gate_paper_config(spec, Path("/tmp/native-paper.sqlite"))
+        self.assertTrue(c["dry_run"])
+        self.assertEqual((c["strategy"], c["initial_state"], c["order_types"]["entry"]),
+                         ("GatePaper", "stopped", "limit"))
+        self.assertFalse(c["force_entry_enable"] or c["position_adjustment_enable"])
+        self.assertFalse(c["exchange"]["key"] or c["exchange"]["secret"])
+        self.assertFalse(any(c[k]["enabled"] for k in ("api_server","telegram","freqai")))
+        with self.assertRaises(ValueError):
+            gate_paper_config(spec, Path("relative.sqlite"))
+        args = docker(Path("/tmp/tb-test"),"tb-probe",["--version"],network_none=True)
+        self.assertEqual(args[args.index("--network")+1],"none")
+
     def test_required_disabled_config_sections(self):
         spec = InstanceSpec(name="Test", pair="BTC/USD", virtual_cents=100000)
         for qualify in (False, True):

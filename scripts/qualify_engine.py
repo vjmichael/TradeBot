@@ -38,10 +38,11 @@ def prepare_workspace(work):
     subprocess.run(workspace_acl(work), check=True, timeout=15)
 
 
-def docker(work, name, args, *, entrypoint=ENGINE_ENTRYPOINT):
+def docker(work, name, args, *, entrypoint=ENGINE_ENTRYPOINT, network_none=False):
     return ["docker", "run", "--rm", "--platform", PLATFORM, "--name", name, "--pull=never", "--user", f"{ENGINE_UID}:{ENGINE_GID}",
             "--entrypoint", entrypoint,
             "--cap-drop=ALL", "--security-opt=no-new-privileges", "--cpus=2", "--memory=3g", "--pids-limit=256",
+            *(["--network", "none"] if network_none else []),
             "--env", f"HOME={ENGINE_HOME}", "--mount", f"type=bind,source={work},target=/work", IMAGE, *args]
 
 
@@ -49,10 +50,10 @@ def cleanup(name):
     subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
 
 
-def run(work, args, timeout=240, *, entrypoint=ENGINE_ENTRYPOINT):
+def run(work, args, timeout=240, *, entrypoint=ENGINE_ENTRYPOINT, network_none=False):
     name = "tb02-" + uuid4().hex
     try:
-        result = subprocess.run(docker(work, name, args, entrypoint=entrypoint), check=True, timeout=timeout, capture_output=True, text=True)
+        result = subprocess.run(docker(work, name, args, entrypoint=entrypoint, network_none=network_none), check=True, timeout=timeout, capture_output=True, text=True)
         print(result.stderr, file=sys.stderr, flush=True)
         return result.stdout
     except subprocess.CalledProcessError as exc:
@@ -212,6 +213,20 @@ def market_listing(base):
     print("RECEIPT: Freqtrade Kraken market listing confirms all three pairs", flush=True)
 
 
+def gate_native_bridge(work):
+    # Copy the exact candidate modules into the pinned native environment.
+    # Synthetic book and isolated database only; no public or private requests.
+    for path in ("financial_ledger.py", "reserve_policy.py", "risk_gate.py",
+                 "paper_execution.py", "tests/test_risk_gate.py",
+                 "engine_strategies/GatePaper.py", "scripts/qualify_gate_native.py"):
+        shutil.copyfile(ROOT / path, work / Path(path).name)
+    result = run(work, ["/work/qualify_gate_native.py"], timeout=180,
+                 entrypoint="/usr/local/bin/python", network_none=True)
+    print(result, flush=True)
+    if "RECEIPT: native Freqtrade method-level paper round trip, actual native ORM and wallet, synthetic book, held after exact ledger import" not in result.splitlines():
+        raise AssertionError("missing native bridge receipt")
+
+
 def main():
     # Image is a prerequisite for container tests. If it fails, still test the
     # direct public adapter but do not implicitly pull or run a different image.
@@ -219,9 +234,10 @@ def main():
         base = Path(tmp)
         stopped = base / "stopped"
         replay = base / "backtest"
-        for work in (stopped, replay):
+        bridge = base / "gate-bridge"
+        for work in (stopped, replay, bridge):
             work.mkdir(mode=0o700)
-        for work in (base, stopped, replay):
+        for work in (base, stopped, replay, bridge):
             prepare_workspace(work)
         image_ready = False
 
@@ -241,6 +257,7 @@ def main():
             ("Freqtrade runtime version", lambda: native(runtime_version, base)),
             ("Freqtrade market listing", lambda: native(market_listing, base)),
             ("Freqtrade stopped runtime", lambda: native(stopped_runtime, stopped)),
+            ("TB-07A2 native Gate accounting bridge (offline fixture)", lambda: native(gate_native_bridge, bridge)),
             ("FreqAI synthetic backtest", lambda: native(backtest, replay)),
         ])
 

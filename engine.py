@@ -168,3 +168,19 @@ def write_config(work: Path, spec, *, qualification=False):
     with path.open("x", encoding="utf-8") as file:
         json.dump(paper_config(spec, qualification=qualification), file, allow_nan=False)
     return path
+
+
+def gate_paper_config(spec, db_path: Path):
+    """Opt-in developer configuration only; no startup or runtime activation.
+
+    NativeDriver requires a separately owned, stopped, isolated paper engine.
+    This never changes the default NoEntry configuration or enables a listener.
+    """
+    path = Path(db_path)
+    if not path.is_absolute() or path.is_symlink():
+        raise ValueError("isolated absolute paper database required")
+    config = paper_config(spec)
+    config.update(strategy="GatePaper", db_url="sqlite:///" + str(path.resolve()),
+                  minimal_roi={}, position_adjustment_enable=False)
+    config["order_types"]["entry"] = "limit"
+    return config
