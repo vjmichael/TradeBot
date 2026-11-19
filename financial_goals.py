@@ -11,16 +11,18 @@ from paper_custody import authenticate
 import goal_evidence
 
 FIELDS = {'expenses_cents','income_cents','savings_cents','extra_costs_cents','tax_bps','zone','target_kind','target_value'}
-DEFAULT = dict(expenses_cents=0,income_cents=0,savings_cents=0,extra_costs_cents=0,tax_bps=0,zone='America/Phoenix',target_kind='none',target_value=0,pause_on_goal=False)
+DEFAULT = dict(expenses_cents=0,income_cents=0,savings_cents=0,extra_costs_cents=0,tax_bps=0,zone='America/Phoenix',target_kind='none',target_value=0,pause_on_goal=False,conservative_bps=0)
 
 
 def validate(p):
-    require(type(p) is dict and set(p) in (FIELDS,FIELDS|{'pause_on_goal'}),'invalid_goal_settings')
+    require(type(p) is dict and FIELDS<=set(p)<=FIELDS|{'pause_on_goal','conservative_bps'},'invalid_goal_settings')
     for k in ('expenses_cents','income_cents','savings_cents','extra_costs_cents','target_value'):
         require(type(p[k]) is int and 0<=p[k]<=100_000_000_000,'invalid_goal_amount')
     require(type(p['tax_bps']) is int and 0<=p['tax_bps']<10000,'invalid_estimated_tax')
     require(p['target_kind'] in ('none','usd','points') and (p['target_kind']!='none' or p['target_value']==0),'invalid_primary_goal')
     require(type(p.get('pause_on_goal',False)) is bool and (not p.get('pause_on_goal') or (p['target_kind']!='none' and p['target_value']>0)),'invalid_goal_pause')
+    bps=p.get('conservative_bps',0)
+    require(type(bps) is int and (bps==0 or 100<=bps<=9900 and bps%100==0 and not p.get('pause_on_goal',False) and p['target_kind']!='none' and p['target_value']>0),'invalid_conservative_limit')
     require(p['target_kind']!='points' or p['target_value']<=1_000_000,'invalid_point_target')
     require(type(p['zone']) is str and 1<=len(p['zone'])<=100 and not p['zone'].startswith(('/', 'posix/', 'right/')) and '..' not in p['zone'],'invalid_reporting_zone')
     try:ZoneInfo(p['zone'])
@@ -198,4 +200,5 @@ def report(transaction,instance,*,clock=time.time,key_for=None):
                     unrealized_usd=usd(unrealized),active_equity_usd=usd(equity),active_equity_change_usd=usd(equity-base if equity is not None and base is not None else None),reserve_earmarks_usd={k:usd(v) for k,v in s['reserve']['earmarks'].items()} if s else None,
                     actual_service_costs_usd=None,withdrawal_status='not_available',journal_head=head,posting_time_valid=valid,
                     progress_basis='journal_posting_time',goal_pause_enabled=settings.get('pause_on_goal',False),
-                    goal_pause_latched=bool(notice and notice['pause']),goal_notification=notice,baseline_persisted=bool(stored and receipt),real_income=False)
+                    goal_pause_latched=bool(notice and notice['pause']),conservative_bps=settings.get('conservative_bps',0),
+                    conservative_active_bps=notice.get('conservative_bps',0) if notice else 0,goal_notification=notice,baseline_persisted=bool(stored and receipt),real_income=False)

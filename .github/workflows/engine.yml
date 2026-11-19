@@ -17,6 +17,7 @@ on:
       - 'goal_control.py'
       - 'goal_evidence.py'
       - 'tests/test_goal_evidence.py'
+      - 'tests/test_conservative_goals.py'
       - 'risk_gate.py'
       - 'reserve_policy.py'
       - 'scripts/qualify_gate_native.py'

@@ -58,6 +58,11 @@ class DashboardTests(unittest.TestCase):
             other_report=c.get(other_path,headers=AUTH).json()
             self.assertEqual(other_report['settings']['version'],0)
             self.assertFalse(other_report['goal_pause_enabled'])
+            self.assertEqual(other_report['conservative_bps'],0)
+            self.assertEqual(c.post(other_path,json=p|{'conservative_bps':5000},headers=AUTH).status_code,409)
+            self.assertEqual(c.post(other_path,json=p|{'pause_on_goal':False,'conservative_bps':10000},headers=AUTH).status_code,422)
+            self.assertEqual(c.post(other_path,json=p|{'pause_on_goal':False,'conservative_bps':5000},headers=AUTH).status_code,200)
+            self.assertEqual(c.get(other_path,headers=AUTH).json()['conservative_bps'],5000)
             self.assertFalse(other_report['real_income'])
             r=c.get(path,headers=AUTH).json()
             self.assertEqual(r['plan']['monthly_pre_tax_usd'],'1875.00000000')
@@ -73,7 +78,8 @@ class DashboardTests(unittest.TestCase):
             stored=c.get(path,headers=AUTH).json()
             self.assertEqual(stored['settings']['version'],1)
             self.assertTrue(stored['goal_pause_enabled'])
-            self.assertEqual(c.get(other_path,headers=AUTH).json()['settings']['version'],0)
+            self.assertEqual(c.get(other_path,headers=AUTH).json()['settings']['version'],1)
+            self.assertEqual(c.get(other_path,headers=AUTH).json()['conservative_bps'],5000)
 
     def test_credentials_write_only_atomic_and_wrong_key(self):
         values={'grok':'synthetic-grok','kraken_read_key':'synthetic-key','kraken_read_secret':'synthetic-secret'}

@@ -30,7 +30,7 @@ from paper_provision import provision, installed_workspace, native_check
 from paper_recovery import RecoveryDriver, RecoveryWorker
 import financial_goals
 from goal_evidence import GoalRecoveryDriver, capture_open
-from goal_control import evaluate as evaluate_goal
+from goal_control import evaluate as evaluate_goal, entry_guard
 from test_paper_provision import ProvisionTests, I
 from risk_gate import Gate
 from test_risk_gate import GateTests
@@ -75,7 +75,7 @@ class PrecisionBook(BookFixture):
     def get_precision_price(self,pair):return .1
 
 
-def qualify(protection=None, authenticated=False, cancel=None, precision=False, goals=False):
+def qualify(protection=None, authenticated=False, cancel=None, precision=False, goals=False, conservative=False):
     book_cls=PrecisionBook if precision else BookFixture
     base=GateTests('test_size_and_exact_idempotency');base.setUp()
     try:
@@ -234,7 +234,7 @@ def qualify(protection=None, authenticated=False, cancel=None, precision=False, 
                     with h.tx() as db:financial_goals.initialize(db)
                     cutoff=financial_goals.bounds(h.now,'America/Phoenix')[2]
                     h.now=cutoff-5
-                    financial_goals.save(h.tx,'a',financial_goals.DEFAULT|{'target_kind':'points','target_value':200,'pause_on_goal':True},0,clock=lambda:h.now)
+                    financial_goals.save(h.tx,'a',financial_goals.DEFAULT|{'target_kind':'points','target_value':200,'pause_on_goal':not conservative,'conservative_bps':5000 if conservative else 0},0,clock=lambda:h.now)
                     capture_open(h.tx,driver,clock=lambda:h.now)
                     h.now=cutoff+2
                     opening=financial_goals.report(h.tx,'a',clock=lambda:h.now,key_for=key_for)
@@ -262,16 +262,39 @@ def qualify(protection=None, authenticated=False, cancel=None, precision=False, 
                     driver.sync_goal_times()
                     publish(h.tx,{i:observation(h.tx,source,clock=lambda:h.now) for i,source in [('a',driver),('b',peer)]},key_for,clock=lambda:h.now)
                     with h.tx() as db:
-                        assert evaluate_goal(db,'a',h.now,key_for,verify=authenticated_projection(key_for))=='daily_goal_reached'
+                        assert evaluate_goal(db,'a',h.now,key_for,verify=authenticated_projection(key_for))==(5000 if conservative else 'daily_goal_reached')
                     result=financial_goals.report(h.tx,'a',clock=lambda:h.now,key_for=key_for)
                     assert result['baseline_evidence']==opening['baseline_evidence'],result
                     assert result['day_start_active_usd']==opening['day_start_active_usd']
                     assert result['execution_day_unknown']==0 and result['execution_day_original_pl_usd']==result['daily_realized_usd'],result
-                    assert result['baseline_persisted'] and result['goal_pause_latched'] and result['goal_notification'],result
+                    assert result['baseline_persisted'] and result['goal_notification'],result
+                    assert result['goal_pause_latched']==(not conservative) and result['conservative_active_bps']==(5000 if conservative else 0),result
                     with h.tx() as db:
                         assert db.execute('SELECT paused,human_pause FROM desk').fetchone()[:]==(1,1)
                         assert db.execute("SELECT COUNT(*) FROM goal_daily WHERE kind='reached'").fetchone()[0]==1
                     print('RECEIPT: FIN-01D-R1 native open bid equity baseline and authenticated full-fill interval report',flush=True)
+                    if conservative:
+                        # Isolated RUN fixture only; actual Store remains PAUSED.
+                        projection=authenticated_projection(key_for)
+                        reduced_gate=Gate(h.tx,clock=lambda:h.now,account_projection=projection,entry_guard=entry_guard(key_for,projection))
+                        with h.tx() as db:db.execute('UPDATE desk SET paused=0,human_pause=0')
+                        reduced_gate.trusted_policy(replace(base.p,version='conservative-policy-2',epoch=2,expires=h.now+120))
+                        m2=replace(market,receipt='native-post-goal',observed=h.now,available=h.now)
+                        reduced_gate.trusted_market(m2)
+                        publish(h.tx,{i:observation(h.tx,source,clock=lambda:h.now) for i,source in [('a',driver),('b',peer)]},key_for,clock=lambda:h.now)
+                        second=reduced_gate.admit(replace(base.req,proposal_id='post-goal-2',evidence_id=m2.receipt,expires=h.now+60))
+                        assert second['state']=='AUTHORIZED' and second['notional_cents']==2500 and second['reserved_cents']==2525,second
+                        assert PaperBridge(h.tx,reduced_gate,clock=lambda:h.now).submit(second['intent_id'],'paper-worker',2,driver)['submitted']
+                        worker=ProtectionWorker(h.tx,driver,clock=lambda:h.now)
+                        assert worker.tick(second['intent_id'])['state']=='MONITORING'
+                        with h.tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
+                        bot.exchange.mid=90.
+                        assert worker.tick(second['intent_id'])['reason']=='stop'
+                        assert worker.tick(second['intent_id'])['state']=='ACCOUNTED'
+                        final=f.snapshot('a')
+                        assert final['protected']==state['protected'] and final['active']<state['active'] and final['qty']==final['pending']==final['gate_reserved']==0,final
+                        assert financial_goals.report(h.tx,'a',clock=lambda:h.now,key_for=key_for)['conservative_active_bps']==5000
+                        print('RECEIPT: FIN-01D-R2 native verified-goal reduced second order and protected loss settlement',flush=True)
                 print('RECEIPT: native protected '+protection+' exit while paused, verified terminal wallet and released reservation',flush=True)
                 if precision:
                     print('RECEIPT: R3-R1-R2 native fractional USD fees and BTC precision after ORM reopen, exact settlement',flush=True)
@@ -320,3 +343,4 @@ if __name__=='__main__':
     qualify(authenticated=True,cancel='partial')
     qualify('target',authenticated=True,precision=True)
     qualify('target',authenticated=True,goals=True)
+    qualify('target',authenticated=True,goals=True,conservative=True)

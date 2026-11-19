@@ -100,6 +100,38 @@ class GateTests(unittest.TestCase):
         with self.h.tx() as db:db.execute('UPDATE desk SET human_pause=1')
         self.assertEqual(self.admit(proposal_id='manual-pause')['reason'],'desk_paused')
 
+    def test_conservative_ceiling_claim_and_final_boundary(self):
+        factor={'a':None,'b':None}
+        self.g.entry_guard=lambda db,i,now,**kw:factor[i]
+        first=self.admit()
+        factor['a']=5000
+        self.assertEqual(self.claim(first)['reason'],'authorization_changed')
+        # A fresh signal, because Gate does not reuse old authorized evidence.
+        self.g.trusted_market(replace(self.m,receipt='market-reduced'))
+        reduced=self.admit(proposal_id='reduced',evidence_id='market-reduced')
+        self.assertEqual((reduced['state'],reduced['notional_cents'],reduced['reserved_cents']),('AUTHORIZED',2500,2525))
+        self.assertTrue(self.claim(reduced)['claimed'])
+        with self.h.tx() as db:
+            row=db.execute('SELECT * FROM gate_intents WHERE id=?',(reduced['intent_id'],)).fetchone()
+            self.g.check_entry_boundary(db,row,self.h.now)
+            factor['a']=2500
+            with self.assertRaisesRegex(GateRefusal,'goal_or_policy_changed'):self.g.check_entry_boundary(db,row,self.h.now)
+            factor['a']=None
+            with self.assertRaisesRegex(GateRefusal,'goal_or_policy_changed'):self.g.check_entry_boundary(db,row,self.h.now)
+
+    def test_conservative_declines_below_min_and_preserves_manual_pause(self):
+        self.g.entry_guard=lambda db,i,now,**kw:100 if i=='a' else None
+        self.assertEqual(self.admit()['reason'],'insufficient_risk_or_active_cash')
+        self.assertEqual(self.second()['notional_cents'],5000)
+        with self.h.tx() as db:db.execute('UPDATE desk SET human_pause=1')
+        self.assertEqual(self.admit(proposal_id='still-paused')['reason'],'desk_paused')
+
+    def test_conservative_daily_loss_ceiling(self):
+        self.g.entry_guard=lambda db,i,now,**kw:5000 if i=='a' else None
+        self.g.trusted_account(replace(self.a,receipt='loss-500',daily_loss_cents=500))
+        self.assertEqual(self.admit()['reason'],'loss_lock')
+        self.assertEqual(self.second()['state'],'AUTHORIZED')
+
     def test_size_and_exact_idempotency(self):
         first=self.admit()
         self.assertEqual((first['state'],first['notional_cents'],first['reserved_cents']),

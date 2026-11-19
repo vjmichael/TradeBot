@@ -240,6 +240,8 @@ def gate_native_bridge(work):
         raise AssertionError("missing realistic native precision receipt")
     if "RECEIPT: FIN-01D-R1 native open bid equity baseline and authenticated full-fill interval report" not in result.splitlines():
         raise AssertionError("missing native financial goal evidence receipt")
+    if "RECEIPT: FIN-01D-R2 native verified-goal reduced second order and protected loss settlement" not in result.splitlines():
+        raise AssertionError("missing conservative continuation receipt")
 
 
 def main():

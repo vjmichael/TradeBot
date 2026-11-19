@@ -79,6 +79,7 @@ class GoalSettings(BaseModel):
     target_kind: Literal["none","usd","points"]
     target_value: int = Field(ge=0, le=MAX_CENTS)
     pause_on_goal: bool = False
+    conservative_bps: int = Field(default=0, ge=0, le=9900)
     expected_version: int = Field(ge=0, le=20000)
 
 

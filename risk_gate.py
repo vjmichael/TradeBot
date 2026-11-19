@@ -338,6 +338,30 @@ class Gate:
             db.execute("UPDATE gate_intents SET state='VOID' WHERE id=?", (row[0],))
             event(db,"VOID",now,row[0],{"reason":"expired"})
 
+    def _entry_policy(self, db, instance, now, *, final=False):
+        policy, ph = self._current(db,"policy","desk",Policy)
+        if policy.expires <= now:
+            raise GateRefusal("policy_expired")
+        policy.check(now)
+        bps = None
+        if self.entry_guard is not None:
+            bps = self.entry_guard(db,instance,now,final=True) if final else self.entry_guard(db,instance,now)
+        if bps is not None:
+            from goal_control import scoped_policy
+            try:
+                policy, ph = scoped_policy(policy,ph,bps)
+            except ValueError as exc:
+                raise GateRefusal("invalid_goal_limit") from exc
+        return policy, ph
+
+    def check_entry_boundary(self, db, row, now):
+        # Claim is already durable. Recheck the exact approved policy and
+        # restrictive overlay before the native side effect, without treating
+        # the in-flight claim as a fresh account projection.
+        _, ph = self._entry_policy(db,row["instance_id"],now,final=True)
+        if ph != row["policy_hash"]:
+            raise GateRefusal("goal_or_policy_changed")
+
     def _evaluate(self, db, proposal, now, exclude=None):
         if proposal.expires <= now:
             raise GateRefusal("proposal_expired")
@@ -352,12 +376,7 @@ class Gate:
         # instance activation are gated separately. No LLM is consulted.
         if inst["strategy_family"] != "numerical-baseline" or inst["state"] != "RUN":
             raise GateRefusal("strategy_or_instance_not_running")
-        if self.entry_guard is not None:
-            self.entry_guard(db,proposal.instance_id,now)
-        policy, ph = self._current(db,"policy","desk",Policy)
-        if policy.expires <= now:
-            raise GateRefusal("policy_expired")
-        policy.check(now)
+        policy, ph = self._entry_policy(db,proposal.instance_id,now)
         if self.account_projection is None:
             account, ah = self._current(db,"account","desk",RiskState)
         else:

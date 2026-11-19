@@ -91,7 +91,9 @@ class PaperBridge:
                         require(not paused and not human and row2['state']=='CLAIMED'
                             and row2['claim_token']==token and now<row2['expires'],'execution_authority_revoked')
                         check=getattr(self.gate,'entry_guard',None)
-                        if check is not None:check(db,instance,now,final=True)
+                        boundary=getattr(self.gate,'check_entry_boundary',None)
+                        if boundary is not None:boundary(db,row2,now)
+                        elif check is not None:check(db,instance,now,final=True)
                         require(event_detail(db,intent,'native_attempt') is None,'native_attempt_repeated')
                         append_event(db,intent,'native_attempt',{'binding':binding},now)
                         return order_call()
