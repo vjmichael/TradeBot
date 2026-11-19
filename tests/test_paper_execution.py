@@ -37,7 +37,6 @@ class BridgeTests(unittest.TestCase):
             db.execute('ALTER TABLE gate_intents ADD COLUMN claim_token TEXT');db.execute("UPDATE gate_intents SET state='AUTHORIZED'")
             db.execute('ALTER TABLE desk ADD COLUMN paused INTEGER DEFAULT 0');db.execute('ALTER TABLE desk ADD COLUMN human_pause INTEGER DEFAULT 0')
             db.execute('CREATE TABLE gate_clock(id INTEGER PRIMARY KEY,high_water INTEGER)');db.execute('INSERT INTO gate_clock VALUES(1,?)',(self.now,))
-            db.execute('CREATE TABLE gate_events(seq INTEGER PRIMARY KEY,intent_id TEXT,action TEXT,at INTEGER,detail TEXT)')
         self.bridge=PaperBridge(self.tx,GateFixture(self.tx),clock=lambda:self.now);self.d=Driver(self)
 
     @contextmanager

@@ -4,6 +4,9 @@ on:
     paths:
       - 'engine.py'
       - 'paper_execution.py'
+      - 'paper_supervisor.py'
+      - 'scripts/run_paper_worker.py'
+      - 'deploy/maj-vaj-paper-protection@.service'
       - 'financial_ledger.py'
       - 'risk_gate.py'
       - 'reserve_policy.py'

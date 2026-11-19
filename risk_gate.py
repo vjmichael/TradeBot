@@ -388,8 +388,12 @@ class Gate:
         for k,i in instances.items():
             if account.active_by_instance[k]+account.exposure_by_instance[k] > i["virtual_cents"]+released.get(k,0):
                 raise GateRefusal("instance_accounting_cap")
-        held = db.execute("""SELECT * FROM gate_intents WHERE state IN
-            ('AUTHORIZED','CLAIMED','UNKNOWN','FILLED_HELD') AND (? IS NULL OR id<>?)""", (exclude,exclude)).fetchall()
+        held_sql = """SELECT * FROM gate_intents WHERE state IN
+            ('AUTHORIZED','CLAIMED','UNKNOWN','FILLED_HELD') AND (? IS NULL OR id<>?)"""
+        if self.account_projection is not None:
+            from financial_ledger import UNRELEASED
+            held_sql += " AND " + UNRELEASED
+        held = db.execute(held_sql, (exclude,exclude)).fetchall()
         if any(r["state"] in UNCERTAIN for r in held):
             raise GateRefusal("unresolved_execution")
         if any(r["instance_id"] == proposal.instance_id for r in held) or account.exposure_by_instance[proposal.instance_id]:
@@ -466,7 +470,12 @@ class Gate:
         if decision["intent_id"] is None:
             return result | {"state":"REJECT"}
         row = db.execute("SELECT * FROM gate_intents WHERE id=?",(decision["intent_id"],)).fetchone()
-        return result | {"intent_id":row["id"],"state":row["state"],
+        state = row["state"]
+        if state == "FILLED_HELD" and self.account_projection is not None:
+            from financial_ledger import UNRELEASED
+            if db.execute("SELECT 1 FROM gate_intents WHERE id=? AND NOT "+UNRELEASED,(row["id"],)).fetchone():
+                state = "ACCOUNTED"
+        return result | {"intent_id":row["id"],"state":state,
                          "notional_cents":row["notional"],"reserved_cents":row["reserved"],
                          "expires":row["expires"]}
 

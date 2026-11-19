@@ -156,7 +156,11 @@ def apply(states, last, instance, kind, event_id, body):
         return  # desk observation is not an instance or an economic event
     s = states.setdefault(instance,fresh())
     require(kind == 'fund' or s['capital'] < 0, 'unfunded_instance')
-    if kind.startswith('reserve_'):
+    if kind == 'execution_closed':
+        require(event_id=='closed:'+body['intent'] and body['balances']==observed(s) and not s['lots'] and not s['sales'],'terminal_execution_mismatch')
+        s['reconciled']=False
+        last[instance]=(event_id,kind,body,None)
+    elif kind.startswith('reserve_'):
         from reserve_policy import apply_event
         apply_event(s,kind,body)
         last[instance] = (event_id,kind,body,None)
@@ -217,8 +221,20 @@ def start(db):
     db.execute('UPDATE fin_head SET boot=boot+1 WHERE id=1')
 
 
+# A release is an explicit immutable receipt, not a NO_FILL outcome. Older
+# readers retain FILLED_HELD; upgraded readers exclude only a proven release.
+UNRELEASED = """(gate_intents.state <> 'FILLED_HELD' OR NOT EXISTS (
+    SELECT 1 FROM gate_events e JOIN fin_events f ON f.id='closed:'||gate_intents.id
+    WHERE e.intent_id=gate_intents.id AND e.action='native_released'
+    AND f.kind='execution_closed' AND f.instance=gate_intents.instance_id
+    AND f.digest=json_extract(e.detail,'$.financial_head')
+    AND json_extract(f.body,'$.payload.view')=json_extract(e.detail,'$.view')
+    AND json_extract(f.body,'$.payload.binding')=json_extract(e.detail,'$.binding')
+    AND (SELECT COUNT(*) FROM gate_events x WHERE x.intent_id=gate_intents.id AND x.action='native_released')=1))"""
+
+
 def gate_reserve(db, instance):
-    return db.execute("SELECT COALESCE(SUM(reserved),0) FROM gate_intents WHERE instance_id=? AND state IN ('AUTHORIZED','CLAIMED','UNKNOWN','FILLED_HELD')",(instance,)).fetchone()[0]*CENT
+    return db.execute("SELECT COALESCE(SUM(reserved),0) FROM gate_intents WHERE instance_id=? AND state IN ('AUTHORIZED','CLAIMED','UNKNOWN','FILLED_HELD') AND "+UNRELEASED,(instance,)).fetchone()[0]*CENT
 
 
 class FinancialLedger:
@@ -254,9 +270,12 @@ class FinancialLedger:
                     require(allocated <= cap,'desk_cap_exceeded')
                     p = {'principal':amount(row[1]*CENT,True),'pair':row[0]}
                 elif kind == 'buy':
-                    auth = db.execute('''SELECT instance_id,pair,notional,reserved,state FROM gate_intents WHERE id=?''',(p['intent'],)).fetchone()
+                    auth = db.execute('''SELECT instance_id,pair,notional,reserved,state FROM gate_intents WHERE id=? AND '''+UNRELEASED,(p['intent'],)).fetchone()
                     require(auth is not None and auth[0] == instance and auth[1] == row[0] and auth[4] in ('CLAIMED','UNKNOWN','FILLED_HELD'),'unverified_intent')
                     p |= {'max_gross':amount(auth[2]*CENT,True),'max_total':amount(auth[3]*CENT,True)}
+                elif kind == 'execution_closed':
+                    held=db.execute("SELECT instance_id,state FROM gate_intents WHERE id=?",(p['intent'],)).fetchone()
+                    require(held is not None and held[0]==instance and held[1]=='FILLED_HELD','unresolved_claim_required')
                 elif kind == 'reconcile':
                     p = {'balances':{k:p[k] for k in ('active','protected','pending','qty')},
                          'reported_reserved':p['reserved'],'expected_reserved':gate_reserve(db,instance),
@@ -387,7 +406,7 @@ def review_correction(old, body):
 def execution_anchor(db):
     # Exclude unsubmitted reservations: Gate must be able to claim its own
     # authorized intent without treating reservation as an external trade.
-    return sha([list(r) for r in db.execute("SELECT id,state FROM gate_intents WHERE state IN ('CLAIMED','UNKNOWN','FILLED_HELD','NO_FILL') ORDER BY id")])
+    return sha([list(r) for r in db.execute("SELECT id,state,CASE WHEN "+UNRELEASED+" THEN 0 ELSE 1 END FROM gate_intents WHERE state IN ('CLAIMED','UNKNOWN','FILLED_HELD','NO_FILL') ORDER BY id")])
 
 
 def projection_values(db, now):
@@ -408,7 +427,7 @@ def projection_values(db, now):
     boot=db.execute('SELECT boot FROM fin_head WHERE id=1').fetchone()[0]
     require(p['boot']==boot,'desk_reconciliation_restart')
     require(p['open_orders']==[],'unresolved_open_orders')
-    require(not db.execute("SELECT 1 FROM gate_intents WHERE state IN ('CLAIMED','UNKNOWN','FILLED_HELD') LIMIT 1").fetchone(),'unresolved_execution')
+    require(not db.execute("SELECT 1 FROM gate_intents WHERE state IN ('CLAIMED','UNKNOWN','FILLED_HELD') AND "+UNRELEASED+" LIMIT 1").fetchone(),'unresolved_execution')
     require(p['execution_anchor']==execution_anchor(db),'desk_execution_changed')
     scope={r[0]:r[1:] for r in db.execute('SELECT id,pair,virtual_cents,mode FROM instances')}
     require(bool(scope) and set(scope)==set(states)==set(p['accounts']),'account_scope_mismatch')

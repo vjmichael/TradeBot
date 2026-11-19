@@ -22,6 +22,7 @@ class LedgerTests(unittest.TestCase):
             db.executemany('INSERT INTO instances VALUES(?,?,10000,\'PAPER\')',[('a','BTC/USD'),('b','ETH/USD')])
             db.execute('CREATE TABLE gate_intents(id TEXT PRIMARY KEY,instance_id TEXT,pair TEXT,notional INTEGER,reserved INTEGER,state TEXT)')
             db.execute("INSERT INTO gate_intents VALUES('i','a','BTC/USD',9900,10000,'CLAIMED')")
+            db.execute('CREATE TABLE gate_events(seq INTEGER PRIMARY KEY,intent_id TEXT,action TEXT,at INTEGER,detail TEXT)')
             initialize(db)
         self.f = FinancialLedger(self.tx,clock=lambda:self.now)
         self.f.fund('fund-a','a')

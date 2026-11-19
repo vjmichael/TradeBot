@@ -20,6 +20,7 @@ from freqtrade.wallets import Wallets
 from GatePaper import GatePaper
 from financial_ledger import FinancialLedger, SCALE, initialize, gate_projection
 from paper_execution import NativeDriver, PaperBridge
+from paper_supervisor import NativeProtectionDriver, ProtectionWorker
 from risk_gate import Gate
 from test_risk_gate import GateTests
 
@@ -31,6 +32,7 @@ class BookFixture:
     check_dry_limit_order_filled=Exchange.check_dry_limit_order_filled
     add_dry_order_fee=Exchange.add_dry_order_fee
     _dry_is_price_crossed=Exchange._dry_is_price_crossed
+    get_dry_market_fill_price=Exchange.get_dry_market_fill_price
     id='kraken'; name='Kraken'; precisionMode=TICK_SIZE; precision_mode_price=TICK_SIZE
     def __init__(self,config):
         self._config=config; self._dry_run_open_orders={}; self.mid=100.0
@@ -47,9 +49,11 @@ class BookFixture:
     def get_precision_amount(self,pair):return .001
     def get_precision_price(self,pair):return .01
     def get_contract_size(self,pair):return 1
+    def get_funding_fees(self,**kwargs):return 0.
+    def fetch_order(self,order_id,pair):return self._dry_run_open_orders[order_id]
 
 
-def qualify():
+def qualify(protection=None):
     base=GateTests('test_size_and_exact_idempotency');base.setUp()
     try:
         h=base.h
@@ -77,8 +81,8 @@ def qualify():
             # Upstream method still calls the real strategy, exchange and persistence.
             bot.get_valid_enter_price_and_stake=lambda pair,price,stake,*a:(price,stake,1.)
             bot._notify_enter=lambda *args,**kwargs:None
-            def fee_update(trade,order_id,order):
-                trade.update_fee(order['fee']['cost'],order['fee']['currency'],order['fee']['rate'],'buy')
+            def fee_update(trade,order_id,order,**kwargs):
+                trade.update_fee(order['fee']['cost'],order['fee']['currency'],order['fee']['rate'],order['side'])
                 trade.update_trade(trade.select_order_by_order_id(order_id))
                 return False
             bot.update_trade_state=fee_update
@@ -92,6 +96,25 @@ def qualify():
             trade=Trade.get_trades_proxy(is_open=True)[0]
             assert trade.enter_tag=='mv:'+intent['intent_id'] and 0<trade.stake_amount<=intent['notional_cents']/100
             assert trade.stop_loss>=95 and trade.stop_loss<100
+            if protection:
+                # Exercise upstream execute_trade_exit (native simulator, ORM and wallets).
+                # Only ancillary callbacks are fixture implementations.
+                bot.strategy.order_types={'entry':'limit','exit':'market','stoploss':'market','stoploss_on_exchange':False}
+                bot._notify_exit=lambda *args,**kwargs:None
+                bot.get_valid_price=lambda custom,proposed:proposed
+                bot.cancel_stoploss_on_exchange=lambda trade,**kwargs:trade
+                bot._exit_reason_cache={}
+                worker=ProtectionWorker(h.tx,NativeProtectionDriver(bot,path,'a',clock=lambda:h.now),clock=lambda:h.now)
+                with h.tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
+                bot.exchange.mid=120. if protection=='target' else 90.
+                action=worker.tick(intent['intent_id']);assert action['reason']==protection,action
+                closed=worker.tick(intent['intent_id']);assert closed['state']=='ACCOUNTED',closed
+                state=f.snapshot('a');assert state['qty']==state['pending']==state['gate_reserved']==0,state
+                if protection=='target':assert state['active']==60*SCALE and state['protected']>0,state
+                else:assert state['active']<60*SCALE and state['protected']==0,state
+                assert worker.tick(intent['intent_id'])['state']=='ACCOUNTED'
+                print('RECEIPT: native protected '+protection+' exit while paused, verified terminal wallet and released reservation',flush=True)
+                return
             # Controlled terminal sell uses real native simulator and ORM. This
             # tests reconciliation, not autonomous protective-exit scheduling.
             bot.exchange.mid=120.
@@ -112,4 +135,7 @@ def qualify():
     finally:base.doCleanups()
 
 
-if __name__=='__main__':qualify()
+if __name__=='__main__':
+    qualify()
+    qualify('stop')
+    qualify('target')

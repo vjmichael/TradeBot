@@ -110,6 +110,8 @@ class GateTests(unittest.TestCase):
                         released_by_instance={'a':500,'b':0})
         def project(db,now):
             return account,digest(asdict(account))
+        from financial_ledger import initialize as initialize_financial
+        with self.h.tx() as db:initialize_financial(db)
         self.g=Gate(self.h.tx,clock=lambda:self.h.now,account_projection=project)
         first=self.admit()
         self.assertEqual(first['state'],'AUTHORIZED')

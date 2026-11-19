@@ -5,7 +5,7 @@ import hmac
 import json
 import time
 from financial_ledger import (CENT, MAX, LIMIT, amount, canon, ident, require,
-                              sha, replay, apply, projection_values, AccountingError)
+                              sha, replay, apply, projection_values, AccountingError, UNRELEASED)
 
 DAY = 86400
 GRACE = 300
@@ -137,7 +137,7 @@ class ReserveManager:
         account=projection_values(db,now)
         paused,human,cap=db.execute('SELECT paused,human_pause,virtual_cap_cents FROM desk WHERE id=1').fetchone()
         require(not paused and not human,'desk_paused')
-        require(not db.execute("SELECT 1 FROM gate_intents WHERE state IN ('AUTHORIZED','CLAIMED','UNKNOWN','FILLED_HELD') LIMIT 1").fetchone(),'held_execution')
+        require(not db.execute("SELECT 1 FROM gate_intents WHERE state IN ('AUTHORIZED','CLAIMED','UNKNOWN','FILLED_HELD') AND "+UNRELEASED+" LIMIT 1").fetchone(),'held_execution')
         row=db.execute("SELECT i.body,i.hash FROM gate_current c JOIN gate_inputs i ON i.kind=c.kind AND i.scope=c.scope AND i.receipt=c.receipt WHERE c.kind='policy' AND c.scope='desk'").fetchone()
         require(row is not None,'missing_risk_policy')
         p=json.loads(row[0]); require(sha(p)==row[1] and now<p['expires'],'risk_policy_expired_or_invalid')
