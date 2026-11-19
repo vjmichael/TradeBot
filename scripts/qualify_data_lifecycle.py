@@ -8,6 +8,8 @@ from data_preparation import Preparation
 from data_lifecycle import backup,restore,coverage
 from historical_readiness import historical_report,recovery_inventory
 from training_handoff import export as export_training_input,verify as verify_training_input
+from release_seed import init as init_seed,capture as capture_seed,verify as verify_seed,materialize as materialize_seed,restore_bundle
+from seed_population import run_epoch,population_status
 from market_memory import MarketMemory
 from market_lake import HistoricalLake
 from market_stream import StreamJournal
@@ -120,6 +122,23 @@ def main():
             assert verify_training_input(root/'training-input',handoff['manifest_sha256'])==handoff
             assert not handoff['training_ready'] and all(x['rows']==168 for x in handoff['markets'])
             print('RECEIPT: real restored database to frozen Freqtrade JSON OHLCV and exact provenance',handoff,flush=True)
+            # Exercise a private persistent repository with genuine data; CI
+            # itself is temporary and is not the distributable seed store.
+            seed=root/'seed';init_seed(seed,snapshot=root/'snapshot',snapshot_sha256=receipt['manifest_sha256'])
+            a=capture_seed(seed,'native-v1')
+            epoch=run_epoch(seed,'native-v2',90)
+            assert epoch['worker_outcome']=='cancelled',epoch['worker_outcome']
+            b=epoch['receipt']
+            assert epoch['state']=='checkpoint_saved_incomplete' and population_status(seed)['epochs'][0]['manifest_sha256']==b['manifest_sha256']
+            assert b['review']['vintages']['saved']>a['review']['vintages']['saved'],(a['review']['vintages']['saved'],b['review']['vintages']['saved'])
+            print('RECEIPT: actual private seed workspace population epoch, more saved genuine economic vintages, supervised terminal worker, immutable incomplete checkpoint',b['review']['vintages']['saved'],flush=True)
+            assert b['reused_object_bytes']>0 and verify_seed(seed,'native-v1',a['manifest_sha256'])['review']==a['review']
+            bundle=root/'seed-package';materialize_seed(seed,'native-v2',b['manifest_sha256'],bundle,bundle=True)
+            restored_seed=root/'restored-seed';restore_bundle(bundle,b['manifest_sha256'],restored_seed)
+            for pair in SYMBOLS:
+                after=MarketMemory(restored_seed).query(pair,60,export_start,export_end,b['cutoff'])['rows'];before=restored.query(pair,60,export_start,export_end,receipt['cutoff'])['rows']
+                assert [(x['ts'],x['digest']) for x in after]==[(x['ts'],x['digest']) for x in before]
+            print('RECEIPT: genuine versioned private seed capture, object reuse, verified portable restore; distribution not approved',b['manifest_sha256'],b['new_object_bytes'],b['reused_object_bytes'],flush=True)
             print('RECEIPT: verified data-only backup and fresh restore; actual observations, Parquet and economic evidence preserved; '+str(receipt),flush=True)
         finally:controller.close()
 

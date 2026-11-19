@@ -25,6 +25,11 @@ on:
       - 'tests/test_market_memory.py'
       - 'data_lifecycle.py'
       - 'training_handoff.py'
+      - 'release_seed.py'
+      - 'seed_population.py'
+      - 'tests/test_seed_population.py'
+      - 'scripts/manage_seed.py'
+      - 'tests/test_release_seed.py'
       - 'tests/test_training_handoff.py'
       - 'data_preparation.py'
       - 'data_scheduler.py'
@@ -60,7 +65,7 @@ permissions:
 jobs:
   native-market-memory:
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
