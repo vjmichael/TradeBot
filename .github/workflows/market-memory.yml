@@ -2,6 +2,7 @@ name: TB-04 native market memory and partition acceptance
 on:
   push:
     paths:
+      - 'tradebot.py'
       - 'economic_memory.py'
       - 'tests/test_long_retention.py'
       - 'market_memory.py'

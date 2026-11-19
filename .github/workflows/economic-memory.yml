@@ -2,6 +2,8 @@ name: TB-04D official economic evidence acceptance
 on:
   push:
     paths:
+      - 'tradebot.py'
+      - 'tests/test_historical_readiness.py'
       - 'economic_memory.py'
       - 'vintage_memory.py'
       - 'scripts/qualify_vintages.py'

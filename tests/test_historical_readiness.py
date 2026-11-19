@@ -87,6 +87,38 @@ class HistoricalReadinessTests(unittest.TestCase):
             self.assertEqual(response.status_code,200,response.text)
             self.assertFalse(response.json()['training_ready'])
             self.assertEqual(c.get('/api/economic/vintage-coverage').status_code,401)
-            v=c.get('/api/economic/vintage-coverage',headers=AUTH).json();self.assertEqual(v['expected'],360);self.assertEqual(len(v['rows']),60)
+            vintage=c.get('/api/economic/vintage-coverage',headers=AUTH)
+            self.assertEqual(vintage.status_code,200,vintage.text)
+            v=vintage.json();self.assertEqual(v['expected'],360);self.assertEqual(len(v['rows']),60)
             self.assertEqual(c.get(route+'?offset=50',headers=AUTH).status_code,409)
             self.assertFalse(c.get('/api/status',headers=AUTH).json()['live_available'])
+
+    def test_vintage_coverage_literal_route_precedes_dynamic_source(self):
+        with TestClient(create_app(self.root,TOKEN),base_url='http://localhost') as c:
+            route='/api/economic/vintage-coverage'
+            self.assertEqual(c.get(route).status_code,401)
+            self.assertEqual(c.get(route,headers={'Authorization':'Bearer invalid'}).status_code,401)
+            keys=[]
+            for offset in range(0,360,60):
+                response=c.get(route,headers=AUTH,params={'as_of':self.now,'offset':offset})
+                self.assertEqual(response.status_code,200,response.text)
+                v=response.json()
+                self.assertEqual((v['expected'],v['saved'],v['missing']),(360,0,360))
+                self.assertEqual(v['as_of'],self.now)
+                self.assertEqual(len(v['rows']),60)
+                self.assertEqual(v['next_offset'],offset+60 if offset<300 else None)
+                self.assertFalse(v['training_ready'])
+                keys.extend((row['series'],row['vintage']) for row in v['rows'])
+            self.assertEqual((len(keys),len(set(keys))),(360,360))
+            for params in ({'offset':361},{'offset':-1},{'as_of':0},{'as_of':int(time.time())+3600}):
+                response=c.get(route,headers=AUTH,params=params)
+                self.assertEqual(response.status_code,422,response.text)
+                self.assertEqual(response.json()['detail'],'Invalid vintage coverage query')
+            for source in ('statistics','monetary','extended'):
+                response=c.get('/api/economic/'+source,headers=AUTH)
+                self.assertEqual(response.status_code,200,response.text)
+                self.assertIn('state',response.json())
+                history=c.get('/api/economic/'+source+'/history',headers=AUTH)
+                self.assertEqual(history.status_code,200,history.text)
+                self.assertIn('rows',history.json())
+            self.assertEqual(c.get('/api/economic/invalid',headers=AUTH).status_code,422)

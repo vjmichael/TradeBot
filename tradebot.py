@@ -400,6 +400,17 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         except (MemoryUnavailable,sqlite3.Error,OSError):
             raise HTTPException(503,"Retained historical evidence unavailable") from None
 
+    # Literal path must precede the dynamic source route; Literal validation
+    # occurs after Starlette selects its first matching route.
+    @app.get("/api/economic/vintage-coverage", dependencies=[Depends(authorize)])
+    def vintage_coverage(as_of: int | None = None,offset: int = 0):
+        from vintage_memory import coverage
+        try:
+            if as_of is not None and as_of>int(time.time()):raise ValueError('future as-of')
+            return coverage(app.state.economic_memory,as_of=as_of,offset=offset,detail=True)
+        except ValueError:raise HTTPException(422,'Invalid vintage coverage query') from None
+        except (MemoryUnavailable,sqlite3.Error,OSError):raise HTTPException(503,'Vintage coverage unavailable') from None
+
     @app.get("/api/economic/{source}", dependencies=[Depends(authorize)])
     def economic(source: Literal["statistics", "monetary", "extended"], as_of: int | None = None, offset: int = 0):
         now=int(time.time())
@@ -511,15 +522,6 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     @app.post("/api/data-maintenance/{mode}", dependencies=[Depends(authorize)])
     def start_data_maintenance(mode: Literal["backup", "preview-retention", "consolidate", "preview-rotation", "vintages"]):
         return maintenance_start(mode)
-
-    @app.get("/api/economic/vintage-coverage", dependencies=[Depends(authorize)])
-    def vintage_coverage(as_of: int | None = None,offset: int = 0):
-        from vintage_memory import coverage
-        try:
-            if as_of is not None and as_of>int(time.time()):raise ValueError('future as-of')
-            return coverage(app.state.economic_memory,as_of=as_of,offset=offset,detail=True)
-        except ValueError:raise HTTPException(422,'Invalid vintage coverage query') from None
-        except (MemoryUnavailable,sqlite3.Error,OSError):raise HTTPException(503,'Vintage coverage unavailable') from None
 
     @app.get("/api/economic/vintages/{series}/{vintage}", dependencies=[Depends(authorize)])
     def historical_vintage(series: str,vintage: str,retrieved_by: int | None = None,replay_at: int | None = None):
