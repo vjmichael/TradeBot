@@ -193,3 +193,70 @@ class BridgeTests(unittest.TestCase):
     def test_nonadvancing_and_duplicate_ids(self):
         with self.assertRaises(ValueError):parse_page('BTC/USD',T*NS,self.page([T],[1]))
         with self.assertRaises(ValueError):parse_page('BTC/USD',T*NS-1,self.page([T,T+3600],[1,1]))
+
+    def run_page(self,page,max_pages=1):
+        return GapBridge(self.mem).run('BTC/USD',self.start,self.end,max_pages=max_pages,fetch=lambda *_:page,pace=lambda _:None,clock=lambda:NOW)
+
+    def test_exact_overlap_across_restart_counts_once(self):
+        first=self.run_page(self.page([T,self.start],[11,12]))
+        result=self.run_page(self.page([T,self.start,self.end,T+3*3600],[11,12,13,14]))
+        self.assertEqual(result['state'],'complete')
+        view=self.mem.query('BTC/USD',60,self.start,self.end,NOW)
+        self.assertEqual((view['coverage'],view['rows'][0]['v'],view['rows'][0]['trades']),(1,'2',1))
+        with self.mem.tx() as db:
+            rows=db.execute('SELECT accepted_count,overlap_count FROM gap_overlap_receipts WHERE job=? ORDER BY page',(first['id'],)).fetchall()
+            self.assertEqual([tuple(r) for r in rows],[(2,0),(2,2)])
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM gap_trade_tail WHERE job=?',(first['id'],)).fetchone()[0],4)
+
+    def test_overlap_spans_multiple_pages_and_same_timestamp_new_trade(self):
+        # Two distinct trade IDs at the same timestamp must both count.
+        self.run_page(self.page([T,self.start],[11,12]))
+        p=self.page([self.start,self.start],[12,13]);p['result']['last']=str(self.start*NS+1)
+        self.run_page(p)
+        j=self.run_page(self.page([T,self.start,self.start,self.end,T+3*3600],[11,12,13,14,15]))
+        self.assertEqual(j['state'],'complete')
+        row=self.mem.query('BTC/USD',60,self.start,self.end,NOW)['rows'][0]
+        self.assertEqual((row['v'],row['trades']),('4',2))
+
+    def test_bad_overlap_does_not_advance_or_publish(self):
+        j=self.run_page(self.page([T,self.start],[11,12]))
+        bad=[self.page([self.start,self.end,T+3*3600],[12,13,14],['101','100','100']),
+             self.page([T,self.end,T+3*3600],[11,13,14]),
+             self.page([T,self.start,self.end,T+3*3600],[10,12,13,14]),
+             self.page([T,self.start],[11,12])]
+        bad[-1]['result']['last']=str(self.start*NS+1)
+        for p in bad:
+            with self.subTest(p=p),self.assertRaises(ValueError):self.run_page(p)
+            with self.mem.tx() as db:
+                row=db.execute('SELECT cursor,pages,last_trade FROM gap_jobs WHERE id=?',(j['id'],)).fetchone()
+                self.assertEqual(tuple(row),(j['cursor'],1,12))
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM gap_pages WHERE job=?',(j['id'],)).fetchone()[0],1)
+            self.assertEqual(self.mem.query('BTC/USD',60,self.start,self.end,NOW)['coverage'],0)
+        self.assertEqual(self.run_page(self.page([self.start,self.end,T+3*3600],[12,13,14]))['state'],'complete')
+
+    def test_missing_durable_tail_fails_closed(self):
+        j=self.run_page(self.page([T,self.start],[11,12]))
+        with self.mem.tx() as db:db.execute('DELETE FROM gap_trade_tail WHERE job=?',(j['id'],))
+        with self.assertRaises(MemoryUnavailable):self.run_page(self.page([self.end,T+3*3600],[13,14]))
+        self.assertEqual(self.mem.query('BTC/USD',60,self.start,self.end,NOW)['coverage'],0)
+
+    def test_legacy_partial_checkpoint_kept_separate(self):
+        first,last=self.b.anchors('BTC/USD',self.start,self.end,NOW)
+        legacy=hashlib.sha256(f'BTC/USD:{self.start}:{self.end}:{first}:{last}'.encode()).hexdigest()
+        with self.mem.tx() as db:
+            db.execute('INSERT INTO gap_jobs(id,pair,start_ts,end_ts,first_digest,last_digest,cursor,last_trade,last_stamp,pages,state) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(legacy,'BTC/USD',self.start,self.end,first,last,str(self.start*NS),12,str(self.start*NS),1,'recovering'))
+        j=self.run_page(self.page([T,self.start,self.end,T+3*3600],[11,12,13,14]))
+        self.assertNotEqual(j['id'],legacy);self.assertEqual(j['state'],'complete')
+        with self.mem.tx() as db:
+            self.assertEqual(tuple(db.execute('SELECT pages,state FROM gap_jobs WHERE id=?',(legacy,)).fetchone()),(1,'recovering'))
+
+    def test_overlap_tail_is_bounded(self):
+        from market_gap import TAIL_LIMIT
+        # Unique trades with one second between each, entirely inside the gap.
+        stamps=[self.start+i for i in range(TAIL_LIMIT)]
+        self.run_page(self.page([T],[1]))
+        j=self.run_page(self.page(stamps,list(range(2,TAIL_LIMIT+2))))
+        with self.mem.tx() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM gap_trade_tail WHERE job=?',(j['id'],)).fetchone()[0],TAIL_LIMIT)
+        with self.assertRaises(ValueError):self.run_page(self.page([T,stamps[-1],self.end],[1,TAIL_LIMIT+1,TAIL_LIMIT+2]))
+        self.assertEqual(self.run_page(self.page([stamps[-1],self.end,T+3*3600],[TAIL_LIMIT+1,TAIL_LIMIT+2,TAIL_LIMIT+3]))['state'],'complete')

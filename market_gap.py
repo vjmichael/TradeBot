@@ -22,6 +22,7 @@ NS=10**9
 STEP=3600
 MAX_SPAN=31*86400
 MAX_PAGES=256
+TAIL_LIMIT=1000
 
 
 def fetch_page(pair,cursor):
@@ -65,6 +66,32 @@ def parse_page(pair,cursor,payload):
     return nxt,clean
 
 
+def reconcile_overlap(rows,prior_id,prior_stamp,tail,cursor):
+    """Only discard an exact contiguous suffix of the durable accepted tail.
+
+    An opaque Kraken cursor may include earlier trades on the next page. Do
+    not deduplicate by timestamp or price alone, or accept a changed trade ID.
+    The parsed page is ordered; prove any replay ends at the durable frontier.
+    Unknown/older overlaps, skipped suffix rows, and no-progress pages fail.
+    """
+    if prior_id:
+        if not tail or tail[-1][:2]!=(prior_stamp,prior_id):
+            raise MemoryUnavailable('trade frontier checkpoint unavailable')
+    elif tail:
+        raise MemoryUnavailable('unexpected trade frontier checkpoint')
+    overlap=0
+    while overlap<len(rows) and rows[overlap][1]<=prior_id:
+        overlap+=1
+    if overlap and (overlap>len(tail) or rows[:overlap]!=tail[-overlap:]):
+        raise ValueError('unverified overlapping trade page; no partial publication')
+    novel=rows[overlap:]
+    if not novel:
+        raise ValueError('trade page contains no new progress')
+    if novel[0][0]<prior_stamp or novel[0][0]+1_000_000<cursor:
+        raise ValueError('reordered new trade or cursor boundary mismatch')
+    return novel,overlap
+
+
 class GapBridge:
     def __init__(self,memory):
         self.memory=memory
@@ -72,6 +99,8 @@ class GapBridge:
             db.execute('''CREATE TABLE IF NOT EXISTS gap_jobs(id TEXT PRIMARY KEY,pair TEXT NOT NULL,start_ts INTEGER NOT NULL,end_ts INTEGER NOT NULL,first_digest TEXT NOT NULL,last_digest TEXT NOT NULL,cursor TEXT NOT NULL,last_trade INTEGER NOT NULL DEFAULT 0,last_stamp TEXT NOT NULL DEFAULT '0',pages INTEGER NOT NULL DEFAULT 0,state TEXT NOT NULL,observed_at INTEGER,source_id TEXT)''')
             db.execute('''CREATE TABLE IF NOT EXISTS gap_candles(job TEXT NOT NULL,ts INTEGER NOT NULL,o TEXT NOT NULL,h TEXT NOT NULL,l TEXT NOT NULL,c TEXT NOT NULL,v TEXT NOT NULL,trades INTEGER NOT NULL,PRIMARY KEY(job,ts))''')
             db.execute('''CREATE TABLE IF NOT EXISTS gap_pages(job TEXT NOT NULL,page INTEGER NOT NULL,old_cursor TEXT NOT NULL,new_cursor TEXT NOT NULL,sha256 TEXT NOT NULL,trade_count INTEGER NOT NULL,observed_at INTEGER NOT NULL,PRIMARY KEY(job,page))''')
+            db.execute('''CREATE TABLE IF NOT EXISTS gap_trade_tail(job TEXT NOT NULL,trade_id INTEGER NOT NULL,stamp TEXT NOT NULL,price TEXT NOT NULL,qty TEXT NOT NULL,PRIMARY KEY(job,trade_id))''')
+            db.execute('''CREATE TABLE IF NOT EXISTS gap_overlap_receipts(job TEXT NOT NULL,page INTEGER NOT NULL,accepted_count INTEGER NOT NULL,overlap_count INTEGER NOT NULL,PRIMARY KEY(job,page))''')
     def anchors(self,pair,start,end,now):
         left=self.memory.query(pair,60,start-STEP,start,now);right=self.memory.query(pair,60,end,end+STEP,now)
         if left['coverage']!=1 or right['coverage']!=1 or left['conflicts'] or right['conflicts']:
@@ -83,8 +112,13 @@ class GapBridge:
             raise ValueError('invalid gap recovery bounds')
         with exclusive_job(self.memory.root,'trade-gap'):
             first,last=self.anchors(pair,start,end,now)
-            key=hashlib.sha256(f'{pair}:{start}:{end}:{first}:{last}'.encode()).hexdigest()
+            legacy=hashlib.sha256(f'{pair}:{start}:{end}:{first}:{last}'.encode()).hexdigest()
+            # Older partial jobs lack a verifiable exact replay tail. Keep
+            # their receipts intact and start a versioned recovery instead.
+            key=hashlib.sha256(f'overlap-v1:{legacy}'.encode()).hexdigest()
             with self.memory.tx() as db:
+                old=db.execute("SELECT * FROM gap_jobs WHERE id=? AND state='complete'",(legacy,)).fetchone()
+                if old:return dict(old)
                 db.execute('INSERT OR IGNORE INTO gap_jobs(id,pair,start_ts,end_ts,first_digest,last_digest,cursor,state) VALUES(?,?,?,?,?,?,?,?)',(key,pair,start,end,first,last,str((start-STEP)*NS-1),'recovering'))
             for _ in range(max_pages):
                 with closing(sqlite3.connect(self.memory.db)) as db:
@@ -93,14 +127,19 @@ class GapBridge:
                 if job['state']=='rejected':raise MemoryUnavailable('trade recovery rejected; independent review needed')
                 if job['state']=='ready':return self.publish(key,pair,start,end,first,last,int(clock()))
                 cursor=int(job['cursor']); nxt,rows=parse_page(pair,cursor,fetch(pair,cursor)); observed=int(clock())
-                if rows[0][0]<(start-STEP)*NS or rows[0][0]+1_000_000<cursor or rows[-1][0]>observed*NS+NS:raise ValueError('trade response outside observation boundary')
+                if rows[0][0]<(start-STEP)*NS or rows[-1][0]>observed*NS+NS:raise ValueError('trade response outside observation boundary')
                 prior_id=job['last_trade'];prior_stamp=int(job['last_stamp'])
-                if rows[0][1]<=prior_id or rows[0][0]<prior_stamp:raise ValueError('overlapping or reordered trade page; no partial publication')
-                reached=rows[-1][0]>=(end+STEP)*NS
                 digest=hashlib.sha256(json.dumps([cursor,nxt,rows],separators=(',',':')).encode()).hexdigest()
                 with self.memory.tx() as db,localcontext() as ctx:
+                    current=db.execute('SELECT cursor,pages,last_trade,last_stamp,state FROM gap_jobs WHERE id=?',(key,)).fetchone()
+                    if tuple(current)!=(job['cursor'],job['pages'],prior_id,job['last_stamp'],'recovering'):
+                        raise MemoryUnavailable('trade recovery checkpoint changed')
+                    tail=[(int(r['stamp']),r['trade_id'],r['price'],r['qty']) for r in db.execute('SELECT * FROM gap_trade_tail WHERE job=? ORDER BY trade_id',(key,))]
+                    if len(tail)>TAIL_LIMIT:raise MemoryUnavailable('trade replay tail exceeds bound')
+                    novel,overlap=reconcile_overlap(rows,prior_id,prior_stamp,tail,cursor)
+                    reached=novel[-1][0]>=(end+STEP)*NS
                     ctx.prec=100
-                    for ns,trade_id,price,qty in rows:
+                    for ns,trade_id,price,qty in novel:
                         ts=ns//(STEP*NS)*STEP
                         if ts>=end+STEP:break
                         old=db.execute('SELECT * FROM gap_candles WHERE job=? AND ts=?',(key,ts)).fetchone()
@@ -108,8 +147,15 @@ class GapBridge:
                             h=decimal_text(max(Decimal(old['h']),Decimal(price)));l=decimal_text(min(Decimal(old['l']),Decimal(price)));v=decimal_text(Decimal(old['v'])+Decimal(qty))
                             db.execute('UPDATE gap_candles SET h=?,l=?,c=?,v=?,trades=trades+1 WHERE job=? AND ts=?',(h,l,price,v,key,ts))
                         else:db.execute('INSERT INTO gap_candles VALUES(?,?,?,?,?,?,?,?)',(key,ts,price,price,price,price,qty,1))
+                    # Tail, page digest, accepted/overlap counts, aggregates
+                    # and cursor advance commit together. Keep only a bounded
+                    # exact tail for the next page's overlap proof.
+                    new_tail=(tail+novel)[-TAIL_LIMIT:]
+                    db.execute('DELETE FROM gap_trade_tail WHERE job=?',(key,))
+                    db.executemany('INSERT INTO gap_trade_tail VALUES(?,?,?,?,?)',[(key,i,str(ns),p,q) for ns,i,p,q in new_tail])
                     db.execute('INSERT INTO gap_pages VALUES(?,?,?,?,?,?,?)',(key,job['pages']+1,str(cursor),str(nxt),digest,len(rows),observed))
-                    db.execute('UPDATE gap_jobs SET cursor=?,last_trade=?,last_stamp=?,pages=pages+1,state=?,observed_at=? WHERE id=?',(str(nxt),rows[-1][1],str(rows[-1][0]),'ready' if reached else 'recovering',observed,key))
+                    db.execute('INSERT INTO gap_overlap_receipts VALUES(?,?,?,?)',(key,job['pages']+1,len(novel),overlap))
+                    db.execute('UPDATE gap_jobs SET cursor=?,last_trade=?,last_stamp=?,pages=pages+1,state=?,observed_at=? WHERE id=?',(str(nxt),novel[-1][1],str(novel[-1][0]),'ready' if reached else 'recovering',observed,key))
                 if reached:return self.publish(key,pair,start,end,first,last,observed)
                 pace(1.25) # conservative per-page request cadence; 429/error stops job, retry resumes
             with closing(sqlite3.connect(self.memory.db)) as db:

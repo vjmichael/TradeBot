@@ -54,13 +54,20 @@ def bridge(memory):
     start=target[0]//1000;end=start+3600
     memory.record_recent(pair,60,snapshot|{'candles':[r for r in source if r[0]!=target[0]]})
     assert not memory.query(pair,60,start,end,int(time.time()))['coverage']
-    j=GapBridge(memory).run(pair,start,end,max_pages=256)
+    # Force an independent reopen at the first checkpoint when more pages
+    # remain; this exercises the exact durable overlap frontier on real data.
+    j=GapBridge(memory).run(pair,start,end,max_pages=1)
+    if j['state']!='complete':j=GapBridge(MarketMemory(memory.root.parent)).run(pair,start,end,max_pages=255)
     if j['state']!='complete':raise RuntimeError('actual bridge page budget insufficient')
     result=memory.query(pair,60,start,end,int(time.time()))
     if result['coverage']!=1 or result['conflicts']:raise RuntimeError('actual trade bridge missing/conflicting result')
     row=result['rows'][0]
     if [row[k] for k in ('o','h','l','c','v','trades')]!=target[1:]:raise RuntimeError('trade reconstruction differs from independent reference candle')
-    print(f'RECEIPT: actual SOL/USD missing hourly candle reconstructed from {j["pages"]} cursor pages and matches independent REST OHLCVT exactly',flush=True)
+    with memory.tx() as db:
+        receipts=db.execute('SELECT p.trade_count,r.accepted_count,r.overlap_count FROM gap_pages p JOIN gap_overlap_receipts r USING(job,page) WHERE p.job=? ORDER BY p.page',(j['id'],)).fetchall()
+        assert len(receipts)==j['pages'] and all(r['accepted_count']>0 and r['accepted_count']+r['overlap_count']==r['trade_count'] for r in receipts)
+        accepted=sum(r['accepted_count'] for r in receipts);overlap=sum(r['overlap_count'] for r in receipts)
+    print(f'RECEIPT: actual SOL/USD missing hourly candle reconstructed from {j["pages"]} cursor pages, {accepted} unique accepted trades and {overlap} verified overlap rows; matches independent REST OHLCVT exactly',flush=True)
 
 
 def main():
