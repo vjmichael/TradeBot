@@ -109,4 +109,4 @@ TB-FIN-01C explicitly allows a human to authorize a bounded expiring recurring p
 
 ### Guided reinvestment widget
 
-See TB-FIN-01's guided control. Default gray locked OFF, bottom red OFF / green ON switch, legible plain-language dynamic hypothetical money split and protected reserve preview; actual ON requires a separately authenticated, valid human authorization. Preview cannot release money. Preserve all risk and paper-first gates.
+Approved Experiment → Apply/Update → Reinvestment ON/OFF layout. Gray locked current policy when OFF, separate always-editable non-mutating preview; save inactive version without changing active authority. Bottom red OFF/green ON dedicated authorization switch, explicit strongly authenticated approval for activation or replacement, revocation without stopping protection. See TB-FIN-01 guided control; all original financial risk and paper-first gates remain binding.
