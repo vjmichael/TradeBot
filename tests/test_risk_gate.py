@@ -100,6 +100,24 @@ class GateTests(unittest.TestCase):
         self.assertFalse(self.claim(first)['claimed'])
         self.assertEqual(self.admit()['state'],'CLAIMED')
 
+    def test_verified_released_cap_is_bounded_by_desk_authority(self):
+        from risk_gate import digest
+        from dataclasses import asdict
+        with self.h.tx() as db:
+            db.execute("UPDATE desk SET virtual_cap_cents=12500 WHERE id=1")
+        account=replace(self.a,settled_cash_cents=18000,protected_cash_cents=5500,
+                        active_by_instance={'a':6500,'b':6000},
+                        released_by_instance={'a':500,'b':0})
+        def project(db,now):
+            return account,digest(asdict(account))
+        self.g=Gate(self.h.tx,clock=lambda:self.h.now,account_projection=project)
+        first=self.admit()
+        self.assertEqual(first['state'],'AUTHORIZED')
+        account=replace(account,released_by_instance={'a':0,'b':0})
+        self.assertEqual(self.admit(proposal_id='unbacked')['reason'],'instance_accounting_cap')
+        account=replace(account,released_by_instance={'a':500,'b':100})
+        self.assertEqual(self.admit(proposal_id='over-cap')['reason'],'desk_authorized_cap')
+
     def test_protected_cash_and_reservation(self):
         self.g.trusted_account(replace(self.a,receipt='limited',settled_cash_cents=10000,
             protected_cash_cents=8000,active_by_instance={'a':1000,'b':1000}))

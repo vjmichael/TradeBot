@@ -31,7 +31,7 @@ from storage_telemetry import storage_growth
 from storage_management import status as maintenance_status
 from market_stream import StreamJournal
 from risk_gate import Gate, initialize as initialize_gate, restrictive_transition as restrict_gate
-from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial, gate_projection
+from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial, gate_projection, replay as replay_financial, CENT as FIN_CENT
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
 SLOTS = frozenset({"grok", "telegram_desk", "telegram_recovery", "kraken_read_key", "kraken_read_secret"})
@@ -150,6 +150,8 @@ class Store:
         with self.transaction() as db:
             state = dict(db.execute("SELECT paused,human_pause,virtual_cap_cents FROM desk WHERE id=1").fetchone())
             allocated = db.execute("SELECT COALESCE(SUM(virtual_cents),0) FROM instances").fetchone()[0]
+            states,_,_,_ = replay_financial(db)
+            allocated += sum(s['reserve']['released']//FIN_CENT for s in states.values())
             return {"mode": "PAPER", "paused": bool(state["paused"]), "human_pause": bool(state["human_pause"]), "virtual_cap_cents": state["virtual_cap_cents"], "allocated_cents": allocated, "engine_connected": False, "live_available": False}
 
     def instances(self):
@@ -159,6 +161,8 @@ class Store:
     def add(self, spec: InstanceSpec):
         with self.transaction() as db:
             allocated = db.execute("SELECT COALESCE(SUM(virtual_cents),0) FROM instances").fetchone()[0]
+            states,_,_,_ = replay_financial(db)
+            allocated += sum(s['reserve']['released']//FIN_CENT for s in states.values())
             cap = db.execute("SELECT virtual_cap_cents FROM desk WHERE id=1").fetchone()[0]
             if allocated + spec.virtual_cents > cap:
                 raise ValueError("virtual allocation exceeds configured cap")
@@ -172,6 +176,8 @@ class Store:
             raise ValueError("invalid paper capital")
         with self.transaction() as db:
             allocated = db.execute("SELECT COALESCE(SUM(virtual_cents),0) FROM instances").fetchone()[0]
+            states,_,_,_ = replay_financial(db)
+            allocated += sum(s['reserve']['released']//FIN_CENT for s in states.values())
             if cents < allocated:
                 raise ValueError("capital below existing allocations")
             db.execute("UPDATE desk SET virtual_cap_cents=?,cap_set_by_user=1 WHERE id=1", (cents,))

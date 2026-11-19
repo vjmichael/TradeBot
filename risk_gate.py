@@ -104,6 +104,7 @@ class RiskState:
     exposure_by_instance: dict
     reconciled: bool
     protection_ok: bool
+    released_by_instance: dict | None = None  # ledger-verified human-approved paper credits
 
     def check(self, now):
         identifier(self.receipt)
@@ -118,6 +119,11 @@ class RiskState:
                 raise GateRefusal("invalid_account_scope")
             for key, value in mapping.items():
                 identifier(key)
+                integer(value, 0, MAX_CENTS)
+        if self.released_by_instance is not None:
+            if type(self.released_by_instance) is not dict or set(self.released_by_instance) != set(self.active_by_instance):
+                raise GateRefusal('invalid_released_scope')
+            for value in self.released_by_instance.values():
                 integer(value, 0, MAX_CENTS)
         if type(self.reconciled) is not bool or type(self.protection_ok) is not bool:
             raise GateRefusal("invalid_account_flags")
@@ -376,8 +382,11 @@ class Gate:
             raise GateRefusal("account_scope_mismatch")
         if sum(account.active_by_instance.values())+sum(account.exposure_by_instance.values()) > desk[2]:
             raise GateRefusal("desk_accounting_cap")
+        released = account.released_by_instance or {}
+        if sum(i['virtual_cents']+released.get(k,0) for k,i in instances.items()) > desk[2]:
+            raise GateRefusal('desk_authorized_cap')
         for k,i in instances.items():
-            if account.active_by_instance[k]+account.exposure_by_instance[k] > i["virtual_cents"]:
+            if account.active_by_instance[k]+account.exposure_by_instance[k] > i["virtual_cents"]+released.get(k,0):
                 raise GateRefusal("instance_accounting_cap")
         held = db.execute("""SELECT * FROM gate_intents WHERE state IN
             ('AUTHORIZED','CLAIMED','UNKNOWN','FILLED_HELD') AND (? IS NULL OR id<>?)""", (exclude,exclude)).fetchall()

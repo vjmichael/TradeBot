@@ -55,7 +55,8 @@ def verify_schema(db):
 
 
 def fresh():
-    return dict(active=0, inventory=0, pending=0, protected=0, capital=0, pl=0,
+    from reserve_policy import fresh as reserve_fresh
+    return dict(reserve=reserve_fresh(),active=0, inventory=0, pending=0, protected=0, capital=0, pl=0,
                 lots=[], sales={}, used={}, fees=0, settled_pl=0, gains=0, losses=0,
                 reconciled=False, reconciled_at=None, matched_reserve=None, matched_boot=None, mark=None, pair=None, history=[], correction_locked=False, correction_reason=None)
 
@@ -74,10 +75,11 @@ def invariants(s):
     require(all(0 <= b[k] <= MAX for k in ('active','inventory','pending','protected')), 'negative_or_excess_balance')
     require(s['inventory'] == sum(l[1] for l in s['lots']), 'lot_basis_mismatch')
     require(s['pending'] == sum(l[0] for l in s['sales'].values()), 'settlement_mismatch')
-    require(s['protected'] == s['gains'], 'protected_gain_mismatch')
+    require(s['protected'] == s['gains']-s['reserve']['released'], 'protected_gain_mismatch')
+    require(0 <= s['reserve']['released'] <= s['gains'] and sum(s['reserve']['earmarks'].values()) <= s['protected'], 'reserve_partition_mismatch')
     require(s['settled_pl'] == s['gains']-s['losses'], 'settled_pl_mismatch')
     require(-s['pl'] == s['settled_pl']+sum(net-basis for net,basis in s['sales'].values()), 'realized_pl_mismatch')
-    require(s['active']+s['inventory']+sum(min(net,basis) for net,basis in s['sales'].values()) <= -s['capital'], 'principal_expansion')
+    require(s['active']+s['inventory']+sum(min(net,basis) for net,basis in s['sales'].values()) <= -s['capital']+s['reserve']['released'], 'principal_expansion')
     require(qty(s) <= MAX and all(0 <= s[k] <= MAX for k in ('fees','gains','losses')), 'ledger_bound')
 
 
@@ -154,7 +156,11 @@ def apply(states, last, instance, kind, event_id, body):
         return  # desk observation is not an instance or an economic event
     s = states.setdefault(instance,fresh())
     require(kind == 'fund' or s['capital'] < 0, 'unfunded_instance')
-    if kind == 'late_correct':
+    if kind.startswith('reserve_'):
+        from reserve_policy import apply_event
+        apply_event(s,kind,body)
+        last[instance] = (event_id,kind,body,None)
+    elif kind == 'late_correct':
         s, accepted, reason = review_correction(s, body)
         if not accepted:
             s['correction_locked'] = True
@@ -171,6 +177,7 @@ def apply(states, last, instance, kind, event_id, body):
         require(not s['mark'] or body['observed'] >= s['mark'][1], 'out_of_order_mark')
         s['mark'] = [amount(body['price'],True),amount(body['observed'],True)]
     elif kind == 'correct':
+        require(s['reserve']['last_time']==0,'reserve_history_requires_manual_correction_review')
         prev = last.get(instance)
         require(prev is not None and prev[0] == body['fill'] and prev[1] in ('buy','sell'), 'dependent_or_unknown_fill')
         original,prior_kind,p,before = prev
@@ -336,7 +343,7 @@ class FinancialLedger:
                 'unrealized_pl':None if value is None else value-s['inventory'],
                 'gate_reserved':reserved,'unencumbered_upper_bound':max(0,s['active']-reserved),
                 'reconciled':bool(s['reconciled'] and scope_ok and not conflicts and not s['correction_locked'] and s['matched_reserve']==reserved and s['matched_boot']==boot and 0 <= now-s['reconciled_at'] <= 60),'conflicts':conflicts,
-                'correction_locked':s['correction_locked'],'correction_reason':s['correction_reason'],'pending_settlements':len(s['sales']),'journal_count':count,'journal_head':head,'execution_ready':False}
+                'reserve_policy':copy.deepcopy(s['reserve']),'correction_locked':s['correction_locked'],'correction_reason':s['correction_reason'],'pending_settlements':len(s['sales']),'journal_count':count,'journal_head':head,'execution_ready':False}
 
 
 def validate_digest(value):
@@ -350,6 +357,7 @@ def review_correction(old, body):
     independently supplied observation, not an assertion of venue authenticity.
     """
     try:
+        require(old['reserve']['last_time']==0,'reserve_history_requires_manual_correction_review')
         revised=fresh()
         found=False
         settled=False
@@ -405,7 +413,7 @@ def projection_values(db, now):
     scope={r[0]:r[1:] for r in db.execute('SELECT id,pair,virtual_cents,mode FROM instances')}
     require(bool(scope) and set(scope)==set(states)==set(p['accounts']),'account_scope_mismatch')
     cap=db.execute('SELECT virtual_cap_cents FROM desk WHERE id=1').fetchone()[0]
-    require(sum(r[1] for r in scope.values())<=cap,'desk_cap_exceeded')
+    require(sum(r[1] for r in scope.values())+sum(s['reserve']['released']//CENT for s in states.values())<=cap,'desk_cap_exceeded')
     for key,s in states.items():
         pair,cents,mode=scope[key]
         require(mode=='PAPER' and s['pair']==pair.replace('/','-') and -s['capital']==cents*CENT,'instance_scope_changed')
@@ -424,7 +432,8 @@ def projection_values(db, now):
     loss=(sum(s['losses'] for s in states.values())+CENT-1)//CENT
     return dict(receipt='fin:'+head,observed=p['observed'],settled_cash_cents=cash,protected_cash_cents=protected,
                 daily_loss_cents=loss,weekly_loss_cents=loss,drawdown_cents=loss,open_risk_cents=sum(exposure.values()),
-                active_by_instance=active,exposure_by_instance=exposure,reconciled=True,protection_ok=True)
+                active_by_instance=active,exposure_by_instance=exposure,reconciled=True,protection_ok=True,
+                released_by_instance={k:s['reserve']['released']//CENT for k,s in states.items()})
 
 
 def gate_projection(db, now):
