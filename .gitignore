@@ -11,3 +11,5 @@ secrets/
 *.key
 *.pem
 .pytest_cache/
+dashboard/node_modules/
+dashboard/vendor/
