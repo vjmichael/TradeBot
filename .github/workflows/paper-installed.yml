@@ -12,6 +12,10 @@ on:
       - 'paper_recovery.py'
       - 'tests/test_paper_custody.py'
       - 'tests/test_paper_supervisor.py'
+      - 'financial_goals.py'
+      - 'goal_control.py'
+      - 'goal_evidence.py'
+      - 'scripts/run_paper_worker.py'
       - '.github/workflows/paper-installed.yml'
   workflow_dispatch:
 permissions:
@@ -54,7 +58,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           cd "$GITHUB_WORKSPACE"
-          PYTHONPATH="$GITHUB_WORKSPACE/tests:$GITHUB_WORKSPACE" /opt/maj-vaj/venv/bin/python -m unittest -v test_financial_ledger test_financial_reconciliation test_reserve_policy test_reserve_runtime test_paper_execution test_paper_supervisor test_paper_custody test_paper_provision test_paper_recovery test_paper_monitor 2>&1 | tee r3r1-evidence/native-worker-regression.log
+          PYTHONPATH="$GITHUB_WORKSPACE/tests:$GITHUB_WORKSPACE" /opt/maj-vaj/venv/bin/python -m unittest -v test_financial_ledger test_financial_reconciliation test_reserve_policy test_reserve_runtime test_paper_execution test_paper_supervisor test_paper_custody test_paper_provision test_paper_recovery test_paper_monitor test_financial_goals test_goal_control test_goal_evidence 2>&1 | tee r3r1-evidence/native-worker-regression.log
       - name: Qualify installed worker and real one-hour public PAPER fixture
         run: sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted bash /opt/maj-vaj/scripts/qualify_installed_paper.sh "$GITHUB_WORKSPACE/r3r1-evidence"
       - name: Publish non-secret evidence, including incomplete results

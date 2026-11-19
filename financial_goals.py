@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from financial_ledger import SCALE, CENT, ZERO, LIMIT, AccountingError, apply, canon, ident, observed, qty, replay, require, sha
 from paper_custody import authenticate
+import goal_evidence
 
 FIELDS = {'expenses_cents','income_cents','savings_cents','extra_costs_cents','tax_bps','zone','target_kind','target_value'}
 DEFAULT = dict(expenses_cents=0,income_cents=0,savings_cents=0,extra_costs_cents=0,tax_bps=0,zone='America/Phoenix',target_kind='none',target_value=0,pause_on_goal=False)
@@ -28,6 +29,7 @@ def validate(p):
 
 
 def initialize(db):
+    goal_evidence.initialize(db)
     # Additive reporting tables; not read by Gate, order sizing or reserve policy.
     db.execute('CREATE TABLE IF NOT EXISTS goal_daily(instance TEXT NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(instance,day,kind))')
     db.execute('CREATE TABLE IF NOT EXISTS goal_versions(instance TEXT NOT NULL, version INTEGER NOT NULL, at INTEGER NOT NULL, effective_day TEXT NOT NULL, body TEXT NOT NULL, previous TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(instance,version))')
@@ -127,25 +129,46 @@ def report(transaction,instance,*,clock=time.time,key_for=None):
         # Replay verified history into immutable cutoff snapshots. Ledger events
         # are attributed to journal posting time; prior-day late fills are not
         # silently assigned an invented exchange execution timestamp.
-        running,last={},{};pre_day=None;old_at=0;base=receipt=None;cut_seen=False
+        running,last={},{};pre_day=None;old_at=0;base=receipt=evidence=None;cut_seen=False
+        execution_day=execution_month=unknown_day=unknown_month=adjust_day=adjust_month=0
+        def opening_snapshot():
+            original,source=boundary_base(db,instance,running.get(instance),pre_day,cutoff,key_for)
+            if source:return original,source,None
+            if pre_day:
+                value,proof=goal_evidence.opening(db,instance,running.get(instance),pre_day['digest'],cutoff,key_for)
+                if proof:return value,pre_day['digest'],proof
+            return None,None,None
         day_pl=month_pl=day_fees=month_fees=day_settled=0;valid=True
         for seq,e,i,k,raw,previous,digest in db.execute('SELECT * FROM fin_events ORDER BY seq'):
             body=json.loads(raw);at=body['recorded_at'];require(type(at) is int,'invalid_posting_time')
             if not old_at<=at<=now:valid=False
             old_at=at
             if at>=cutoff and not cut_seen:
-                base,receipt=boundary_base(db,instance,running.get(instance),pre_day,cutoff,key_for)
+                base,receipt,evidence=opening_snapshot()
                 cut_seen=True
             before=running.get(instance);pl=-before['pl'] if before else 0;fees=before['fees'] if before else 0;settled=before['settled_pl'] if before else 0
             apply(running,last,i,k,e,body['payload'])
             cur=running.get(instance);dp=(-cur['pl'] if cur else 0)-pl;df=(cur['fees'] if cur else 0)-fees;ds=(cur['settled_pl'] if cur else 0)-settled
+            if i==instance and k=='sell':
+                interval=goal_evidence.attributed(db,instance,e,body,key_for)
+                if interval is None:
+                    unknown_day+=int(at>=cutoff);unknown_month+=int(at>=m_start)
+                else:
+                    lo,hi=interval
+                    if lo>=cutoff and hi<end:execution_day+=dp
+                    elif lo<cutoff<=hi:unknown_day+=1
+                    if lo>=m_start:execution_month+=dp
+                    elif lo<m_start<=hi:unknown_month+=1
+            elif i==instance and k in ('correct','late_correct','execution_rounding'):
+                if at>=cutoff:adjust_day+=dp
+                if at>=m_start:adjust_month+=dp
             if at<cutoff:
                 pre_day=dict(kind=k,payload=body['payload'],previous=previous,digest=digest)
             else:day_pl+=dp;day_fees+=df;day_settled+=ds
             if at>=m_start:month_pl+=dp;month_fees+=df
-        if not cut_seen:base,receipt=boundary_base(db,instance,running.get(instance),pre_day,cutoff,key_for)
-        if not valid:base=receipt=None
-        if db.execute('SELECT 1 FROM fin_conflicts LIMIT 1').fetchone() or (s and s['correction_locked']):base=receipt=None
+        if not cut_seen:base,receipt,evidence=opening_snapshot()
+        if not valid:base=receipt=evidence=None
+        if db.execute('SELECT 1 FROM fin_conflicts LIMIT 1').fetchone() or (s and s['correction_locked']):base=receipt=evidence=None
         if not valid or not s:day_pl=month_pl=day_fees=month_fees=day_settled=None
         with localcontext() as ctx:
             ctx.prec=48
@@ -158,7 +181,7 @@ def report(transaction,instance,*,clock=time.time,key_for=None):
             shortfall=None if target_usd is None or pnl is None else max(Decimal(0),target_usd-pnl)
         stored=day_record(db,instance,day,'baseline')
         if stored and base is not None:
-            require(stored['base']==base and stored['receipt']==receipt,'goal_baseline_changed')
+            require(stored['base']==base and stored['receipt']==receipt and stored.get('evidence')==evidence,'goal_baseline_changed')
         notice=day_record(db,instance,day,'reached')
         mark=s['mark'] if s else None
         mark_value=0 if s and not qty(s) else qty(s)*mark[0]//SCALE if s and mark and 0<=now-mark[1]<=60 else None
@@ -167,8 +190,9 @@ def report(transaction,instance,*,clock=time.time,key_for=None):
         return dict(mode='PAPER',currency='USD',instance=instance,day=day,zone=p['zone'],day_start=cutoff,day_end=end,as_of=now,
                     settings=hist[-1] if hist else dict(version=0,settings=DEFAULT,effective_day=day),effective_version=effective['version'] if effective else 0,
                     effective_settings=settings,plan=plan(settings,days),authorized_principal_usd=usd(row[1]*CENT),
-                    day_start_active_usd=usd(base),baseline_receipt=receipt,baseline_state='verified_flat_snapshot' if receipt else 'unavailable',
+                    day_start_active_usd=usd(base),baseline_receipt=receipt,baseline_state=('verified_open_bid_snapshot' if evidence else 'verified_flat_snapshot') if receipt else 'unavailable',baseline_evidence=evidence,
                     daily_realized_usd=usd(day_pl),month_realized_usd=usd(month_pl),daily_settled_usd=usd(day_settled),daily_fees_usd=usd(day_fees),month_fees_usd=usd(month_fees),
+                    execution_day_original_pl_usd=usd(execution_day if valid and s and not unknown_day else None),execution_month_original_pl_usd=usd(execution_month if valid and s and not unknown_month else None),execution_day_unknown=unknown_day,execution_month_unknown=unknown_month,posting_day_adjustments_usd=usd(adjust_day if valid and s else None),posting_month_adjustments_usd=usd(adjust_month if valid and s else None),
                     daily_points=fmt(points),target_usd=fmt(target_usd),target_points=fmt(target_points),target_reached=reached,target_shortfall_usd=fmt(shortfall),
                     active_cash_usd=usd(s['active']) if s else None,protected_usd=usd(s['protected']) if s else None,
                     unrealized_usd=usd(unrealized),active_equity_usd=usd(equity),active_equity_change_usd=usd(equity-base if equity is not None and base is not None else None),reserve_earmarks_usd={k:usd(v) for k,v in s['reserve']['earmarks'].items()} if s else None,

@@ -218,7 +218,7 @@ def gate_native_bridge(work):
     # Synthetic book and isolated database only; no public or private requests.
     for path in ("financial_ledger.py", "reserve_policy.py", "risk_gate.py",
                  "paper_execution.py", "paper_supervisor.py", "paper_custody.py",
-                 "paper_provision.py", "paper_recovery.py", "tests/test_paper_provision.py", "tests/test_risk_gate.py",
+                 "paper_provision.py", "paper_recovery.py", "financial_goals.py", "goal_evidence.py", "tests/test_paper_provision.py", "tests/test_risk_gate.py",
                  "engine_strategies/GatePaper.py", "scripts/qualify_gate_native.py"):
         shutil.copyfile(ROOT / path, work / Path(path).name)
     result = run(work, ["/work/qualify_gate_native.py"], timeout=180,
@@ -238,6 +238,8 @@ def gate_native_bridge(work):
             raise AssertionError("missing R3 cancellation receipt: " + kind)
     if "RECEIPT: R3-R1-R2 native fractional USD fees and BTC precision after ORM reopen, exact settlement" not in result.splitlines():
         raise AssertionError("missing realistic native precision receipt")
+    if "RECEIPT: FIN-01D-R1 native open bid equity baseline and authenticated full-fill interval report" not in result.splitlines():
+        raise AssertionError("missing native financial goal evidence receipt")
 
 
 def main():

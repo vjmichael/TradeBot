@@ -42,6 +42,8 @@ def exercise(page, reload_page, errors, external, mode):
         page.get_by_role('button',name='Save planning settings').click()
         expect(page.get_by_text('$1,875.00',exact=True)).to_be_visible()
         expect(page.get_by_text('Daily goal entry restriction is enabled.',exact=False)).to_be_visible()
+        expect(page.get_by_text('Execution-day original sales P/L',exact=True)).to_be_visible()
+        expect(page.get_by_text('Opening baseline evidence',exact=True)).to_be_visible()
         expect(page.get_by_text('Paper profits are simulated, not household income.',exact=False)).to_be_visible()
         page.get_by_role('button',name='Dashboard',exact=True).click()
     expect(page.get_by_label('Paper trading for Bitcoin research')).to_be_checked();page.get_by_label('Paper trading for Bitcoin research').click();expect(page.get_by_role('heading',name='Real-money trading unavailable')).to_be_visible();page.get_by_role('button',name='Keep paper trading').click();expect(page.get_by_label('Paper trading for Bitcoin research')).to_be_checked()

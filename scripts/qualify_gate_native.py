@@ -28,6 +28,8 @@ from paper_supervisor import NativeProtectionDriver, ProtectionWorker
 from paper_custody import AuthenticatedNativeDriver, observation, publish, authenticated_projection
 from paper_provision import provision, installed_workspace, native_check
 from paper_recovery import RecoveryDriver, RecoveryWorker
+import financial_goals
+from goal_evidence import GoalRecoveryDriver, capture_open
 from test_paper_provision import ProvisionTests, I
 from risk_gate import Gate
 from test_risk_gate import GateTests
@@ -72,7 +74,7 @@ class PrecisionBook(BookFixture):
     def get_precision_price(self,pair):return .1
 
 
-def qualify(protection=None, authenticated=False, cancel=None, precision=False):
+def qualify(protection=None, authenticated=False, cancel=None, precision=False, goals=False):
     book_cls=PrecisionBook if precision else BookFixture
     base=GateTests('test_size_and_exact_idempotency');base.setUp()
     try:
@@ -217,7 +219,7 @@ def qualify(protection=None, authenticated=False, cancel=None, precision=False):
                     init_db(config['db_url'])
                     bot.exchange=book_cls(config)
                     bot.wallets=Wallets(config,bot.exchange)
-                    driver=AuthenticatedNativeDriver(bot,path,'a',key,clock=lambda:h.now)
+                    driver=GoalRecoveryDriver(bot,path,'a',key,h.tx,clock=lambda:h.now) if goals else AuthenticatedNativeDriver(bot,path,'a',key,clock=lambda:h.now)
                     worker=ProtectionWorker(h.tx,driver,clock=lambda:h.now)
                     for _ in range(100):
                         result=worker.tick(intent['intent_id'])
@@ -227,6 +229,16 @@ def qualify(protection=None, authenticated=False, cancel=None, precision=False):
                         h.now+=2
                 else:
                     worker=ProtectionWorker(h.tx,NativeProtectionDriver(bot,path,'a',clock=lambda:h.now),clock=lambda:h.now)
+                if goals:
+                    with h.tx() as db:financial_goals.initialize(db)
+                    cutoff=financial_goals.bounds(h.now,'America/Phoenix')[2]
+                    h.now=cutoff-5
+                    financial_goals.save(h.tx,'a',financial_goals.DEFAULT|{'target_kind':'points','target_value':200},0,clock=lambda:h.now)
+                    capture_open(h.tx,driver,clock=lambda:h.now)
+                    h.now=cutoff+2
+                    opening=financial_goals.report(h.tx,'a',clock=lambda:h.now,key_for=key_for)
+                    assert opening['baseline_state']=='verified_open_bid_snapshot',opening
+                    assert opening['day_start_active_usd'] is not None
                 with h.tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
                 bot.exchange.mid=(63000.1 if protection=='target' else 59000.) if precision else (120. if protection=='target' else 90.)
                 action=worker.tick(intent['intent_id']);assert action['reason']==protection,action
@@ -235,6 +247,13 @@ def qualify(protection=None, authenticated=False, cancel=None, precision=False):
                 if protection=='target':assert state['active']==60*SCALE and state['protected']>0,state
                 else:assert state['active']<60*SCALE and state['protected']==0,state
                 assert worker.tick(intent['intent_id'])['state']=='ACCOUNTED'
+                if goals:
+                    driver.sync_goal_times()
+                    result=financial_goals.report(h.tx,'a',clock=lambda:h.now,key_for=key_for)
+                    assert result['baseline_evidence']==opening['baseline_evidence'],result
+                    assert result['day_start_active_usd']==opening['day_start_active_usd']
+                    assert result['execution_day_unknown']==0 and result['execution_day_original_pl_usd']==result['daily_realized_usd'],result
+                    print('RECEIPT: FIN-01D-R1 native open bid equity baseline and authenticated full-fill interval report',flush=True)
                 print('RECEIPT: native protected '+protection+' exit while paused, verified terminal wallet and released reservation',flush=True)
                 if precision:
                     print('RECEIPT: R3-R1-R2 native fractional USD fees and BTC precision after ORM reopen, exact settlement',flush=True)
@@ -282,3 +301,4 @@ if __name__=='__main__':
     qualify(authenticated=True,cancel='zero')
     qualify(authenticated=True,cancel='partial')
     qualify('target',authenticated=True,precision=True)
+    qualify('target',authenticated=True,goals=True)

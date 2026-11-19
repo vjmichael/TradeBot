@@ -76,3 +76,8 @@ The Financial Goals candidate separates monthly expenses, desired savings, other
 ### Can Maj Vaj stop entering trades when I reach my daily target?
 
 The optional daily entry pause is OFF by default. A verified positive target can pause only new entries for the rest of the local reporting day; protection and settlement of existing trades continue. A later downward correction does not undo a recorded daily pause. At the next local day only the goal restriction expires, not manual or risk pauses. If you choose a point-based pause and an authenticated opening baseline is missing, new entries remain blocked rather than guessing. A goal reached notification is retained in the local dashboard after verified financial reconciliation. This is not a quota or permission to increase capital. See [TB-FIN-01D](tb-fin-01d.md); integrated acceptance is pending.
+
+
+### Can I continue after reaching a daily profit goal, but with more caution?
+
+Stop after goal and ordinary continuation within the existing independent limits remain the two candidate behaviors. A third optional conservative continuation is a deferred design: once a verified target is reached, a narrower approved risk budget may allow qualified opportunities without automatically ending the day. It does not guarantee keeping the day's profit or finding/executing every opportunity. The new setting must never increase exposure, reinvest protected proceeds, disable protective exits or override other risk/manual pauses. This third mode is not implemented yet.

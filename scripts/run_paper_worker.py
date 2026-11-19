@@ -18,6 +18,7 @@ from paper_custody import AuthenticatedNativeDriver, IdlePublisher, authenticate
 from risk_gate import Gate
 import financial_goals
 from goal_control import evaluate, entry_guard
+from goal_evidence import GoalRecoveryDriver, capture_open
 from paper_provision import instance_id, installed_workspace
 from paper_recovery import RecoveryDriver, RecoveryWorker
 from paper_monitor import heartbeat
@@ -41,6 +42,7 @@ def run(data,instance):
     stop=Event()
     for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.set())
 
+    owned=[]
     def create():
         # Never allow an environment overlay to broaden the fixed configuration.
         require(not any(k.startswith('FREQTRADE__') for k in os.environ),'native_environment_override')
@@ -66,15 +68,22 @@ def run(data,instance):
         require(not config.get('external_message_consumer',{}).get('enabled'),'unsafe_native_service')
         bot=FreqtradeBot(config)
         key,binding=workspace_key(data,instance)
-        driver=RecoveryDriver(bot,path,instance,key,tx)
+        driver=GoalRecoveryDriver(bot,path,instance,key,tx)
         require(driver.binding==binding,'native_db_replaced')
         driver.close=bot.cleanup
+        owned.append(driver)
         return driver
     keys=lambda i:workspace_key(data,i)
     projection=authenticated_projection(keys)
     def report(ready):
         # Notification processing never interrupts risk-reducing protection.
         if not ready:
+            try:owned[0].sync_goal_times()
+            except (ValueError,OSError,KeyError,TypeError,sqlite3.Error):
+                print('Execution interval reporting unavailable.',file=sys.stderr,flush=True)
+            try:capture_open(tx,owned[0],clock=time.time)
+            except Exception:
+                print('Opening equity observation unavailable.',file=sys.stderr,flush=True)
             try:
                 with tx() as db:evaluate(db,instance,int(time.time()),keys,verify=projection)
             except (ValueError,OSError,KeyError,TypeError,sqlite3.Error):

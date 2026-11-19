@@ -36,7 +36,7 @@ def evaluate(db,instance,now,key_for,*,verify=None):
         return 'daily_goal_reached' if prior['pause'] else None
     r=report(lambda:nullcontext(db),instance,clock=lambda:now,key_for=key_for)
     if r['baseline_receipt']:
-        record(db,instance,day,'baseline',dict(base=int(Decimal(r['day_start_active_usd'])*SCALE),receipt=r['baseline_receipt'],journal_head=r['baseline_receipt']))
+        record(db,instance,day,'baseline',dict(base=int(Decimal(r['day_start_active_usd'])*SCALE),receipt=r['baseline_receipt'],journal_head=r['baseline_receipt'],evidence=r['baseline_evidence']))
     if p['target_kind']=='none':return None
     if not r['posting_time_valid'] or r['daily_realized_usd'] is None:
         return 'goal_progress_unavailable' if pause else None

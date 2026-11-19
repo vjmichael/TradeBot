@@ -54,6 +54,8 @@ class DashboardTests(unittest.TestCase):
             r=c.get(path,headers=AUTH).json()
             self.assertEqual(r['plan']['monthly_pre_tax_usd'],'1875.00000000')
             self.assertIsNone(r['daily_realized_usd'])
+            self.assertIsNone(r['execution_day_original_pl_usd'])
+            self.assertEqual(r['baseline_state'],'unavailable')
             self.assertFalse(r['real_income'])
             self.assertTrue(r['goal_pause_enabled'])
             self.assertFalse(r['goal_pause_latched'])
