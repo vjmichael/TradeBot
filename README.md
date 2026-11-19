@@ -12,6 +12,8 @@ A 24/7 cloud trading desk based on [design v0.7](docs/design-v0.7.md), the bindi
 
 Developer checks (not end-user installation): install `requirements.txt`, then run `python -m unittest discover -s tests -v`. For local API development only, set `TRADEBOT_ADMIN_TOKEN` to a random secret of at least 32 characters, and `TRADEBOT_DATA_DIR` to a private directory, then run `python -m tradebot`. The eventual supported VPS deployment will require no user-entered shell commands. Never commit credentials.
 
+Developer-only paper worker setup/recovery and sustained qualification: see [TB-07A2-R3](docs/tb07a2-r3.md). The desk remains PAUSED; setup creates virtual paper funding only, never enables trading, and is not the production graphical installer.
+
 Developer-only native acceptance: `python scripts/qualify_engine.py` on a qualified Linux host with Docker, internet and the pinned FreqAI image. This is not the end-user installer. See [TB-02](docs/tb02.md).
 
 Developer-only dashboard build: install the pinned npm dependencies with `npm --prefix dashboard ci --ignore-scripts --no-audit --no-fund`, then `npm --prefix dashboard run build`. Open `http://127.0.0.1:8765/` after starting the local service. Set `TRADEBOT_VAULT_KEY` to a separately managed Fernet key for **test** credential setup; if absent the write-only credential endpoint is unavailable. Browser tests: install Playwright 1.57.0 and Chromium, then `python scripts/test_dashboard_browser.py`. `--offline` runs a synthetic browser fixture, not acceptance of the HTTP integration. See [TB-03](docs/tb03.md). The end-user DigitalOcean Linux deployment will use a graphical installation path at TB-10; do not provision a VPS yet merely for these development checks.

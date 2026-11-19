@@ -22,6 +22,9 @@ from financial_ledger import FinancialLedger, SCALE, initialize, gate_projection
 from paper_execution import NativeDriver, PaperBridge
 from paper_supervisor import NativeProtectionDriver, ProtectionWorker
 from paper_custody import AuthenticatedNativeDriver, observation, publish, authenticated_projection
+from paper_provision import provision, installed_workspace, native_check
+from paper_recovery import RecoveryDriver, RecoveryWorker
+from test_paper_provision import ProvisionTests, I
 from risk_gate import Gate
 from test_risk_gate import GateTests
 
@@ -54,7 +57,7 @@ class BookFixture:
     def fetch_order(self,order_id,pair):return self._dry_run_open_orders[order_id]
 
 
-def qualify(protection=None, authenticated=False):
+def qualify(protection=None, authenticated=False, cancel=None):
     base=GateTests('test_size_and_exact_idempotency');base.setUp()
     try:
         h=base.h
@@ -78,11 +81,13 @@ def qualify(protection=None, authenticated=False):
             bot.trading_mode=TradingMode.SPOT;bot.exchange=BookFixture(config);bot.strategy=GatePaper(config)
             bot.strategy.order_time_in_force={'entry':'GTC','exit':'GTC'}
             bot.wallets=Wallets(config,bot.exchange)
+            if cancel:bot.exchange.mid=101.
             # Fixture surrounding price/size preparation and notifications only.
             # Upstream method still calls the real strategy, exchange and persistence.
             bot.get_valid_enter_price_and_stake=lambda pair,price,stake,*a:(price,stake,1.)
             bot._notify_enter=lambda *args,**kwargs:None
             def fee_update(trade,order_id,order,**kwargs):
+                trade.update_order(order)
                 trade.update_fee(order['fee']['cost'],order['fee']['currency'],order['fee']['rate'],order['side'])
                 trade.update_trade(trade.select_order_by_order_id(order_id))
                 return False
@@ -90,7 +95,7 @@ def qualify(protection=None, authenticated=False):
             if authenticated:
                 key=b'native-qualification-only-key-32'[:32]
                 assert len(key)==32
-                driver=AuthenticatedNativeDriver(bot,path,'a',key,clock=lambda:h.now)
+                driver=RecoveryDriver(bot,path,'a',key,h.tx,clock=lambda:h.now) if cancel else AuthenticatedNativeDriver(bot,path,'a',key,clock=lambda:h.now)
                 # The other portfolio is an explicit independent flat wallet fixture.
                 class Flat:
                     instance='b';binding='b'*64
@@ -111,6 +116,50 @@ def qualify(protection=None, authenticated=False):
             assert not bridge.submit(intent['intent_id'],'paper-worker',1,driver)['submitted']
             trade=Trade.get_trades_proxy(is_open=True)[0]
             assert trade.enter_tag=='mv:'+intent['intent_id'] and 0<trade.stake_amount<=intent['notional_cents']/100
+            if cancel:
+                assert authenticated and len(trade.open_orders)==1
+                order=trade.open_orders[0]
+                assert not order.filled and order.ft_order_tag=='mv:'+intent['intent_id']
+                oid=order.order_id
+                if cancel=='partial':
+                    # Pinned dry simulator normally fills all-or-none. Explicitly
+                    # inject a known cumulative partial observation for recovery;
+                    # subsequent ORM and exit are actual upstream methods.
+                    raw=bot.exchange._dry_run_open_orders[oid]
+                    raw.update(filled=.2,remaining=raw['amount']-.2,cost=20.,average=100.,
+                               fee={'currency':'USD','cost':.10,'rate':.005})
+                bot.strategy.order_types={'entry':'limit','exit':'market','stoploss':'market','stoploss_on_exchange':False}
+                bot._notify_enter_cancel=lambda *args,**kwargs:None
+                bot._notify_exit=lambda *args,**kwargs:None
+                bot.get_valid_price=lambda custom,proposed:proposed
+                bot.cancel_stoploss_on_exchange=lambda trade,**kwargs:trade
+                bot._exit_reason_cache={}
+                worker=RecoveryWorker(h.tx,driver,clock=lambda:h.now)
+                with h.tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
+                # Interrupt immediately after signed cancellation commit but
+                # before native ORM mutation; reopen the original native file.
+                def interrupted(*args):raise RuntimeError('cancel-cut')
+                driver._apply_frozen=interrupted
+                try:worker.tick(intent['intent_id'])
+                except RuntimeError as exc:assert str(exc)=='cancel-cut'
+                else:raise AssertionError('missing simulated process interruption')
+                Trade.session.remove()
+                init_db(config['db_url'])
+                bot.exchange=BookFixture(config);bot.exchange.mid=120.
+                bot.wallets=Wallets(config,bot.exchange)
+                driver=RecoveryDriver(bot,path,'a',key,h.tx,clock=lambda:h.now)
+                worker=RecoveryWorker(h.tx,driver,clock=lambda:h.now)
+                recovered=worker.tick(intent['intent_id'])
+                if cancel=='zero':
+                    assert recovered['state']=='NO_FILL',recovered
+                    assert not Trade.get_trades_proxy(is_open=True)
+                    state=f.snapshot('a');assert state['active']==60*SCALE and state['protected']==state['gate_reserved']==0,state
+                else:
+                    assert recovered['state']=='EXIT_REQUESTED' and recovered['reason']=='target',recovered
+                    assert worker.tick(intent['intent_id'])['state']=='ACCOUNTED'
+                    state=f.snapshot('a');assert state['qty']==state['pending']==state['gate_reserved']==0 and state['protected']>0,state
+                print('RECEIPT: R3 native '+cancel+' cancellation recovery after ORM reopen, signed snapshot and verified wallet',flush=True)
+                return
             assert trade.stop_loss>=95 and trade.stop_loss<100
             if protection:
                 # Exercise upstream execute_trade_exit (native simulator, ORM and wallets).
@@ -167,8 +216,23 @@ def qualify(protection=None, authenticated=False):
     finally:base.doCleanups()
 
 
+def qualify_provision():
+    h=ProvisionTests('test_atomic_setup_and_duplicate_no_reset');h.setUp()
+    try:
+        result=provision(h.data,I,h.tx)
+        assert result['state']=='provisioned',result
+        with h.tx() as db:work=installed_workspace(h.data,I,db)
+        native_check(work/'paper.sqlite',empty=True)
+        assert provision(h.data,I,h.tx)['state']=='already_provisioned'
+        print('RECEIPT: R3 real Freqtrade ORM workspace initialization and idempotent private provisioning',flush=True)
+    finally:h.doCleanups()
+
+
 if __name__=='__main__':
+    qualify_provision()
     qualify()
     qualify('stop')
     qualify('target')
     qualify('target',authenticated=True)
+    qualify(authenticated=True,cancel='zero')
+    qualify(authenticated=True,cancel='partial')

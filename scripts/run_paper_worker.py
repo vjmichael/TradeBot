@@ -14,6 +14,9 @@ from financial_ledger import ident, require
 from paper_execution import validate_config
 from paper_custody import AuthenticatedNativeDriver, IdlePublisher, authenticated_projection, run_owned, workspace_key
 from risk_gate import Gate
+from paper_provision import instance_id, installed_workspace
+from paper_recovery import RecoveryDriver, RecoveryWorker
+from paper_monitor import heartbeat
 from reserve_runtime import desk_transaction, private_directory, private_open
 
 
@@ -26,7 +29,7 @@ def notify(ready):
 
 def run(data,instance):
     """Existing private native workspace only; no auto-provision, no credentials."""
-    ident(instance); data=private_directory(data)
+    instance_id(instance); data=private_directory(data)
     work=private_directory(private_directory(data/'paper')/instance)
     path=work/'paper.sqlite'
     os.close(private_open(path,os.O_RDONLY))
@@ -43,6 +46,7 @@ def run(data,instance):
         from engine import gate_paper_config
         from tradebot import InstanceSpec
         with tx() as db:
+            installed_workspace(data,instance,db)
             row=db.execute('SELECT id,name,pair,virtual_cents,mode FROM instances WHERE id=?',(instance,)).fetchone()
             require(row is not None and row['mode']=='PAPER','paper_instance_required')
             pair=row['pair']; spec=InstanceSpec(name=row['name'],pair=pair,virtual_cents=row['virtual_cents'],provider='none',strategy_family='numerical-baseline')
@@ -57,12 +61,15 @@ def run(data,instance):
         require(not config.get('external_message_consumer',{}).get('enabled'),'unsafe_native_service')
         bot=FreqtradeBot(config)
         key,binding=workspace_key(data,instance)
-        driver=AuthenticatedNativeDriver(bot,path,instance,key)
+        driver=RecoveryDriver(bot,path,instance,key,tx)
         require(driver.binding==binding,'native_db_replaced')
         driver.close=bot.cleanup
         return driver
+    def report(ready):
+        heartbeat(data,instance,tx,ready)
+        notify(ready)
     run_owned(work,tx,create,lambda:Gate(tx,account_projection=authenticated_projection(lambda i:workspace_key(data,i))),
-              stop=stop,heartbeat=notify,on_idle=IdlePublisher(data,tx))
+              stop=stop,heartbeat=report,on_idle=IdlePublisher(data,tx),worker_factory=RecoveryWorker)
 
 
 if __name__=='__main__':

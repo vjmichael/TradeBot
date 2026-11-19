@@ -192,7 +192,7 @@ def authenticated_projection(key_for):
     return project
 
 
-def run_owned(directory,transaction,driver_factory,gate_factory,*,stop,interval=2,clock=time.time,heartbeat=lambda ready:None,on_idle=lambda driver:None):
+def run_owned(directory,transaction,driver_factory,gate_factory,*,stop,interval=2,clock=time.time,heartbeat=lambda ready:None,on_idle=lambda driver:None,worker_factory=ProtectionWorker):
     """One custody lease covers native construction, entry, protection, cleanup.
 
     No strategy or UI can submit native orders. Only already-authorized intents
@@ -200,7 +200,7 @@ def run_owned(directory,transaction,driver_factory,gate_factory,*,stop,interval=
     """
     require(.25<=interval<=30,'invalid_worker_interval')
     with custody(directory):
-        driver=driver_factory();worker=ProtectionWorker(transaction,driver,clock=clock)
+        driver=driver_factory();worker=worker_factory(transaction,driver,clock=clock)
         bridge=PaperBridge(transaction,gate_factory(),clock=clock)
         try:
             heartbeat(True)
