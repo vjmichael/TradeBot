@@ -136,7 +136,12 @@ def run(directory,mode,job):
                 await asyncio.sleep(30)
                 while True:
                     await asyncio.to_thread(check_scope)
-                    try:await asyncio.to_thread(lambda:VintageMemory(directory).collect_batch(scope_check=check_scope))
+                    def vintage_step():
+                        memory=VintageMemory(directory)
+                        result=memory.collect_batch(scope_check=check_scope)
+                        if result['state']=='complete' and not result['observed']:
+                            memory.collect_supplemental(scope_check=check_scope)
+                    try:await asyncio.to_thread(vintage_step)
                     except (OSError,ValueError,sqlite3.Error,ArchiveError,MemoryUnavailable):pass
                     await asyncio.sleep(BACKGROUND_INTERVAL)
             async with asyncio.TaskGroup() as group:

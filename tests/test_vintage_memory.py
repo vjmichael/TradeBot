@@ -72,3 +72,15 @@ class VintageTests(unittest.TestCase):
         with patch('vintage_memory.HOUR_LIMIT',1):
             with httpx.Client(transport=httpx.MockTransport(lambda req:self.fail('budget should stop request'))) as c:
                 self.assertEqual(self.m.collect('PAYEMS',V,client=c,clock=lambda:now+1800)['state'],'budget_exhausted')
+
+    def test_supplemental_policy_preserves_core_target(self):
+        from vintage_memory import coverage,ensure_plan,supplemental_targets
+        now=int(time.time());anchor=ensure_plan(self.m.memory,now)
+        series,vintage=supplemental_targets(anchor)[0]
+        self.assertEqual(self.m.collect_supplemental()['state'],'core_incomplete')
+        raw=f'observation_date,{series}_{vintage.replace("-","")}\n{vintage},3.5\n'.encode()
+        with httpx.Client(transport=httpx.MockTransport(lambda _:httpx.Response(200,stream=httpx.ByteStream(raw)))) as c:
+            self.assertEqual(self.m.collect(series,vintage,client=c)['state'],'observed')
+        status=coverage(self.m.memory)
+        self.assertEqual((status['expected'],status['saved'],status['supplemental']['saved']),(360,0,1))
+        self.assertEqual(self.m.view(series,vintage)['state'],'observed')

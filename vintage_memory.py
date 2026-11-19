@@ -15,6 +15,8 @@ from market_memory import MemoryUnavailable,decimal_text
 
 URL='https://alfred.stlouisfed.org/graph/alfredgraph.csv'
 SERIES={'UNRATE':'Unemployment rate (seasonally adjusted)','PAYEMS':'Nonfarm payroll employment (seasonally adjusted)','CPIAUCNS':'Consumer price index (not seasonally adjusted)'}
+SUPPLEMENTAL={'FEDFUNDS':'Effective federal funds rate (monthly, percent)'}
+ALL_SERIES=SERIES|SUPPLEMENTAL
 MAX_BYTES=128*1024
 MAX_ROWS=1500
 MAX_SNAPSHOTS=2048
@@ -37,7 +39,7 @@ def cutoff(vintage):
 
 def parse(series,vintage,raw):
     d=day(vintage)
-    if series not in SERIES or not isinstance(raw,bytes) or not 0<len(raw)<=MAX_BYTES:raise ValueError('invalid vintage source')
+    if series not in ALL_SERIES or not isinstance(raw,bytes) or not 0<len(raw)<=MAX_BYTES:raise ValueError('invalid vintage source')
     reader=csv.reader(io.StringIO(raw.decode('utf-8-sig')),strict=True)
     header=next(reader,None)
     if not header or len(header)!=2 or header[0] not in ('observation_date','DATE') or header[1]!=series+'_'+vintage.replace('-',''):raise ValueError('vintage identity not verified')
@@ -75,6 +77,9 @@ def targets(anchor):
     return [(series,date(y,m+1,1).isoformat()) for i in range(1,121)
             for y,m in [divmod(month-i,12)] for series in SERIES]
 
+def supplemental_targets(anchor):
+    return [('FEDFUNDS',vintage) for series,vintage in targets(anchor) if series=='UNRATE'][:12]
+
 def current_anchor(now):
     return datetime.fromtimestamp(now,timezone.utc).date().replace(day=1).isoformat()
 
@@ -110,6 +115,7 @@ def coverage(memory,*,as_of=None,offset=0,limit=60,detail=False):
             h,d=db.execute('SELECT COALESCE(sum(started>?),0),count(*) FROM vintage_requests WHERE started>?',(now-3600,now-86400)).fetchone()
             until=cooldown[0] if cooldown and cooldown[0]>now else None
             admission={'hour_requests':h,'hour_limit':HOUR_LIMIT,'day_requests':d,'day_limit':DAY_LIMIT,'cooldown_until':until if until and until<2**62 else None,'blocked':bool(until or h>=HOUR_LIMIT or d>=DAY_LIMIT)}
+        supplemental=[{'series':series,'vintage':vintage,'saved':(series,vintage) in saved} for series,vintage in supplemental_targets(anchor)]
         data=[];series_rows=[];counts={'saved':0,'not_requested':0,'attempted_unavailable':0,'attempt_pending':0}
         for series in SERIES:
             sc=dict.fromkeys(counts,0);missing_preview=[]
@@ -128,7 +134,7 @@ def coverage(memory,*,as_of=None,offset=0,limit=60,detail=False):
             series_rows.append({'series':series,'title':SERIES[series],'expected':120,**sc,'missing':120-sc['saved'],'missing_preview':missing_preview})
     result={'state':'complete' if counts['saved']==len(wanted) else 'incomplete' if plan else 'not_started',
             'plan_created_at':plan['created_at'] if plan else None,'anchor_month':anchor,'expected':len(wanted),**counts,
-            'missing':len(wanted)-counts['saved'],'series':series_rows,'release_precision':'date_only',
+            'missing':len(wanted)-counts['saved'],'series':series_rows,'supplemental':{'series':'FEDFUNDS','expected':len(supplemental),'saved':sum(r['saved'] for r in supplemental),'dates':supplemental},'release_precision':'date_only',
             'scope':'monthly provider-dated snapshots; saved receipt counts, not all release dates or intraday vintages',
             'training_ready':False}
     if as_of is None:result['admission']=admission
@@ -189,7 +195,7 @@ class VintageMemory:
 
     def view(self,series,vintage,*,retrieved_by=None,replay_at=None):
         day(vintage)
-        if series not in SERIES:raise ValueError('unknown vintage series')
+        if series not in ALL_SERIES:raise ValueError('unknown vintage series')
         now=int(time.time()) if retrieved_by is None else retrieved_by
         replay=now if replay_at is None else replay_at
         if type(now) is not int or type(replay) is not int or not 0<replay<=now<=int(time.time()):raise ValueError('invalid vintage cutoff')
@@ -200,14 +206,14 @@ class VintageMemory:
             if hashlib.sha256(raw).hexdigest()!=row['sha256'] or row['available_after']!=cutoff(vintage):raise MemoryUnavailable('vintage checksum mismatch')
             rows=parse(series,vintage,raw)
             if len(rows)!=row['rows']:raise MemoryUnavailable('vintage row count changed')
-            return {'state':'observed','series':series,'title':SERIES[series],'vintage':vintage,'retrieved_at':row['retrieved_at'],'available_after':row['available_after'],'sha256':row['sha256'],'source_url':URL,'release_precision':'date_only','rows':rows,'scope':'provider-dated historical snapshot, not locally observed on vintage date'}
+            return {'state':'observed','series':series,'title':ALL_SERIES[series],'vintage':vintage,'retrieved_at':row['retrieved_at'],'available_after':row['available_after'],'sha256':row['sha256'],'source_url':URL,'release_precision':'date_only','rows':rows,'scope':'provider-dated historical snapshot, not locally observed on vintage date'}
 
     def collect(self,series,vintage,*,client=None,clock=time.time):
         day(vintage);now=int(clock())
-        if series not in SERIES or cutoff(vintage)>now:raise ValueError('vintage outside authorized scope')
+        if series not in ALL_SERIES or cutoff(vintage)>now:raise ValueError('vintage outside authorized scope')
         with self.memory.tx() as db:
             plan=db.execute('SELECT anchor_month FROM vintage_backfill_plan WHERE id=1').fetchone()
-        if day(vintage).year<datetime.fromtimestamp(now,timezone.utc).year-11 and (not plan or (series,vintage) not in targets(plan['anchor_month'])):raise ValueError('vintage outside authorized scope')
+        if day(vintage).year<datetime.fromtimestamp(now,timezone.utc).year-11 and (not plan or (series,vintage) not in targets(plan['anchor_month'])+supplemental_targets(plan['anchor_month'])):raise ValueError('vintage outside authorized scope')
         with exclusive_job(self.memory.root,'alfred-vintage'):
             with self.memory.tx(True) as db:
                 if db.execute('SELECT 1 FROM alfred_vintages WHERE series=? AND vintage=?',(series,vintage)).fetchone():return {'state':'already_observed'}
@@ -268,3 +274,16 @@ class VintageMemory:
             remaining=len(wanted-saved)
             return {'observed':observed,'unavailable':failures,'remaining':remaining,
                     'state':'complete' if not remaining else deferred or ('incomplete' if failures else 'batch_finished' if due else 'waiting_retry')}
+
+    def collect_supplemental(self,*,client=None,clock=time.time,scope_check=lambda:None):
+        """One separately counted rate snapshot, after the core plan completes."""
+        with exclusive_job(self.memory.root,'alfred-backfill'):
+            now=int(clock());anchor=ensure_plan(self.memory,now)
+            with self.memory.tx() as db:
+                done={tuple(r) for r in db.execute('SELECT series,vintage FROM alfred_vintages')}
+                attempts={(r[0],r[1]):r[2] for r in db.execute('SELECT series,vintage,last_attempt FROM alfred_attempts')}
+            if not set(targets(anchor))<=done:return {'state':'core_incomplete'}
+            due=[t for t in supplemental_targets(anchor) if t not in done and (t not in attempts or now-attempts[t]>=RETRY_SECONDS)]
+            if not due:return {'state':'complete' if set(supplemental_targets(anchor))<=done else 'waiting_retry'}
+            scope_check()
+            return self.collect(*min(due,key=lambda t:attempts.get(t,-1)),client=client,clock=clock)

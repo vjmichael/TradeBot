@@ -26,6 +26,19 @@ def main():
         saved=memory.status()['coverage'];assert saved['saved']==prior['saved']+6 and saved['missing']==prior['missing']-6
         assert all(s['saved']>=previous[s['series']]+1 for s in saved['series'])
         print('RECEIPT: six genuine frozen monthly targets across three ALFRED series',saved,flush=True)
+        # Reopen between bursts and verify no duplication of real snapshots.
+        for _ in range(2):
+            time.sleep(PACE)
+            memory=VintageMemory(directory);prior=coverage(memory.memory)
+            batch=memory.collect_batch();assert batch['observed']==6,batch
+            assert coverage(memory.memory)['saved']==prior['saved']+6
+        from vintage_memory import supplemental_targets
+        time.sleep(PACE)
+        rate=supplemental_targets(saved['anchor_month'])[0]
+        result=memory.collect(*rate);assert result['state']=='observed',result
+        assert memory.view(*rate)['state']=='observed'
+        saved=coverage(memory.memory);assert saved['supplemental']['saved']==1
+        print('RECEIPT: three genuine core bursts across reopen, additional historical effective federal funds rate vintage',saved,flush=True)
         from market_memory import MarketMemory
         from data_lifecycle import backup,restore
         MarketMemory(directory)

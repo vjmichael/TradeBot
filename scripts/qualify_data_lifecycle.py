@@ -7,6 +7,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from data_preparation import Preparation
 from data_lifecycle import backup,restore,coverage
 from historical_readiness import historical_report,recovery_inventory
+from training_handoff import export as export_training_input,verify as verify_training_input
 from market_memory import MarketMemory
 from market_lake import HistoricalLake
 from market_stream import StreamJournal
@@ -88,6 +89,19 @@ def main():
             for r in actual:
                 assert m.query(r['pair'],60,r['start'],r['end'],int(time.time()))['coverage']==0
             print('RECEIPT: genuine two-market extended recovery under shared 24-request budget; restart preserves counts and both durable cursors; no incomplete candles published',actual,budget,flush=True)
+            # Resume each existing frontier in one larger bounded burst; preserve all
+            # admission/cursor evidence through a fresh MarketMemory reopen.
+            time.sleep(31)
+            more_reports=[]
+            for item in recovery_inventory(MarketMemory(directory)):
+                selected=[x for x in item['ranges'] if x['recovery']=='checkpoint_saved' and x['end']-x['start']>=48*3600]
+                assert selected,item['pair']
+                more_reports.append({'pair':item['pair'],'ranges':selected})
+            before=recovery_budget_status(m)['total_requests'];actual2=recover_batch(MarketMemory(directory),more_reports,max_pages=24,total_pages=72)
+            assert len(actual2)==3 and all(x['outcome']=='checkpointed' and x['pages']>=32 for x in actual2),actual2
+            assert recovery_budget_status(m)['total_requests']==before+72
+            for row in actual2:assert m.query(row['pair'],60,row['start'],row['end'],int(time.time()))['coverage']==0
+            print('RECEIPT: 72 additional genuine admitted trade pages across three reopened market frontiers; incomplete candles still withheld',actual2,flush=True)
             receipt=backup(directory,root/'snapshot');restore(root/'snapshot',root/'restored',receipt['manifest_sha256'])
             restored=MarketMemory(root/'restored');restored_lake=HistoricalLake(restored);restored_e=EconomicMemory(root/'restored')
             now=int(time.time());end=now//3600*3600
@@ -99,6 +113,13 @@ def main():
                 assert a==b and a['rows']
                 assert e.history(source,as_of=now)==restored_e.history(source,as_of=now)
             assert all(not r['connected'] for r in StreamJournal(restored).status())
+            # Fixed recent historical window, not an automatically selected
+            # performance subset. Real input format only, no model activation.
+            export_end=v['as_of']//3600*3600-2*3600;export_start=export_end-168*3600
+            handoff=export_training_input(root/'snapshot',root/'training-input',receipt['manifest_sha256'],list(SYMBOLS),export_start,export_end)
+            assert verify_training_input(root/'training-input',handoff['manifest_sha256'])==handoff
+            assert not handoff['training_ready'] and all(x['rows']==168 for x in handoff['markets'])
+            print('RECEIPT: real restored database to frozen Freqtrade JSON OHLCV and exact provenance',handoff,flush=True)
             print('RECEIPT: verified data-only backup and fresh restore; actual observations, Parquet and economic evidence preserved; '+str(receipt),flush=True)
         finally:controller.close()
 

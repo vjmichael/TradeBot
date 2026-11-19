@@ -201,6 +201,7 @@ def readiness_requirements(coverage,trade_conflicts,assets,cost,collector,eviden
         {'id':'sampled_market_cost','state':'observed' if cost and cost['state']=='recent_sample' else 'incomplete'},
         {'id':'official_economic_sources','state':'observed' if all(e['state']=='observed' and e['total']>0 for e in evidence) else 'incomplete','observed':sum(e['state']=='observed' and e['total']>0 for e in evidence),'expected':len(evidence)},
         {'id':'monthly_vintages','state':'observed' if vintages['saved']==vintages['expected'] else 'incomplete','observed':vintages['saved'],'expected':vintages['expected']},
+        {'id':'supplemental_rate_vintages','state':'observed' if vintages['supplemental']['saved']==vintages['supplemental']['expected'] else 'incomplete','observed':vintages['supplemental']['saved'],'expected':vintages['supplemental']['expected']},
         {'id':'release_time_and_cost_validation','state':'not_qualified'},
         {'id':'strategy_features_and_frozen_evaluation','state':'not_qualified'}]
     return {'requirements':requirements,'recovery_hours':dict(sorted(states.items())),

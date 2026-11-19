@@ -13,6 +13,8 @@ on:
       - 'tests/test_recovery_budget.py'
       - 'market_memory.py'
       - 'data_lifecycle.py'
+      - 'training_handoff.py'
+      - 'tests/test_training_handoff.py'
       - 'tests/test_long_retention.py'
       - 'vintage_memory.py'
       - 'tests/test_vintage_memory.py'

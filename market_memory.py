@@ -166,8 +166,10 @@ PRAGMA user_version=1;'''
         kind = db.execute('SELECT kind FROM sources WHERE id=?', (source,)).fetchone()[0]
         inserted = 0
         for stamp, o, h, l, c, v, trades, digest in rows:
+            # Same price/volume with a different trade count is evidence of
+            # disagreement, not a duplicate. Keep it for explicit review.
             if kind == 'rest' and db.execute('''SELECT 1 FROM candles c JOIN sources s ON s.id=c.source_id
-                WHERE c.pair=? AND c.interval=? AND c.ts=? AND c.digest=? AND s.kind='rest' LIMIT 1''', (pair, interval, stamp, digest)).fetchone():
+                WHERE c.pair=? AND c.interval=? AND c.ts=? AND c.digest=? AND c.trades IS ? AND s.kind='rest' LIMIT 1''', (pair, interval, stamp, digest, trades)).fetchone():
                 continue
             inserted += db.execute('INSERT OR IGNORE INTO candles VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (pair, interval, stamp, digest, source, observed_at, o,h,l,c,v,trades)).rowcount
         return inserted

@@ -24,6 +24,8 @@ on:
       - 'scripts/qualify_market_memory.py'
       - 'tests/test_market_memory.py'
       - 'data_lifecycle.py'
+      - 'training_handoff.py'
+      - 'tests/test_training_handoff.py'
       - 'data_preparation.py'
       - 'data_scheduler.py'
       - 'storage_management.py'
@@ -58,7 +60,7 @@ permissions:
 jobs:
   native-market-memory:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
