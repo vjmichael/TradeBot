@@ -12,7 +12,7 @@ import sqlite3
 import stat
 import time
 
-from financial_ledger import UNRELEASED, SCALE, FinancialLedger, observed, replay, require, sha, ident, amount
+from financial_ledger import UNRELEASED, SCALE, FinancialLedger, observed, replay, require, sha, ident, amount, quote_units, rounding_delta
 from paper_execution import NativeDriver, append_event, event_detail, units, validate_config
 
 
@@ -168,7 +168,15 @@ class ProtectionWorker:
             require(view['position']==0 and not s['lots'],'native_open_inventory')
             require(any(o['side']=='sell' and o['qty'] for o in view['orders']),'no_fill_unverified')
             require(set(s['sales'])=={'native:'+sha([self.driver.binding,o['id']]) for o in view['orders'] if o['side']=='sell' and o['qty']},'unexpected_pending_sales')
-            # Exact wallet includes proceeds still pending in our financial journal.
+            # No tolerance: a discrepant wallet requires exact authenticated
+            # sub-unit source arithmetic, not a guessed adjustment.
+            if s['active']+s['protected']+s['pending']!=view['quote']:
+                proof=getattr(self.driver,'rounding_proof',None)
+                require(proof is not None,'independent_wallet_mismatch')
+                orders=proof(row,view);delta=rounding_delta(orders)
+                require(delta!=0 and s['active']+s['protected']+s['pending']+delta==view['quote'],'independent_wallet_mismatch')
+                ledger._append('rounding:'+intent,instance,'execution_rounding',dict(intent=intent,binding=self.driver.binding,sale=list(s['sales'])[-1],orders=orders,delta=delta,wallet=view['quote']))
+                states,_,_,_=replay(db);s=states[instance]
             require(s['active']+s['protected']+s['pending']==view['quote'],'independent_wallet_mismatch')
             for sale,(net,_) in list(s['sales'].items()):
                 ledger.settle('settle:'+sha([intent,sale]),instance,sale,net)
@@ -209,31 +217,31 @@ class NativeProtectionDriver(NativeDriver):
             self.bot.update_trade_state(t,o.order_id,native,send_msg=False)
             Trade.commit()
 
-    def view(self,row):
+    def view(self,row,*,receipt_fees=False):
         # Native persistence + native Wallets, not Maj Vaj's account projection.
         t=self.trade(row); self.bot.wallets.update(require_update=True)
         orders=[]
         for o in t.orders:
             side=o.ft_order_side; require(side in ('buy','sell') and o.ft_pair==t.pair and o.side==side and str(o.order_id).startswith('dry_run_'+side+'_'),'native_order_scope')
             q=units(o.filled or 0); price=units(o.average or o.price); fee=None
-            if q and not o.ft_is_open:
+            if q and not o.ft_is_open and not receipt_fees:
                 try:raw=self.bot.exchange.fetch_order(o.order_id,t.pair)
                 except Exception:raw={}  # unavailable fee evidence must not prevent protection
-                if raw.get('fee') and raw['fee'].get('currency')=='USD' and units(raw['filled'])==q and units(raw['cost'])==units(o.cost):
-                    fee=units(raw['fee']['cost'])
+                if raw.get('fee') and raw['fee'].get('currency')=='USD' and units(raw['filled'])==q and quote_units(raw['cost'])==quote_units(o.cost):
+                    fee=quote_units(raw['fee']['cost'])
                 else:
                     # Persisted trade-side fee is only unambiguous for one fill on that side.
                     k='open' if side=='buy' else 'close'
                     same=[x for x in t.orders if x.ft_order_side==side and x.filled]
-                    if len(same)==1 and getattr(t,'fee_'+k+'_currency')=='USD':fee=units(getattr(t,'fee_'+k+'_cost'))
+                    if len(same)==1 and getattr(t,'fee_'+k+'_currency')=='USD':fee=quote_units(getattr(t,'fee_'+k+'_cost'))
                 if o.ft_fee_base not in (None,0) or not o.order_filled_date or o.status not in ('closed','canceled','expired') or (side=='buy' and o.order_type!='limit'):fee=None
             orders.append(dict(id='order:'+sha([t.pair,o.order_id]),tag=o.ft_order_tag,side=side,terminal=not o.ft_is_open,
-                qty=q,price=price,gross=units(o.cost) if q else 0,fee=fee))
+                qty=q,price=price,gross=quote_units(o.cost) if q else 0,fee=fee))
         pos=units(self.bot.wallets.get_total(t.pair.split('/')[0]))
         if any(not o['terminal'] for o in orders):
             pos=sum(o['qty']*(1 if o['side']=='buy' else -1) for o in orders)
         require(t.is_open or t.close_date is not None,'native_close_unverified')
-        return dict(orders=orders,position=pos,closed=not t.is_open,quote=units(self.bot.wallets.get_total('USD')))
+        return dict(orders=orders,position=pos,closed=not t.is_open,quote=quote_units(self.bot.wallets.get_total('USD')))
 
     def bid(self,row):
         self.verify(row); at=int(self.clock()); book=self.bot.exchange.fetch_l2_order_book(row['pair'],1)

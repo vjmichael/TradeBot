@@ -4,7 +4,7 @@ import json
 import sqlite3
 import time
 
-from financial_ledger import AccountingError, observed, replay, require, sha
+from financial_ledger import AccountingError, observed, replay, require, sha, quote_units, quote_decimal
 from paper_custody import AuthenticatedNativeDriver, authenticate, packet
 from paper_execution import append_event, event_detail, units
 from paper_supervisor import ProtectionWorker, events, released
@@ -21,18 +21,18 @@ def cancellation(raw,persisted,pair,intent,binding):
     q=units(raw['filled']); total=units(raw['amount']); price=units(raw['average'])
     require(total==persisted['amount'] and persisted['filled']<=q<=total and q<total and units(raw['remaining'])==total-q,'cancel_quantity_regression')
     require(price>0 and units(raw['price'])==persisted['price'],'cancel_price_mismatch')
-    cost=0 if not q else units(raw['cost']);fee=raw.get('fee')
+    cost=0 if not q else quote_units(raw['cost']);fee=raw.get('fee')
     if q:
-        require(abs(cost-q*price//100000000)<=1 and type(fee) is dict and fee.get('currency')=='USD' and units(fee['cost'])<=cost,'cancel_partial_fee_unverified')
+        require(abs(cost-q*price//100000000)<=1 and type(fee) is dict and fee.get('currency')=='USD' and quote_decimal(fee['cost'])<=quote_decimal(raw['cost']),'cancel_partial_fee_unverified')
         rate=fee.get('rate');require(type(rate) in (int,float) and 0<=rate<=1,'cancel_partial_fee_rate')
         fee={'currency':'USD','cost':fee['cost'],'rate':rate}
     else:
-        require(fee is None or (type(fee) is dict and fee.get('currency')=='USD' and units(fee['cost'])==0),'cancel_zero_fee_unverified')
+        require(fee is None or (type(fee) is dict and fee.get('currency')=='USD' and quote_decimal(fee['cost'])==0),'cancel_zero_fee_unverified')
         fee=None
     # For open zero-filled dry-run orders native cost is requested notional, not
     # executed cost. Normalize only the verified zero fill, not an unknown value.
     frozen={k:raw[k] for k in ('id','symbol','type','side','price','average','amount','filled','remaining','timestamp','datetime')}
-    frozen.update(status='canceled',cost=cost/100000000,fee=fee,info={})
+    frozen.update(status='canceled',cost=raw['cost'] if q else 0,fee=fee,info={})
     return {'intent':intent,'binding':binding,'order':frozen}
 
 
@@ -154,7 +154,7 @@ def finish_zero(transaction,driver,row,*,clock=time.time):
         proof=event_detail(db,row['id'],'native_cancel_frozen')
         require(bound and bound['binding']==driver.binding and event_detail(db,row['id'],'native_attempt') and proof,'zero_proof_missing')
         body=authenticate(driver.key,'frozen-cancel',proof)
-        require(body=={'intent':row['id'],'binding':driver.binding,'order':raw} and raw['status']=='canceled' and units(raw['filled'])==units(raw['cost'])==0 and raw['fee'] is None,'zero_proof_mismatch')
+        require(body=={'intent':row['id'],'binding':driver.binding,'order':raw} and raw['status']=='canceled' and units(raw['filled'])==quote_decimal(raw['cost'])==0 and raw['fee'] is None,'zero_proof_mismatch')
         require(not any(events(db,row['id'],a) for a in ('native_partial_accounted','native_accounted','native_exit_attempt','native_released')),'zero_prior_execution')
         states,_,_,_=replay(db);s=states[row['instance_id']];b=observed(s)
         require(not s['correction_locked'] and not db.execute('SELECT 1 FROM fin_conflicts LIMIT 1').fetchone(),'zero_financial_conflict')

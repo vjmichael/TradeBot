@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import time
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 
 SCALE = 100_000_000  # USD/base quantity units, 8 decimals; cents = 1_000_000 units
 CENT = SCALE // 100
@@ -24,6 +25,41 @@ def require(ok, reason):
 def amount(x, positive=False):
     require(type(x) is int and int(positive) <= x <= MAX, 'invalid_fixed_point_amount')
     return x
+
+
+def quote_decimal(value):
+    """Native USD is decimal, not a base-asset quantity. Preserve source evidence."""
+    require(type(value) in (int,float,str) and len(str(value))<=128,'invalid_native_quote')
+    try:
+        d=Decimal(str(value))
+        require(d.is_finite() and 0<=d<=Decimal(MAX)/SCALE and len(d.as_tuple().digits)<=40,'invalid_native_quote')
+        return d
+    except InvalidOperation as exc:
+        raise AccountingError('invalid_native_quote') from exc
+
+
+def quote_units(value):
+    with localcontext() as ctx:
+        ctx.prec=64
+        return amount(int((quote_decimal(value)*SCALE).to_integral_value(rounding=ROUND_HALF_EVEN)))
+
+
+def rounding_delta(orders):
+    """Exact round-trip net vs separately rounded gross and fee. No wallet tolerance."""
+    require(type(orders) is list and 2<=len(orders)<=256,'invalid_rounding_evidence')
+    with localcontext() as ctx:
+        ctx.prec=64
+        exact=Decimal(0); normalized=0; ids=set()
+        for o in orders:
+            require(set(o)=={'id','side','gross','fee','raw_gross','raw_fee'} and o['side'] in ('buy','sell'),'invalid_rounding_order')
+            ident(o['id']);require(o['id'] not in ids,'duplicate_rounding_order');ids.add(o['id'])
+            g,f=quote_decimal(o['raw_gross']),quote_decimal(o['raw_fee'])
+            require(f<=g and quote_units(g.__str__())==o['gross'] and quote_units(f.__str__())==o['fee'],'rounding_source_mismatch')
+            exact+=g*(-1 if o['side']=='buy' else 1)-f
+            normalized+=o['gross']*(-1 if o['side']=='buy' else 1)-o['fee']
+        delta=int((exact*SCALE).to_integral_value(rounding=ROUND_HALF_EVEN))-normalized
+        require(abs(delta)<=len(orders),'rounding_bound')
+        return delta
 
 
 def ident(x):
@@ -123,6 +159,20 @@ def economic(s, kind, event_id, p):
             s['pl'] -= net-basis
             s['sales'][event_id] = [net,basis]
         s['fees'] += fee
+    elif kind == 'execution_rounding':
+        require(event_id=='rounding:'+ident(p['intent']) and not s['lots'] and p['sale'] in s['sales'],'rounding_scope')
+        d=rounding_delta(p['orders']);require(d!=0 and d==p['delta'],'rounding_delta_mismatch')
+        require(s['active']+s['protected']+s['pending']+d==amount(p['wallet']),'independent_wallet_mismatch')
+        # The exact authenticated source rows must already be recorded as fills.
+        fills={i:(k,b) for k,i,b in s['history'] if k in ('buy','sell')}
+        for o in p['orders']:
+            i='native:'+sha([p['binding'],o['id']]);k,b=fills.get(i,(None,{}))
+            require(k==o['side'] and b.get('gross')==o['gross'] and b.get('fee')==o['fee'],'rounding_unbooked_fill')
+            if k=='buy':require(b['intent']==p['intent'],'rounding_wrong_intent')
+            else:require(i in s['sales'],'rounding_wrong_sale')
+        require(set(s['sales'])=={'native:'+sha([p['binding'],o['id']]) for o in p['orders'] if o['side']=='sell'} and sum(o['side']=='buy' for o in p['orders'])==1,'rounding_fill_scope')
+        net,basis=s['sales'][p['sale']];require(net+d>=0,'rounding_negative_proceeds')
+        s['sales'][p['sale']]=[net+d,basis];s['pending']+=d;s['pl']-=d
     elif kind == 'settle':
         ref = ident(p['sale'])
         require(ref in s['sales'], 'unknown_or_already_settled_sale')
@@ -273,7 +323,7 @@ class FinancialLedger:
                     auth = db.execute('''SELECT instance_id,pair,notional,reserved,state FROM gate_intents WHERE id=? AND '''+UNRELEASED,(p['intent'],)).fetchone()
                     require(auth is not None and auth[0] == instance and auth[1] == row[0] and auth[4] in ('CLAIMED','UNKNOWN','FILLED_HELD'),'unverified_intent')
                     p |= {'max_gross':amount(auth[2]*CENT,True),'max_total':amount(auth[3]*CENT,True)}
-                elif kind == 'execution_closed':
+                elif kind in ('execution_closed','execution_rounding'):
                     held=db.execute("SELECT instance_id,state FROM gate_intents WHERE id=?",(p['intent'],)).fetchone()
                     require(held is not None and held[0]==instance and held[1]=='FILLED_HELD','unresolved_claim_required')
                 elif kind == 'reconcile':
@@ -377,6 +427,7 @@ def review_correction(old, body):
     """
     try:
         require(old['reserve']['last_time']==0,'reserve_history_requires_manual_correction_review')
+        require(not any(k=='execution_rounding' for k,_,_ in old['history']),'rounding_history_requires_manual_correction_review')
         revised=fresh()
         found=False
         settled=False

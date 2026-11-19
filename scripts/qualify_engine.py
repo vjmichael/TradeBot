@@ -236,6 +236,8 @@ def gate_native_bridge(work):
     for kind in ("zero","partial"):
         if f"RECEIPT: R3 native {kind} cancellation recovery after SIGKILL and ORM reopen, signed snapshot and verified wallet" not in result.splitlines():
             raise AssertionError("missing R3 cancellation receipt: " + kind)
+    if "RECEIPT: R3-R1-R2 native fractional USD fees and BTC precision after ORM reopen, exact settlement" not in result.splitlines():
+        raise AssertionError("missing realistic native precision receipt")
 
 
 def main():

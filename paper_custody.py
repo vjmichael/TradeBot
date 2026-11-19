@@ -16,8 +16,8 @@ import time
 import tempfile
 
 from financial_ledger import (AccountingError, FinancialLedger, amount, canon, execution_anchor,
-                              ident, observed, projection_values, replay, require, sha,
-                              UNRELEASED)
+                              ident, observed, projection_values, replay, require, sha, SCALE,
+                              UNRELEASED, quote_units, quote_decimal)
 from paper_execution import PaperBridge, units
 from paper_supervisor import NativeProtectionDriver, ProtectionWorker, custody, released
 
@@ -68,7 +68,13 @@ class ReceiptJournal:
         side=raw['side'];pair=raw['symbol'];oid=str(raw['id'])
         require(side in ('buy','sell') and pair in ('BTC/USD','ETH/USD','SOL/USD') and oid.startswith('dry_run_'+side+'_'),'native_receipt_scope')
         body=dict(binding=self.binding,id='order:'+sha([pair,oid]),pair=pair,side=side,status=raw['status'],
-                  qty=units(raw['filled']),gross=units(raw['cost']),fee=units(fee['cost']),price=units(raw['average']))
+                  qty=units(raw['filled']),gross=quote_units(raw['cost']),fee=quote_units(fee['cost']),price=units(raw['average']))
+        g,f=quote_decimal(raw['cost']),quote_decimal(fee['cost'])
+        require(f<=g,'native_fee_unverified')
+        # Preserve the prior integral receipt format; sign exact sub-unit source
+        # decimal strings when separately quantizing them changes the amount.
+        if g*SCALE!=body['gross'] or f*SCALE!=body['fee']:
+            body.update(raw_gross=str(g),raw_fee=str(f))
         require(body['qty']>0 and body['gross']>0 and body['fee']<=body['gross'],'native_fee_unverified')
         mac=sign(self.key,'terminal-order',body)
         with closing(sqlite3.connect(self.path,timeout=5,isolation_level=None)) as db:
@@ -80,14 +86,18 @@ class ReceiptJournal:
             db.commit()
             require(not conflict,'native_terminal_receipt_conflict')
 
-    def fee(self,oid,pair,side,qty,gross,price):
+    def detail(self,oid,pair,side,qty,gross,price):
         with closing(sqlite3.connect(self.path.resolve().as_uri()+'?mode=ro',uri=True)) as db:
             require(not db.execute('SELECT 1 FROM conflicts WHERE id=?',(oid,)).fetchone(),'native_terminal_receipt_conflict')
             old=db.execute('SELECT body,mac FROM receipts WHERE id=?',(oid,)).fetchone()
         if old is None:return None
         body=authenticate(self.key,'terminal-order',{'body':json.loads(old[0]),'mac':old[1]})
         require(all(body[k]==v for k,v in dict(binding=self.binding,id=oid,pair=pair,side=side,qty=qty,gross=gross,price=price).items()),'native_terminal_receipt_mismatch')
-        return body['fee']
+        return body
+
+    def fee(self,oid,pair,side,qty,gross,price):
+        body=self.detail(oid,pair,side,qty,gross,price)
+        return None if body is None else body['fee']
 
 
 class AuthenticatedNativeDriver(NativeProtectionDriver):
@@ -108,7 +118,7 @@ class AuthenticatedNativeDriver(NativeProtectionDriver):
             setattr(bot.exchange,name,capture)
 
     def view(self,row):
-        view=super().view(row)
+        view=super().view(row,receipt_fees=True)
         # Never synthesize fees from a rate or an aggregate trade-side fee.
         t=self.trade(row); native={'order:'+sha([t.pair,x.order_id]):x for x in t.orders}
         for o in view['orders']:
@@ -119,6 +129,17 @@ class AuthenticatedNativeDriver(NativeProtectionDriver):
                 except (ValueError,KeyError,sqlite3.Error):pass
         return view
 
+    def rounding_proof(self,row,view):
+        from decimal import Decimal
+        orders=[]
+        for o in view['orders']:
+            if not o['qty']:continue
+            require(o['terminal'] and o['fee'] is not None,'rounding_unverified_fill')
+            b=self.journal.detail(o['id'],row['pair'],o['side'],o['qty'],o['gross'],o['price'])
+            require(b is not None and b['fee']==o['fee'],'rounding_unverified_receipt')
+            orders.append({k:b[k] for k in ('id','side','gross','fee')}|{'raw_gross':b.get('raw_gross',str(Decimal(b['gross'])/SCALE)),'raw_fee':b.get('raw_fee',str(Decimal(b['fee'])/SCALE))})
+        return orders
+
     def observation(self,row):
         self.verify(row)
         from freqtrade.persistence import Trade
@@ -127,7 +148,7 @@ class AuthenticatedNativeDriver(NativeProtectionDriver):
         with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
             require(not db.execute('SELECT 1 FROM orders WHERE ft_is_open=1 LIMIT 1').fetchone(),'native_open_order')
         self.bot.wallets.update(require_update=True)
-        return {'quote':units(self.bot.wallets.get_total('USD')),'qty':units(self.bot.wallets.get_total(row['pair'].split('/')[0]))}
+        return {'quote':quote_units(self.bot.wallets.get_total('USD')),'qty':units(self.bot.wallets.get_total(row['pair'].split('/')[0]))}
 
 
 def observation(transaction,driver,*,clock=time.time):

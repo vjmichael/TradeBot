@@ -31,6 +31,33 @@ class JournalTests(unittest.TestCase):
 
     def fee(self,j=None):return (j or self.j).fee(self.oid,'BTC/USD','buy',SCALE//2,50*SCALE,100*SCALE)
 
+    def test_real_market_fractional_quote_and_fee_preserved(self):
+        from financial_ledger import quote_units
+        data=raw()|{'filled':.00095223,'average':61469.6,'cost':58.533197208,'fee':{'currency':'USD','cost':.1521863127408}}
+        self.j.capture(data)
+        j=ReceiptJournal(self.p,KEY,'b'*64)
+        b=j.detail(self.oid,'BTC/USD','buy',95223,5853319721,6146960000000)
+        self.assertEqual(b['raw_gross'],'58.533197208')
+        self.assertEqual(b['raw_fee'],'0.1521863127408')
+        self.assertEqual(b['fee'],15218631)
+        self.assertEqual(quote_units('58.533197208'),5853319721)
+        from paper_execution import units
+        for bad in ('0.000952231','-0.00000000001'):
+            with self.assertRaises(AccountingError):units(bad)
+        for bad in ('NaN','-0.00000000001','Infinity'):
+            with self.assertRaises(AccountingError):quote_units(bad)
+
+    def test_native_view_uses_only_authenticated_terminal_fees(self):
+        from types import SimpleNamespace as S
+        from paper_custody import AuthenticatedNativeDriver
+        d=object.__new__(AuthenticatedNativeDriver);d.journal=self.j
+        self.j.capture(raw()|{'filled':.00095223,'average':61469.6,'cost':58.533197208,'fee':{'currency':'USD','cost':.1521863127408}})
+        order=S(ft_order_side='buy',ft_pair='BTC/USD',side='buy',order_id='dry_run_buy_native',filled=.00095223,average=61469.6,price=61469.6,cost=58.533197208,ft_is_open=False,ft_order_tag='mv:i',ft_fee_base=None,order_filled_date='date',status='closed',order_type='limit')
+        d.trade=lambda row:S(pair='BTC/USD',orders=[order],is_open=True)
+        def forbidden(*args):self.fail('terminal order must not be fetched again')
+        d.bot=S(exchange=S(fetch_order=forbidden),wallets=S(update=lambda **kw:None,get_total=lambda x:.00095223 if x=='BTC' else 941.3146164792592))
+        v=d.view({'pair':'BTC/USD'});self.assertEqual(v['orders'][0]['fee'],15218631);self.assertEqual(v['position'],95223)
+
     def test_terminal_fee_restart_and_idempotency(self):
         self.j.capture(raw());self.j.capture(raw())
         self.assertEqual(self.fee(ReceiptJournal(self.p,KEY,'b'*64)),SCALE)

@@ -61,7 +61,19 @@ class BookFixture:
     def fetch_order(self,order_id,pair):return self._dry_run_open_orders[order_id]
 
 
-def qualify(protection=None, authenticated=False, cancel=None):
+class PrecisionBook(BookFixture):
+    """Recorded-price-shaped synthetic BTC book, not a public session."""
+    def __init__(self,config):
+        super().__init__(config); self.mid=61469.6
+    def amount_to_precision(self,pair,amount):return float(Decimal(str(amount)).quantize(Decimal('.00000001'),rounding=ROUND_DOWN))
+    def price_to_precision(self,pair,price):return float(Decimal(str(price)).quantize(Decimal('.1'),rounding=ROUND_DOWN))
+    def get_fee(self,symbol,taker_or_maker='maker'):return .0026
+    def get_precision_amount(self,pair):return .00000001
+    def get_precision_price(self,pair):return .1
+
+
+def qualify(protection=None, authenticated=False, cancel=None, precision=False):
+    book_cls=PrecisionBook if precision else BookFixture
     base=GateTests('test_size_and_exact_idempotency');base.setUp()
     try:
         h=base.h
@@ -69,7 +81,7 @@ def qualify(protection=None, authenticated=False, cancel=None):
         f=FinancialLedger(h.tx,clock=lambda:h.now)
         f.fund('native-fund-a','a');f.fund('native-fund-b','b')
         gate=Gate(h.tx,clock=lambda:h.now,account_projection=gate_projection)
-        market=replace(base.m,receipt='native-market',entry=100*SCALE,stop=95*SCALE,target=110*SCALE)
+        market=replace(base.m,receipt='native-market',entry=6146960000000 if precision else 100*SCALE,stop=60000*SCALE if precision else 95*SCALE,target=62000*SCALE if precision else 110*SCALE)
         gate.trusted_market(market)
         accounts={k:dict(active=60*SCALE,protected=0,pending=0,qty=0,covered_qty=0) for k in ('a','b')}
         f.reconcile_desk('native-initial',observed_at=h.now,evidence_digest='a'*64,accounts=accounts,open_orders=[])
@@ -82,7 +94,7 @@ def qualify(protection=None, authenticated=False, cancel=None):
                 telegram={'enabled':False},api_server={'enabled':False},freqai={'enabled':False})
             init_db(config['db_url'])
             bot=object.__new__(FreqtradeBot);bot.config=config;bot.state=State.STOPPED
-            bot.trading_mode=TradingMode.SPOT;bot.exchange=BookFixture(config);bot.strategy=GatePaper(config)
+            bot.trading_mode=TradingMode.SPOT;bot.exchange=book_cls(config);bot.strategy=GatePaper(config)
             bot.strategy.order_time_in_force={'entry':'GTC','exit':'GTC'}
             bot.wallets=Wallets(config,bot.exchange)
             if cancel:bot.exchange.mid=101.
@@ -174,7 +186,7 @@ def qualify(protection=None, authenticated=False, cancel=None):
                 assert os.WIFSIGNALED(status) and os.WTERMSIG(status)==signal.SIGKILL,'child was not killed'
                 Trade.session.remove()
                 init_db(config['db_url'])
-                bot.exchange=BookFixture(config);bot.exchange.mid=120.
+                bot.exchange=book_cls(config);bot.exchange.mid=120.
                 bot.wallets=Wallets(config,bot.exchange)
                 driver=RecoveryDriver(bot,path,'a',key,h.tx,clock=lambda:h.now)
                 worker=RecoveryWorker(h.tx,driver,clock=lambda:h.now)
@@ -189,7 +201,7 @@ def qualify(protection=None, authenticated=False, cancel=None):
                     state=f.snapshot('a');assert state['qty']==state['pending']==state['gate_reserved']==0 and state['protected']>0,state
                 print('RECEIPT: R3 native '+cancel+' cancellation recovery after SIGKILL and ORM reopen, signed snapshot and verified wallet',flush=True)
                 return
-            assert trade.stop_loss>=95 and trade.stop_loss<100
+            assert trade.stop_loss>=market.stop/SCALE and trade.stop_loss<market.entry/SCALE
             if protection:
                 # Exercise upstream execute_trade_exit (native simulator, ORM and wallets).
                 # Only ancillary callbacks are fixture implementations.
@@ -203,18 +215,20 @@ def qualify(protection=None, authenticated=False, cancel=None):
                     # orders and construct a fresh authenticated native driver.
                     Trade.session.remove()
                     init_db(config['db_url'])
-                    bot.exchange=BookFixture(config)
+                    bot.exchange=book_cls(config)
                     bot.wallets=Wallets(config,bot.exchange)
                     driver=AuthenticatedNativeDriver(bot,path,'a',key,clock=lambda:h.now)
                     worker=ProtectionWorker(h.tx,driver,clock=lambda:h.now)
                     for _ in range(100):
                         result=worker.tick(intent['intent_id'])
                         assert result['state']=='MONITORING' and result['accounting']=='ok',result
+                        if precision:
+                            with h.tx() as db:assert db.execute("SELECT COUNT(*) FROM fin_events WHERE kind='buy'").fetchone()[0]==1
                         h.now+=2
                 else:
                     worker=ProtectionWorker(h.tx,NativeProtectionDriver(bot,path,'a',clock=lambda:h.now),clock=lambda:h.now)
                 with h.tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
-                bot.exchange.mid=120. if protection=='target' else 90.
+                bot.exchange.mid=(63000.1 if protection=='target' else 59000.) if precision else (120. if protection=='target' else 90.)
                 action=worker.tick(intent['intent_id']);assert action['reason']==protection,action
                 closed=worker.tick(intent['intent_id']);assert closed['state']=='ACCOUNTED',closed
                 state=f.snapshot('a');assert state['qty']==state['pending']==state['gate_reserved']==0,state
@@ -222,6 +236,8 @@ def qualify(protection=None, authenticated=False, cancel=None):
                 else:assert state['active']<60*SCALE and state['protected']==0,state
                 assert worker.tick(intent['intent_id'])['state']=='ACCOUNTED'
                 print('RECEIPT: native protected '+protection+' exit while paused, verified terminal wallet and released reservation',flush=True)
+                if precision:
+                    print('RECEIPT: R3-R1-R2 native fractional USD fees and BTC precision after ORM reopen, exact settlement',flush=True)
                 if authenticated:
                     print('RECEIPT: authenticated native entry, reopened ORM and terminal fee evidence, 100 protection observations, verified settlement',flush=True)
                 return
@@ -265,3 +281,4 @@ if __name__=='__main__':
     qualify('target',authenticated=True)
     qualify(authenticated=True,cancel='zero')
     qualify(authenticated=True,cancel='partial')
+    qualify('target',authenticated=True,precision=True)

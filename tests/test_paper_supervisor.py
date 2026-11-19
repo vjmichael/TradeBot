@@ -61,6 +61,32 @@ class SupervisionTests(unittest.TestCase):
         self.assertEqual(self.tick()['state'],'ACCOUNTED');s=self.snapshot()
         self.assertEqual(s['qty'],0);self.assertEqual(s['pending'],0);self.assertEqual(s['protected'],4*SCALE);self.assertEqual(s['active'],99*SCALE)
         # Each settled gain protected independently; loss is never replenished.
+    def test_rounding_exact_source_proof_and_replay(self):
+        from financial_ledger import rounding_delta, replay
+        self.d.price=120*SCALE
+        self.tick()
+        def proof(row,view):
+            return [{k:o[k] for k in ('id','side','gross','fee')}|{'raw_gross':str(o['gross']/SCALE),'raw_fee':'1.000000004' if o['side']=='buy' else '0.500000004'} for o in view['orders']]
+        self.d.rounding_proof=proof
+        self.d.quote-=1
+        self.assertEqual(rounding_delta(proof({},self.d.view({}))),-1)
+        self.assertEqual(self.tick()['state'],'ACCOUNTED')
+        self.assertEqual(self.snapshot()['protected'],8*SCALE+SCALE//2-1)
+        self.assertEqual(self.snapshot()['gate_reserved'],0)
+        with self.h.tx() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM fin_events WHERE kind='execution_rounding'").fetchone()[0],1)
+            start(db);replay(db)
+        self.assertEqual(self.tick()['state'],'ACCOUNTED')
+
+    def test_rounding_does_not_accept_arbitrary_wallet_discrepancy(self):
+        self.d.price=120*SCALE;self.tick();self.d.quote+=2
+        self.d.rounding_proof=lambda row,view:[{k:o[k] for k in ('id','side','gross','fee')}|{'raw_gross':str(o['gross']/SCALE),'raw_fee':'0.999999996' if o['side']=='buy' else '0.499999996'} for o in view['orders']]
+        with self.assertRaisesRegex(AccountingError,'wallet_mismatch'):self.tick()
+        self.assertEqual(self.snapshot()['gate_reserved'],100*SCALE)
+        self.d.quote-=1
+        self.assertEqual(self.tick()['state'],'ACCOUNTED')
+        self.assertEqual(self.snapshot()['protected'],8*SCALE+SCALE//2+1)
+
     def test_wallet_conflict_rolls_back_release_and_can_reconcile(self):
         self.d.price=120*SCALE;self.tick();self.d.quote+=1
         with self.assertRaisesRegex(AccountingError,'wallet_mismatch'):self.tick()

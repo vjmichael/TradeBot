@@ -5,6 +5,13 @@ on:
       - 'scripts/qualify_installed_paper.py'
       - 'scripts/qualify_installed_paper.sh'
       - 'requirements-native-worker.txt'
+      - 'financial_ledger.py'
+      - 'paper_execution.py'
+      - 'paper_supervisor.py'
+      - 'paper_custody.py'
+      - 'paper_recovery.py'
+      - 'tests/test_paper_custody.py'
+      - 'tests/test_paper_supervisor.py'
       - '.github/workflows/paper-installed.yml'
   workflow_dispatch:
 permissions:

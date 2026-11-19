@@ -12,7 +12,7 @@ import time
 from threading import Lock
 
 from financial_ledger import (CENT, SCALE, FinancialLedger, observed, replay,
-                              require, sha, ident, amount)
+                              require, sha, ident, amount, quote_units)
 
 
 def units(value):
@@ -21,7 +21,7 @@ def units(value):
     try:
         n=Decimal(str(value))*SCALE
         rounded=n.to_integral_value(rounding=ROUND_HALF_EVEN)
-        require(n.is_finite() and abs(n-rounded)<=Decimal('0.01'),'unsupported_native_precision')
+        require(n.is_finite() and n>=0 and abs(n-rounded)<=Decimal('0.01'),'unsupported_native_precision')
         return amount(int(rounded))
     except (InvalidOperation, OverflowError) as exc:
         raise ValueError('invalid_native_amount') from exc
@@ -178,7 +178,7 @@ def read_closed(path,intent,pair):
                 and o['order_filled_date'] and str(o['order_id']).startswith('dry_run_'+side+'_'),'native_order_scope')
             if side=='buy':require(o['order_type']=='limit','native_entry_not_limit')
             require(o['ft_fee_base'] in (None,0) and t['fee_'+k+'_currency']=='USD','native_fee_unverified')
-            q=units(o['filled']); price=units(o['average']); gross=units(o['cost']); fee=units(t['fee_'+k+'_cost'])
+            q=units(o['filled']); price=units(o['average']); gross=quote_units(o['cost']); fee=quote_units(t['fee_'+k+'_cost'])
             require(q>0 and price>0 and gross>0 and q<=units(o['amount']) and abs(gross-q*price//SCALE)<=1,'native_fill_arithmetic')
             if side=='buy':require(o['ft_order_tag']=='mv:'+intent,'native_buy_tag')
             out[side]={'id':'order:'+sha([pair,o['order_id']]),'qty':q,'price':price,'gross':gross,'fee':fee}
@@ -235,7 +235,7 @@ class NativeDriver:
             try:
                 require(result.get('type')=='limit' and units(result['price'])==row['entry'],'native_limit_converted')
                 if result.get('filled'):
-                    require(units(result['average'])<=row['entry'] and units(result['cost'])<=row['notional']*CENT,'native_unbounded_fill')
+                    require(units(result['average'])<=row['entry'] and quote_units(result['cost'])<=row['notional']*CENT,'native_unbounded_fill')
             except ValueError as exc:
                 # Let Freqtrade persist what actually happened before quarantining.
                 violations.append(str(exc))
@@ -260,7 +260,7 @@ class NativeDriver:
             and getattr(wallets._config.get('trading_mode'),'value',wallets._config.get('trading_mode'))=='spot','native_wallet_not_paper')
         before=self.closed_receipt(intent,pair)
         wallets.update(require_update=True)
-        quote=units(wallets.get_total('USD')); quantity=units(wallets.get_total(pair.split('/')[0]))
+        quote=quote_units(wallets.get_total('USD')); quantity=units(wallets.get_total(pair.split('/')[0]))
         require(before==self.closed_receipt(intent,pair),'native_wallet_observation_changed')
         return dict(wallet_quote=quote,wallet_quantity=quantity,
                     evidence_digest=sha([self.binding,before,quote,quantity]))
