@@ -44,7 +44,16 @@ def exercise(page, reload_page, errors, external, mode):
         expect(page.get_by_text('Daily goal entry restriction is enabled.',exact=False)).to_be_visible()
         expect(page.get_by_text('Execution-day original sales P/L',exact=True)).to_be_visible()
         expect(page.get_by_text('Opening baseline evidence',exact=True)).to_be_visible()
+        expect(page.get_by_text('Opening active equity',exact=True)).to_be_visible()
+        expect(page.get_by_role('row',name='Opening active equity Unavailable')).to_be_visible()
+        expect(page.get_by_role('row',name='Execution-day original sales P/L Unavailable')).to_be_visible()
         expect(page.get_by_text('Paper profits are simulated, not household income.',exact=False)).to_be_visible()
+        page.get_by_label('Paper portfolio').select_option(label='Numerical ETH · ETH/USD')
+        expect(page.get_by_label('Monthly expenses (USD)')).to_have_value('0.00')
+        expect(page.get_by_label('Daily goal type')).to_have_value('none')
+        page.get_by_label('Paper portfolio').select_option(label='Bitcoin research · BTC/USD')
+        expect(page.get_by_label('Monthly expenses (USD)')).to_have_value('2500.00')
+        expect(page.get_by_label('Pause new entries after the goal is reached')).to_be_checked()
         page.get_by_role('button',name='Dashboard',exact=True).click()
     expect(page.get_by_label('Paper trading for Bitcoin research')).to_be_checked();page.get_by_label('Paper trading for Bitcoin research').click();expect(page.get_by_role('heading',name='Real-money trading unavailable')).to_be_visible();page.get_by_role('button',name='Keep paper trading').click();expect(page.get_by_label('Paper trading for Bitcoin research')).to_be_checked()
     page.once('dialog',lambda dialog: dialog.accept());page.get_by_role('button',name='Pause all').click();expect(page.get_by_role('status')).to_contain_text('All instances paused')
@@ -70,6 +79,12 @@ def exercise(page, reload_page, errors, external, mode):
     if mode == 'real local API':
         assert page.evaluate('localStorage.length === 0 && sessionStorage.length === 0 && document.cookie === ""')
     reload_page();expect(page.get_by_role('button',name='Sign in',exact=True)).to_be_visible();sign_in();expect(page.get_by_role('heading',name='Bitcoin research')).to_be_visible()
+    if mode=='real local API':
+        page.get_by_role('button',name='Financial Goals',exact=True).click()
+        expect(page.get_by_label('Monthly expenses (USD)')).to_have_value('2500.00')
+        expect(page.get_by_label('Pause new entries after the goal is reached')).to_be_checked()
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        expect(page.get_by_text('PAPER · PAUSED',exact=True)).to_be_visible()
     assert not errors,errors;assert not external,external
     print('PASS: Chromium interaction flow (' + mode + '); React',page.evaluate('React.version'))
 

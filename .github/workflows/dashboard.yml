@@ -4,6 +4,12 @@ on:
     paths:
       - 'dashboard/**'
       - 'tradebot.py'
+      - 'financial_goals.py'
+      - 'goal_control.py'
+      - 'goal_evidence.py'
+      - 'tests/test_financial_goals.py'
+      - 'tests/test_goal_control.py'
+      - 'tests/test_goal_evidence.py'
       - 'tests/test_dashboard.py'
       - 'scripts/test_dashboard_browser.py'
       - '.github/workflows/dashboard.yml'

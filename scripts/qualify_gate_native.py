@@ -30,6 +30,7 @@ from paper_provision import provision, installed_workspace, native_check
 from paper_recovery import RecoveryDriver, RecoveryWorker
 import financial_goals
 from goal_evidence import GoalRecoveryDriver, capture_open
+from goal_control import evaluate as evaluate_goal
 from test_paper_provision import ProvisionTests, I
 from risk_gate import Gate
 from test_risk_gate import GateTests
@@ -233,12 +234,16 @@ def qualify(protection=None, authenticated=False, cancel=None, precision=False, 
                     with h.tx() as db:financial_goals.initialize(db)
                     cutoff=financial_goals.bounds(h.now,'America/Phoenix')[2]
                     h.now=cutoff-5
-                    financial_goals.save(h.tx,'a',financial_goals.DEFAULT|{'target_kind':'points','target_value':200},0,clock=lambda:h.now)
+                    financial_goals.save(h.tx,'a',financial_goals.DEFAULT|{'target_kind':'points','target_value':200,'pause_on_goal':True},0,clock=lambda:h.now)
                     capture_open(h.tx,driver,clock=lambda:h.now)
                     h.now=cutoff+2
                     opening=financial_goals.report(h.tx,'a',clock=lambda:h.now,key_for=key_for)
                     assert opening['baseline_state']=='verified_open_bid_snapshot',opening
-                    assert opening['day_start_active_usd'] is not None
+                    # Independent native bid and booked active funds give the exact mark.
+                    before=f.snapshot('a');bid,_=driver.bid({'id':intent['intent_id'],'instance_id':'a','pair':'BTC/USD'})
+                    assert opening['day_start_active_usd']==financial_goals.usd(before['active']+before['qty']*bid//SCALE),opening
+                    assert opening['goal_notification'] is None
+                    with h.tx() as db:assert evaluate_goal(db,'a',h.now,key_for) is None
                 with h.tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
                 bot.exchange.mid=(63000.1 if protection=='target' else 59000.) if precision else (120. if protection=='target' else 90.)
                 action=worker.tick(intent['intent_id']);assert action['reason']==protection,action
@@ -248,11 +253,24 @@ def qualify(protection=None, authenticated=False, cancel=None, precision=False, 
                 else:assert state['active']<60*SCALE and state['protected']==0,state
                 assert worker.tick(intent['intent_id'])['state']=='ACCOUNTED'
                 if goals:
+                    # Dispose and reopen before importing the timing receipt, to
+                    # require durable evidence rather than in-memory callbacks.
+                    Trade.session.remove()
+                    init_db(config['db_url'])
+                    bot.exchange=book_cls(config);bot.wallets=Wallets(config,bot.exchange)
+                    driver=GoalRecoveryDriver(bot,path,'a',key,h.tx,clock=lambda:h.now)
                     driver.sync_goal_times()
+                    publish(h.tx,{i:observation(h.tx,source,clock=lambda:h.now) for i,source in [('a',driver),('b',peer)]},key_for,clock=lambda:h.now)
+                    with h.tx() as db:
+                        assert evaluate_goal(db,'a',h.now,key_for,verify=authenticated_projection(key_for))=='daily_goal_reached'
                     result=financial_goals.report(h.tx,'a',clock=lambda:h.now,key_for=key_for)
                     assert result['baseline_evidence']==opening['baseline_evidence'],result
                     assert result['day_start_active_usd']==opening['day_start_active_usd']
                     assert result['execution_day_unknown']==0 and result['execution_day_original_pl_usd']==result['daily_realized_usd'],result
+                    assert result['baseline_persisted'] and result['goal_pause_latched'] and result['goal_notification'],result
+                    with h.tx() as db:
+                        assert db.execute('SELECT paused,human_pause FROM desk').fetchone()[:]==(1,1)
+                        assert db.execute("SELECT COUNT(*) FROM goal_daily WHERE kind='reached'").fetchone()[0]==1
                     print('RECEIPT: FIN-01D-R1 native open bid equity baseline and authenticated full-fill interval report',flush=True)
                 print('RECEIPT: native protected '+protection+' exit while paused, verified terminal wallet and released reservation',flush=True)
                 if precision:

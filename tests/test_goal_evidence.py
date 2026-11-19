@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from contextlib import contextmanager, closing
 import unittest
 
-from financial_ledger import SCALE, AccountingError, canon, replay, sha, start
+from financial_ledger import SCALE, AccountingError, canon, replay, sha, start, observed
 from financial_goals import DEFAULT, save, report
 from goal_control import evaluate
 from goal_evidence import capture_open, timing_packet, validate_time, GoalRecoveryDriver
@@ -52,6 +52,39 @@ class EvidenceTests(unittest.TestCase):
         self.assertTrue(self.report()['baseline_persisted'])
         self.h.h.sell(gross=115*SCALE);self.h.h.f.settle('settle','a','sell',110*SCALE)
         b=self.report();self.assertEqual(b['baseline_evidence'],a['baseline_evidence']);self.assertEqual(b['day_start_active_usd'],'110.00000000');self.assertEqual(b['protected_usd'],'10.00000000')
+
+    def second_position(self):
+        # Complete first round trip using the same financial closure and release
+        # contract as ProtectionWorker. The original FILLED_HELD row is retained.
+        self.h.h.sell(gross=115*SCALE)
+        self.h.h.f.settle('settle','a','sell',110*SCALE)
+        with self.tx() as db:balances=observed(replay(db)[0]['a'])
+        view=sha({'terminal':'first'})
+        self.h.h.f._append('closed:i','a','execution_closed',dict(intent='i',binding=self.binding,view=view,balances=balances))
+        with self.tx() as db:
+            append_event(db,'i','native_released',dict(binding=self.binding,view=view,financial_head=replay(db)[3]),self.clock())
+            db.execute("INSERT INTO gate_intents VALUES('j','a','BTC/USD',9900,10000,'CLAIMED')")
+            append_event(db,'j','native_bound',{'binding':self.binding},self.clock())
+            append_event(db,'j','native_attempt',{'binding':self.binding},self.clock())
+        oid='order:'+sha(['BTC/USD','dry_run_buy_second'])
+        self.h.h.f.buy('native:'+sha([self.binding,oid]),'a','j',SCALE,98*SCALE,2*SCALE)
+        with self.tx() as db:db.execute("UPDATE gate_intents SET state='FILLED_HELD' WHERE id='j'")
+        self.v['orders'][0].update(id=oid,tag='mv:j');self.v['quote']=12*SCALE
+
+    def test_prior_verified_release_does_not_hide_new_open_position(self):
+        self.second_position();self.snap();self.after()
+        self.assertEqual(self.report()['day_start_active_usd'],'110.00000000')
+        self.assertEqual(self.report()['baseline_state'],'verified_open_bid_snapshot')
+
+    def test_tampered_prior_release_does_not_qualify_open_position(self):
+        self.second_position()
+        with self.tx() as db:db.execute("UPDATE gate_events SET detail=json_set(detail,'$.financial_head','bad') WHERE action='native_released'")
+        with self.assertRaisesRegex(AccountingError,'release_receipt_integrity'):self.snap()
+        self.after();self.assertIsNone(self.report()['day_start_active_usd'])
+
+    def test_competing_unresolved_claim_blocks_opening_snapshot(self):
+        with self.tx() as db:db.execute("INSERT INTO gate_intents VALUES('j','a','BTC/USD',9900,10000,'UNKNOWN')")
+        self.snap();self.after();self.assertIsNone(self.report()['day_start_active_usd'])
 
     def test_position_wallet_mismatch_refused(self):
         self.v['quote']+=1

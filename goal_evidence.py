@@ -6,7 +6,7 @@ import sqlite3
 from financial_ledger import SCALE, amount, canon, quote_units, qty, replay, require, sha
 from paper_custody import authenticate, packet
 from paper_execution import event_detail, units
-from paper_supervisor import checked_view
+from paper_supervisor import checked_view, released
 from paper_recovery import RecoveryDriver
 
 
@@ -41,9 +41,13 @@ def capture_open(transaction,driver,*,clock):
         if not 0<cutoff-now<=30:return
         states,_,_,head=replay(db);s=states.get(driver.instance)
         if not s or not qty(s) or s['sales']:return
-        row=db.execute("SELECT * FROM gate_intents WHERE instance_id=? AND state='FILLED_HELD'",(driver.instance,)).fetchall()
-        if len(row)!=1:return
-        row=dict(row[0]);bound=event_detail(db,row['id'],'native_bound')
+        candidates=db.execute("SELECT * FROM gate_intents WHERE instance_id=? AND state IN ('AUTHORIZED','CLAIMED','UNKNOWN','FILLED_HELD')",(driver.instance,)).fetchall()
+        # A completed intent remains historically FILLED_HELD. Only a verified
+        # terminal release can exclude it; unresolved competing claims block the
+        # baseline rather than letting a single booked position hide other risk.
+        held=[r for r in candidates if not released(db,r['id'])]
+        if len(held)!=1 or held[0]['state']!='FILLED_HELD':return
+        row=dict(held[0]);bound=event_detail(db,row['id'],'native_bound')
         require(bound and bound['binding']==driver.binding and event_detail(db,row['id'],'native_attempt'),'opening_binding_unverified')
         boot=db.execute('SELECT boot FROM fin_head WHERE id=1').fetchone()[0]
         seq=db.execute('SELECT COALESCE(MAX(seq),0) FROM gate_events').fetchone()[0]
