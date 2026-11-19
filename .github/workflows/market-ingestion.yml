@@ -7,6 +7,7 @@ on:
       - 'market_archive.py'
       - 'market_stream.py'
       - 'market_gap.py'
+      - 'historical_readiness.py'
       - 'gap_schedule.py'
       - 'recovery_budget.py'
       - 'tests/test_recovery_budget.py'

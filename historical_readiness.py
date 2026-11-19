@@ -12,7 +12,7 @@ import time
 from collections import Counter
 from contextlib import closing
 from market_memory import MAX_TIME, MemoryUnavailable, sha256_file
-from market_gap import MAX_SPAN
+from market_gap import MAX_SPAN,MAX_JOB_PAGES
 from economic_memory import SOURCES
 from market_quality import parse_depth, measure, SLOT
 
@@ -63,64 +63,39 @@ def _archive_assets(db,memory,pair,as_of):
             'scope':'retained hourly archive CSV assets; database and partition integrity qualified separately'}
 
 
-def historical_report(memory,economic,pair,*,as_of=None,offset=0,report_id=None,clock=time.time):
-    now=int(clock())
-    as_of=now if as_of is None else as_of
-    if (type(as_of) is not int or not HOURS*STEP+STEP<as_of<=now<MAX_TIME
-            or type(offset) is not int or not 0<=offset<=HOURS
-            or (offset and (not isinstance(report_id,str) or not HEX.fullmatch(report_id)))
-            or (report_id is not None and (not isinstance(report_id,str) or not HEX.fullmatch(report_id)))):
-        raise ValueError('invalid report window or page')
-    symbols=memory.symbols
-    if pair not in symbols:raise ValueError('unknown market')
-    end=as_of//STEP*STEP;start=end-HOURS*STEP
-    with closing(sqlite3.connect(memory.db,timeout=10)) as db:
-        db.row_factory=sqlite3.Row
-        # One SQLite read cut for all market counts, source and recovery evidence.
-        db.execute('BEGIN')
-        base="""FROM candles c JOIN sources s ON s.id=c.source_id
-            WHERE c.pair=? AND c.interval=60 AND c.ts>=? AND c.ts<?
-            AND c.available_at<=? AND s.published_at<=?
-            AND s.kind!='fixture' AND s.state='complete'"""
-        args=(pair,start,end,as_of,as_of)
-        rows=db.execute("SELECT c.ts,COUNT(DISTINCT c.digest) AS versions,COUNT(DISTINCT c.trades) AS counts "+base+" GROUP BY c.ts ORDER BY c.ts LIMIT ?",args+(HOURS+1,)).fetchall()
-        if len(rows)>HOURS or any(r['ts']%STEP for r in rows):raise MemoryUnavailable('unexpected historical observation identity')
-        by_time={r['ts']:r for r in rows}
-        clean={t for t,r in by_time.items() if r['versions']==1}
-        anchors={t for t in clean if by_time[t]['counts']<=1}
-        bounds=db.execute("SELECT MIN(CASE WHEN s.kind='archive' THEN c.ts END),MAX(CASE WHEN s.kind='archive' THEN c.ts END),MIN(c.ts),MAX(c.ts) "+base,args).fetchone()
-        archive_first,archive_last,first,last=tuple(bounds)
-        # Historical recovery is read-only; an attempt is not an observation.
-        attempts={}
-        if _has(db,'gap_attempts'):
-            found=db.execute("""SELECT start,end,attempted,outcome FROM gap_attempts
-                WHERE pair=? AND start>=? AND end<=? AND attempted<=?
-                ORDER BY start,end LIMIT ?""",(pair,start,end,as_of,MAX_ATTEMPTS+1)).fetchall()
-            if len(found)>MAX_ATTEMPTS:raise MemoryUnavailable('gap attempt inventory exceeds report bound')
-            attempts={(r['start'],r['end']):dict(r) for r in found}
-        jobs={}
-        if _has(db,'gap_jobs'):
-            found=db.execute("""SELECT id,start_ts,end_ts,state,pages,observed_at
-                FROM gap_jobs WHERE pair=? AND start_ts>=? AND end_ts<=?
-                AND observed_at<=? ORDER BY rowid LIMIT ?""",(pair,start,end,as_of,MAX_ATTEMPTS+1)).fetchall()
-            if len(found)>MAX_ATTEMPTS:raise MemoryUnavailable('gap job inventory exceeds report bound')
-            for j in found:jobs[(j['start_ts'],j['end_ts'])]=dict(j)
-        collector=db.execute('SELECT last_success,state FROM collector WHERE pair=? AND interval=60 AND last_attempt<=?',(pair,as_of)).fetchone()
-        source_counts=dict(db.execute("""SELECT kind,COUNT(*) FROM sources WHERE pair=? AND interval=60
-            AND kind!='fixture' AND state='complete' AND published_at<=? GROUP BY kind""",(pair,as_of)))
-        assets=_archive_assets(db,memory,pair,as_of)
-        # Latest saved cost evidence is explicitly a sample, not historical fills.
-        book=None;cost=None
-        if _has(db,'quality_books'):
-            book=db.execute("SELECT observed,digest,body,source_digest FROM quality_books WHERE pair=? AND published<=? ORDER BY observed DESC LIMIT 1",(pair,as_of)).fetchone()
-            if book:
-                if hashlib.sha256(book['body'].encode()).hexdigest()!=book['digest']:
-                    raise MemoryUnavailable('saved order book integrity failure')
-                cost=measure(parse_depth(pair,{'error':[],'result':{symbols[pair][1]:json.loads(book['body'])}},book['observed'],symbols))
-                cost.update(observed_at=book['observed'],source_digest=book['source_digest'],
-                            state='recent_sample' if 0<=as_of-book['observed']<=2*SLOT else 'old_sample',
-                            fee_bps_per_side=None)
-        db.rollback()
+def _scan(db,pair,start,end,as_of):
+    """Shared bounded hourly inventory; no provider I/O or asset hashing."""
+    base="""FROM candles c JOIN sources s ON s.id=c.source_id
+        WHERE c.pair=? AND c.interval=60 AND c.ts>=? AND c.ts<?
+        AND c.available_at<=? AND s.published_at<=?
+        AND s.kind!='fixture' AND s.state='complete'"""
+    args=(pair,start,end,as_of,as_of)
+    rows=db.execute("SELECT c.ts,COUNT(DISTINCT c.digest) AS versions,COUNT(DISTINCT c.trades) AS counts "+base+" GROUP BY c.ts ORDER BY c.ts LIMIT ?",args+(HOURS+1,)).fetchall()
+    if len(rows)>HOURS or any(r['ts']%STEP for r in rows):raise MemoryUnavailable('unexpected historical observation identity')
+    by_time={r['ts']:r for r in rows}
+    clean={t for t,r in by_time.items() if r['versions']==1}
+    anchors={t for t in clean if by_time[t]['counts']<=1}
+    bounds=db.execute("SELECT MIN(CASE WHEN s.kind='archive' THEN c.ts END),MAX(CASE WHEN s.kind='archive' THEN c.ts END),MIN(c.ts),MAX(c.ts) "+base,args).fetchone()
+    archive_first,archive_last,first,last=tuple(bounds)
+    # Historical recovery is read-only; an attempt is not an observation.
+    attempts={}
+    if _has(db,'gap_attempts'):
+        found=db.execute("""SELECT start,end,attempted,outcome FROM gap_attempts
+            WHERE pair=? AND start>=? AND end<=? AND attempted<=?
+            ORDER BY start,end LIMIT ?""",(pair,start,end,as_of,MAX_ATTEMPTS+1)).fetchall()
+        if len(found)>MAX_ATTEMPTS:raise MemoryUnavailable('gap attempt inventory exceeds report bound')
+        attempts={(r['start'],r['end']):dict(r) for r in found}
+    jobs={}
+    if _has(db,'gap_jobs'):
+        found=db.execute("""SELECT id,start_ts,end_ts,state,pages,observed_at
+            FROM gap_jobs WHERE pair=? AND start_ts>=? AND end_ts<=?
+            AND observed_at<=? ORDER BY rowid LIMIT ?""",(pair,start,end,as_of,MAX_ATTEMPTS+1)).fetchall()
+        if len(found)>MAX_ATTEMPTS:raise MemoryUnavailable('gap job inventory exceeds report bound')
+        for j in found:jobs[(j['start_ts'],j['end_ts'])]=dict(j)
+    return by_time,clean,anchors,tuple(bounds),attempts,jobs
+
+def _classify(start,end,by_time,anchors,bounds,attempts,jobs):
+    archive_first,archive_last,first,last=bounds
     def reason(t):
         row=by_time.get(t)
         if row is not None:
@@ -152,30 +127,120 @@ def historical_report(memory,economic,pair,*,as_of=None,offset=0,report_id=None,
         bound=(ranges[i]['start'],ranges[j-1]['end'])
         for k in range(i,j):recovery_bounds[k]=bound
         i=j
+    completed=sorted((a,b) for (a,b),job in jobs.items() if job['state']=='complete')
+    # A completed bridge may publish only trade-bearing hours; residual
+    # subranges within its original bounds require independent review.
+    from bisect import bisect_right
+    starts=[];max_ends=[]
+    for a,b in completed:
+        starts.append(a);max_ends.append(max(b,max_ends[-1] if max_ends else b))
     for i,item in enumerate(ranges):
         label=item['reason'];a,b=recovery_bounds.get(i,(item['start'],item['end']))
         job=jobs.get((a,b));attempt=attempts.get((a,b))
+        idx=bisect_right(starts,a)-1
+        completed_residual=idx>=0 and max_ends[idx]>=b
         item['hours']=(item['end']-item['start'])//STEP
         if label.startswith('conflicting_'):
             recovery='independent_source_review'
-        elif job and job['state']=='complete':
+        elif completed_residual or job and job['state']=='complete':
             # A completed bridge can still leave a missing hour. Never assert
             # verified no-trade absence merely from a missing candle.
             recovery='completed_attempt_still_missing'
         elif job and job['state']=='rejected':
             recovery='rejected_requires_review'
-        elif job and job['state'] in ('recovering','ready'):
-            recovery='checkpoint_saved'
         elif a-STEP not in anchors or b not in anchors:
             recovery='independent_anchors_missing'
         elif b-a>MAX_SPAN:
             recovery='exceeds_current_recovery_span'
+        elif job and job['state']=='recovering' and job['pages']>=MAX_JOB_PAGES:
+            recovery='page_limit_review'
+        elif job and job['state'] in ('recovering','ready'):
+            recovery='checkpoint_saved'
         elif attempt and attempt['outcome']=='unavailable':
             recovery='attempt_unavailable'
         else:
             recovery='bounded_recovery_possible'
         item.update(recovery=recovery,recovery_start=a,recovery_end=b,pages=job['pages'] if job else 0,
                     last_attempt=attempt['attempted'] if attempt else None)
+    return ranges,counts
+
+ELIGIBLE=('bounded_recovery_possible','checkpoint_saved','attempt_unavailable')
+
+def recovery_inventory(memory,symbols=None,*,as_of=None,clock=time.time):
+    now=int(clock());as_of=now if as_of is None else as_of
+    if type(as_of) is not int or not HOURS*STEP+STEP<as_of<=now<MAX_TIME:raise ValueError('invalid recovery inventory cut')
+    known=memory.symbols;scope=known if symbols is None else symbols
+    if not scope or len(scope)>32 or any(known.get(k)!=v for k,v in scope.items()):raise ValueError('invalid recovery inventory scope')
+    end=as_of//STEP*STEP;start=end-HOURS*STEP
+    reports=[]
+    with closing(sqlite3.connect(memory.db,timeout=10)) as db:
+        db.row_factory=sqlite3.Row;db.execute('BEGIN')
+        for pair in scope:
+            by_time,clean,anchors,bounds,attempts,jobs=_scan(db,pair,start,end,as_of)
+            ranges,counts=_classify(start,end,by_time,anchors,bounds,attempts,jobs)
+            unique={}
+            for item in ranges:
+                if item['recovery'] not in ELIGIBLE:continue
+                a,b=item['recovery_start'],item['recovery_end']
+                unique[(a,b)]={'start':a,'end':b,'reason':'verified_boundary_gap','recovery':item['recovery'],'pages':item['pages']}
+            missing=HOURS-len(clean)
+            if sum(n for label,n in counts.items() if label!='conflicting_trade_counts')!=missing:raise MemoryUnavailable('recovery coverage did not reconcile')
+            reports.append({'pair':pair,'as_of':as_of,'expected':HOURS,'coverage':len(clean),'missing':missing,'trade_count_conflicts':counts['conflicting_trade_counts'],
+                            'eligible_hours':sum((b-a)//STEP for a,b in unique),'ranges':list(unique.values())})
+        db.rollback()
+    return reports
+
+def readiness_requirements(coverage,trade_conflicts,assets,cost,collector,evidence,vintages,as_of,ranges):
+    # Initial strict review criteria, not automatic strategy/training admission.
+    states=Counter()
+    for item in ranges:states[item['recovery']]+=item['hours']
+    requirements=[
+        {'id':'hourly_history','state':'observed' if coverage==HOURS and not trade_conflicts else 'incomplete','observed':coverage,'expected':HOURS},
+        {'id':'archive_integrity','state':'observed' if assets['assets']>0 and assets['integrity'].get('verified',0)==assets['assets'] else 'review_required','observed':assets['integrity'].get('verified',0),'expected':assets['assets']},
+        {'id':'recent_hourly_data','state':'observed' if collector and collector['last_success'] is not None and 0<=as_of-collector['last_success']<=7200 else 'incomplete'},
+        {'id':'sampled_market_cost','state':'observed' if cost and cost['state']=='recent_sample' else 'incomplete'},
+        {'id':'official_economic_sources','state':'observed' if all(e['state']=='observed' and e['total']>0 for e in evidence) else 'incomplete','observed':sum(e['state']=='observed' and e['total']>0 for e in evidence),'expected':len(evidence)},
+        {'id':'monthly_vintages','state':'observed' if vintages['saved']==vintages['expected'] else 'incomplete','observed':vintages['saved'],'expected':vintages['expected']},
+        {'id':'release_time_and_cost_validation','state':'not_qualified'},
+        {'id':'strategy_features_and_frozen_evaluation','state':'not_qualified'}]
+    return {'requirements':requirements,'recovery_hours':dict(sorted(states.items())),
+            'eligible_recovery_hours':sum(n for k,n in states.items() if k in ELIGIBLE),
+            'state':'review_required','training_ready':False,'paper_ready':False}
+
+def historical_report(memory,economic,pair,*,as_of=None,offset=0,report_id=None,clock=time.time):
+    now=int(clock())
+    as_of=now if as_of is None else as_of
+    if (type(as_of) is not int or not HOURS*STEP+STEP<as_of<=now<MAX_TIME
+            or type(offset) is not int or not 0<=offset<=HOURS
+            or (offset and (not isinstance(report_id,str) or not HEX.fullmatch(report_id)))
+            or (report_id is not None and (not isinstance(report_id,str) or not HEX.fullmatch(report_id)))):
+        raise ValueError('invalid report window or page')
+    symbols=memory.symbols
+    if pair not in symbols:raise ValueError('unknown market')
+    end=as_of//STEP*STEP;start=end-HOURS*STEP
+    with closing(sqlite3.connect(memory.db,timeout=10)) as db:
+        db.row_factory=sqlite3.Row
+        # One SQLite read cut for all market counts, source and recovery evidence.
+        db.execute('BEGIN')
+        by_time,clean,anchors,bounds,attempts,jobs=_scan(db,pair,start,end,as_of)
+        archive_first,archive_last,first,last=bounds
+        collector=db.execute('SELECT last_success,state FROM collector WHERE pair=? AND interval=60 AND last_attempt<=?',(pair,as_of)).fetchone()
+        source_counts=dict(db.execute("""SELECT kind,COUNT(*) FROM sources WHERE pair=? AND interval=60
+            AND kind!='fixture' AND state='complete' AND published_at<=? GROUP BY kind""",(pair,as_of)))
+        assets=_archive_assets(db,memory,pair,as_of)
+        # Latest saved cost evidence is explicitly a sample, not historical fills.
+        book=None;cost=None
+        if _has(db,'quality_books'):
+            book=db.execute("SELECT observed,digest,body,source_digest FROM quality_books WHERE pair=? AND published<=? ORDER BY observed DESC LIMIT 1",(pair,as_of)).fetchone()
+            if book:
+                if hashlib.sha256(book['body'].encode()).hexdigest()!=book['digest']:
+                    raise MemoryUnavailable('saved order book integrity failure')
+                cost=measure(parse_depth(pair,{'error':[],'result':{symbols[pair][1]:json.loads(book['body'])}},book['observed'],symbols))
+                cost.update(observed_at=book['observed'],source_digest=book['source_digest'],
+                            state='recent_sample' if 0<=as_of-book['observed']<=2*SLOT else 'old_sample',
+                            fee_bps_per_side=None)
+        db.rollback()
+    ranges,counts=_classify(start,end,by_time,anchors,bounds,attempts,jobs)
     evidence=[]
     for source in SOURCES:
         view=economic.view(source,as_of=as_of,limit=1)
@@ -194,6 +259,7 @@ def historical_report(memory,economic,pair,*,as_of=None,offset=0,report_id=None,
             'collector_state':collector['state'] if collector else 'not_observed',
             'classification_hours':dict(sorted(counts.items())),'source_counts':source_counts,'archive_retention':assets,
             'latest_book_observed':book['observed'] if book else None,'cost_sample':cost,'economic_sources':evidence,'vintage_coverage':vintages,
+            'qualification':readiness_requirements(coverage,trade_conflicts,assets,cost,collector,evidence,vintages,as_of,ranges),
             'historical_state':'observations_incomplete' if missing or trade_conflicts else 'integrity_review_required',
             'training_ready':False,'paper_ready':False,
             'range_count':len(ranges),'no_trade_hours_verified':0}

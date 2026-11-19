@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 from market_memory import MarketMemory,sha256_file
 from economic_memory import EconomicMemory
-from historical_readiness import historical_report,HOURS,STEP
+from historical_readiness import historical_report,recovery_inventory,HOURS,STEP
+from engine import SYMBOLS
 from market_gap import GapBridge
 from tradebot import create_app
 from fastapi.testclient import TestClient
@@ -122,3 +123,45 @@ class HistoricalReadinessTests(unittest.TestCase):
                 self.assertEqual(history.status_code,200,history.text)
                 self.assertIn('rows',history.json())
             self.assertEqual(c.get('/api/economic/invalid',headers=AUTH).status_code,422)
+
+    def test_shared_inventory_deduplicates_cross_boundary_and_excludes_conflicts(self):
+        first=self.end-722*STEP;last=self.end-719*STEP
+        self.archive([first])
+        self.m.record_recent(PAIR,60,{'exchange':'kraken','product':'spot','pair':PAIR,'interval_minutes':60,
+            'observed_at':last+STEP,'candles':[[last*1000,'100','102','99','100','2',1]]},now=self.now)
+        scope={PAIR:SYMBOLS[PAIR]}
+        report=self.report();inv=recovery_inventory(self.m,scope,as_of=self.now)[0]
+        self.assertEqual((inv['missing'],inv['eligible_hours']),(report['missing'],2))
+        self.assertEqual(len(inv['ranges']),1)
+        self.assertEqual((inv['ranges'][0]['start'],inv['ranges'][0]['end']),(first+STEP,last))
+        self.assertEqual(report['qualification']['eligible_recovery_hours'],2)
+        self.archive([first],price='101')
+        inv=recovery_inventory(self.m,scope,as_of=self.now)[0]
+        self.assertEqual(inv['eligible_hours'],0)
+        self.assertFalse(self.report()['qualification']['training_ready'])
+    def test_exhausted_rejected_and_completed_residual_gaps_not_requeued(self):
+        first=self.end-10*STEP;last=first+4*STEP
+        self.archive([first,first+2*STEP,last])
+        GapBridge(self.m)
+        from market_gap import MAX_JOB_PAGES
+        with self.m.tx() as db:
+            for key,start,end,state,pages in [('wide',first+STEP,last,'complete',4),('exhausted',first+3*STEP,last,'recovering',MAX_JOB_PAGES)]:
+                db.execute('INSERT INTO gap_jobs(id,pair,start_ts,end_ts,first_digest,last_digest,cursor,pages,state,observed_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                           (key,PAIR,start,end,'a','b','1',pages,state,self.now))
+        inv=recovery_inventory(self.m,{PAIR:SYMBOLS[PAIR]},as_of=self.now)[0]
+        self.assertEqual(inv['eligible_hours'],0)
+        self.assertEqual(self.report()['qualification']['recovery_hours']['completed_attempt_still_missing'],2)
+        with self.m.tx() as db:db.execute("DELETE FROM gap_jobs WHERE id='wide'")
+        inv=recovery_inventory(self.m,{PAIR:SYMBOLS[PAIR]},as_of=self.now)[0]
+        self.assertEqual(inv['eligible_hours'],1)
+        self.assertEqual(self.report()['qualification']['recovery_hours']['page_limit_review'],1)
+        with self.m.tx() as db:db.execute("UPDATE gap_jobs SET state='rejected' WHERE id='exhausted'")
+        self.assertEqual(self.report()['qualification']['recovery_hours']['rejected_requires_review'],1)
+    def test_readiness_criteria_explain_independent_remaining_gates(self):
+        report=self.report()
+        q={x['id']:x for x in report['qualification']['requirements']}
+        self.assertEqual(q['hourly_history']['expected'],HOURS)
+        self.assertEqual(q['monthly_vintages']['expected'],360)
+        self.assertEqual(q['release_time_and_cost_validation']['state'],'not_qualified')
+        self.assertEqual(q['strategy_features_and_frozen_evaluation']['state'],'not_qualified')
+        self.assertFalse(report['qualification']['paper_ready'])

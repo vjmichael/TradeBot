@@ -13,7 +13,8 @@ from market_memory import MarketMemory,MemoryUnavailable
 from market_archive import RemoteParts,public_client,import_members,RELEASE
 from market_stream import StreamJournal,run_stream,exact_closed
 from market_quality import QualityMemory
-from recovery_budget import recover_batch
+from recovery_budget import recover_batch,recovery_budget_status
+from historical_readiness import recovery_inventory
 from storage_telemetry import sample_storage
 from market_lake import HistoricalLake
 from economic_memory import EconomicMemory,SOURCES
@@ -86,13 +87,14 @@ def run(directory,mode,job):
             try:journal.repair(pair)
             except Exception:failed=True
         mark('repairing_gaps')
-        outcomes=recover_batch(m,journal.gap_reports(),scope_check=check_scope,max_pages=64,total_pages=192)
+        outcomes=recover_batch(m,recovery_inventory(m,symbols),scope_check=check_scope,max_pages=64,total_pages=192)
         for pair in symbols:
             check_scope()
             try:journal.repair(pair)
             except Exception:failed=True
         mark('review_coverage')
-        if failed or any(r['outcome']!='complete' for r in outcomes):raise RuntimeError('gap recovery incomplete; checkpoint retained')
+        remaining=recovery_inventory(m,symbols)
+        if failed or any(r['outcome']!='complete' for r in outcomes) or any(r['missing'] or r['trade_count_conflicts'] for r in remaining):raise RuntimeError('gap recovery incomplete; checkpoint retained')
     elif mode=='collect':
         mark('continuous_public_data')
         async def collect():
@@ -119,8 +121,15 @@ def run(directory,mode,job):
                 await asyncio.sleep(90)
                 while True:
                     await asyncio.to_thread(check_scope)
-                    await asyncio.to_thread(lambda:recover_batch(m,journal.gap_reports(),scope_check=check_scope))
-                    await asyncio.sleep(120)
+                    try:
+                        outcomes=await asyncio.to_thread(lambda:recover_batch(m,recovery_inventory(m,symbols),scope_check=check_scope))
+                        budget=await asyncio.to_thread(recovery_budget_status,m)
+                    except (OSError,MemoryUnavailable,sqlite3.Error,ValueError):
+                        await asyncio.sleep(120);continue
+                    if budget['state'] in ('paced','exchange_cooldown','clock_review'):
+                        when=budget['next_available_at'];delay=max(30,min(300,when-int(time.time()))) if when else 300
+                    else:delay=30 if any(r['outcome']=='checkpointed' for r in outcomes) else 120
+                    await asyncio.sleep(delay)
             async def vintage_backfill():
                 # The explicit continuous-collection opt-in authorizes the
                 # same fixed public source as manual vintage collection.

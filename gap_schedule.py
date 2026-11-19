@@ -5,6 +5,7 @@ from market_gap import GapBridge,MAX_SPAN,RecoveryDeferred
 from market_memory import MemoryUnavailable
 
 RETRY=300
+CHECKPOINT_RETRY=30
 MAX_TRACKED=100000
 
 def repair_due(memory,reports,*,now=None,bridge=None,max_pages=64,total_pages=None,prefer_checkpoint=False):
@@ -23,16 +24,21 @@ def repair_due(memory,reports,*,now=None,bridge=None,max_pages=64,total_pages=No
     reports=sorted(reports,key=lambda r:latest.get(r['pair'],-1))
     for report in reports:
         if len(result)>=3 or remaining<=0:break
-        pair=report['pair'];rs=[r for r in report['ranges'] if r['reason']=='outside_rest_window' and 0<r['end']-r['start']<=MAX_SPAN]
+        pair=report['pair'];rs=[r for r in report['ranges'] if r['reason'] in ('outside_rest_window','verified_boundary_gap') and 0<r['end']-r['start']<=MAX_SPAN]
         with memory.tx() as db:
             known={(r['start'],r['end']):dict(r) for r in db.execute('SELECT * FROM gap_attempts WHERE pair=?',(pair,))}
             def rank(r):
                 old=known.get((r['start'],r['end']))
                 # Continue the durable large-gap frontier before starting more
                 # short historical gaps; rotation across markets remains fair.
-                priority=0 if prefer_checkpoint and old and old['outcome'] in ('checkpointed','deferred') else 1
+                priority=0 if prefer_checkpoint and (r.get('recovery')=='checkpoint_saved' or old and old['outcome'] in ('checkpointed','deferred')) else 1
                 return (priority,old['attempted'] if old else -1,-(r['end']-r['start']),r['start'])
-            due=[r for r in rs if (r['start'],r['end']) not in known or (known[(r['start'],r['end'])]['outcome']!='complete' and now-known[(r['start'],r['end'])]['attempted']>=RETRY)]
+            def eligible(r):
+                old=known.get((r['start'],r['end']))
+                if not old:return True
+                retry=CHECKPOINT_RETRY if r.get('recovery')=='checkpoint_saved' and old['outcome']=='checkpointed' else RETRY
+                return old['outcome']!='complete' and now-old['attempted']>=retry
+            due=[r for r in rs if eligible(r)]
             if not due:continue
             r=min(due,key=rank);start,end=r['start'],r['end']
             if (start,end) not in known and db.execute('SELECT count(*) FROM gap_attempts').fetchone()[0]>=MAX_TRACKED:raise MemoryUnavailable('gap attempt capacity reached')

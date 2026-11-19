@@ -122,6 +122,12 @@ class GapBridge:
         left=self.memory.query(pair,60,start-STEP,start,now);right=self.memory.query(pair,60,end,end+STEP,now)
         if left['coverage']!=1 or right['coverage']!=1 or left['conflicts'] or right['conflicts']:
             raise MemoryUnavailable('gap recovery requires known clean boundary candles')
+        # MarketMemory.query withholds conflicting trade counts rather than
+        # classifying a price conflict. Reject known count disagreement too.
+        with self.memory.tx() as db:
+            for stamp in (start-STEP,end):
+                count=db.execute("SELECT COUNT(DISTINCT c.trades) FROM candles c JOIN sources s ON s.id=c.source_id WHERE c.pair=? AND c.interval=60 AND c.ts=? AND c.available_at<=? AND s.published_at<=? AND s.kind!='fixture' AND s.state='complete'",(pair,stamp,now,now)).fetchone()[0]
+                if count>1:raise MemoryUnavailable('conflicting boundary trade counts')
         return left['rows'][0]['digest'],right['rows'][0]['digest']
     def run(self,pair,start,end,*,max_pages=64,fetch=fetch_page,pace=time.sleep,clock=time.time,before_page=None):
         now=int(clock())
@@ -199,10 +205,18 @@ class GapBridge:
                     if {r[0] for r in known}!={digest} or any(r[1] is not None and r[1]!=recovered_count for r in known):raise MemoryUnavailable('boundary value or trade count mismatch')
                 rows=[r for r in data if start<=r[0]<end]
                 if not rows:raise MemoryUnavailable('no trade-derived candles recovered')
-                source=hashlib.sha256(('public-trades:'+key).encode()).hexdigest()
-                db.execute('INSERT INTO sources(id,kind,pair,interval,locator,observed_at,cursor,last_ts,state,published_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(source,'rest',pair,60,URL,now,len(rows),rows[-1][0],'complete',now))
-                self.memory._insert(db,source,pair,60,now,rows)
-                db.execute("UPDATE gap_jobs SET state='complete',source_id=? WHERE id=?",(source,key))
-        if not valid:raise MemoryUnavailable('trade-derived boundary does not match independent candles')
+                # Never create a conflicting revision against an independent
+                # observation arriving before bridge publication.
+                existing=db.execute("SELECT c.ts,c.digest,c.trades FROM candles c JOIN sources s ON s.id=c.source_id WHERE c.pair=? AND c.interval=60 AND c.ts>=? AND c.ts<? AND c.available_at<=? AND s.published_at<=? AND s.kind!='fixture' AND s.state='complete'",(pair,start,end,now,now)).fetchall()
+                recovered={r[0]:r for r in rows}
+                if any(r['ts'] not in recovered or r['digest']!=recovered[r['ts']][-1] or (r['trades'] is not None and r['trades']!=recovered[r['ts']][6]) for r in existing):
+                    valid=False
+                    db.execute("UPDATE gap_jobs SET state='rejected' WHERE id=?",(key,))
+                else:
+                    source=hashlib.sha256(('public-trades:'+key).encode()).hexdigest()
+                    db.execute('INSERT INTO sources(id,kind,pair,interval,locator,observed_at,cursor,last_ts,state,published_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(source,'rest',pair,60,URL,now,len(rows),rows[-1][0],'complete',now))
+                    self.memory._insert(db,source,pair,60,now,rows)
+                    db.execute("UPDATE gap_jobs SET state='complete',source_id=? WHERE id=?",(source,key))
+        if not valid:raise MemoryUnavailable('trade-derived observations do not match independent candles')
         with closing(sqlite3.connect(self.memory.db)) as db:
             db.row_factory=sqlite3.Row;return dict(db.execute('SELECT * FROM gap_jobs WHERE id=?',(key,)).fetchone())

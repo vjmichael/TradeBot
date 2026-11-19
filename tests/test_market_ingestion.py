@@ -225,6 +225,18 @@ class BridgeTests(unittest.TestCase):
             state=db.execute('SELECT cursor,pages,state FROM gap_jobs WHERE id=?',(first['id'],)).fetchone()
             self.assertEqual(tuple(state),(first['cursor'],1,'recovering'))
         self.assertEqual(self.mem.query('BTC/USD',60,self.start,self.end,NOW)['coverage'],0)
+    def test_concurrent_conflicting_interior_observation_rejects_publication(self):
+        first=self.run_page(self.page([T,self.start],[11,12]))
+        snapshot=rest('BTC/USD',[self.start],self.start+3600)
+        snapshot['candles'][0][1:5]=['101']*4
+        self.mem.record_recent('BTC/USD',60,snapshot,now=NOW)
+        with self.assertRaises(MemoryUnavailable):self.run_page(self.page([self.end,T+3*3600],[13,14]))
+        with self.mem.tx() as db:
+            row=db.execute('SELECT state,source_id FROM gap_jobs WHERE id=?',(first['id'],)).fetchone()
+            self.assertEqual(tuple(row),('rejected',None))
+        view=self.mem.query('BTC/USD',60,self.start,self.end,NOW)
+        self.assertEqual((view['coverage'],view['conflicts']),(1,0))
+        self.assertEqual(view['rows'][0]['o'],'101')
     def test_bad_anchor_never_publishes(self):
         p=self.page([T,self.start,self.end,T+3*3600],[11,12,13,14],['99','100','100','100'])
         with self.assertRaises(MemoryUnavailable):self.b.run('BTC/USD',self.start,self.end,fetch=lambda *_:p,clock=lambda:NOW)

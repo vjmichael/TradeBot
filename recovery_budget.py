@@ -13,8 +13,8 @@ from gap_schedule import repair_due
 WINDOW_MS=3600000
 MIN_SPACING_MS=1250
 HOURLY_LIMIT=480
-BACKGROUND_PAGES=16
-BACKGROUND_TOTAL=48
+BACKGROUND_PAGES=32
+BACKGROUND_TOTAL=96
 
 def _schema(db):
     db.execute('CREATE TABLE IF NOT EXISTS recovery_admission(id INTEGER PRIMARY KEY AUTOINCREMENT,pair TEXT NOT NULL,requested_ms INTEGER NOT NULL)')
@@ -95,13 +95,15 @@ def recovery_budget_status(memory,now_ms=None):
 
 def recover_batch(memory,reports,*,scope_check=lambda:None,max_pages=BACKGROUND_PAGES,total_pages=BACKGROUND_TOTAL):
     budget=RecoveryBudget(memory)
+    state=recovery_budget_status(memory)
+    if state['state'] in ('exchange_cooldown','paced','clock_review'):return []
     class BudgetedBridge:
         def run(self,pair,start,end,**kwargs):
             # Guard again after shared pacing; if scope changes, the reserved
             # request remains charged and no request leaves the process.
             def admit(p):
                 scope_check();budget.reserve(p);scope_check()
-            try:return GapBridge(memory).run(pair,start,end,before_page=admit,**kwargs)
+            try:return GapBridge(memory).run(pair,start,end,before_page=admit,pace=lambda _:None,**kwargs)
             except RecoveryThrottled as exc:
                 budget.throttle(exc.retry_after)
                 raise

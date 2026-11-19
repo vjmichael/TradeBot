@@ -110,3 +110,16 @@ class RecoveryBudgetTests(unittest.TestCase):
         self.assertGreaterEqual(result['latest']['recovery_copies']['logical_bytes'],8192)
         self.assertGreaterEqual(result['windows'][0]['recovery_allocated_delta'],8192)
         self.assertEqual(result['windows'][0]['missed_nominal_slots'],1)
+
+    def test_verified_checkpoint_resumes_early_but_new_markets_rotate(self):
+        calls=[]
+        class Bridge:
+            def run(self,pair,start,end,**kwargs):
+                calls.append(pair);return {'state':'recovering','pages':1,'cursor':'12'}
+        reports=[{'pair':p,'ranges':[{'start':3600,'end':7200,'reason':'verified_boundary_gap','recovery':'checkpoint_saved'}]} for p in SYMBOLS]
+        for offset in (0,1,2):
+            repair_due(self.memory,reports,now=100000+offset,bridge=Bridge(),max_pages=1,total_pages=1,prefer_checkpoint=True)
+        self.assertEqual(calls,list(SYMBOLS))
+        self.assertEqual(repair_due(self.memory,reports,now=100029,bridge=Bridge(),max_pages=1,total_pages=1,prefer_checkpoint=True),[])
+        repair_due(MarketMemory(self.root),reports,now=100030,bridge=Bridge(),max_pages=1,total_pages=1,prefer_checkpoint=True)
+        self.assertEqual(calls[-1],list(SYMBOLS)[0])

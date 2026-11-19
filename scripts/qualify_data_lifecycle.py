@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from data_preparation import Preparation
 from data_lifecycle import backup,restore,coverage
-from historical_readiness import historical_report
+from historical_readiness import historical_report,recovery_inventory
 from market_memory import MarketMemory
 from market_lake import HistoricalLake
 from market_stream import StreamJournal
@@ -36,12 +36,16 @@ def main():
             m=MarketMemory(directory);lake=HistoricalLake(m);e=EconomicMemory(directory)
             v=coverage(m);assert not v['training_ready'] and all(r['coverage']>40000 and r['conflicts']==0 for r in v['markets'])
             print('RECEIPT: actual graphical preparation worker; '+str(v['markets']),flush=True)
+            inventory=recovery_inventory(m,as_of=v['as_of']);assert len(inventory)==len(SYMBOLS)
             for pair in SYMBOLS:
                 report=historical_report(m,e,pair,as_of=v['as_of'])
                 expected=next(r for r in v['markets'] if r['pair']==pair)
                 assert (report['coverage'],report['missing'],report['conflicts'])==(expected['coverage'],expected['missing'],expected['conflicts'])
                 assert sum(n for label,n in report['classification_hours'].items() if label!='conflicting_trade_counts')==report['missing']
                 assert report['archive_retention']['integrity'].get('verified',0)>0 and not report['training_ready']
+                inv=next(r for r in inventory if r['pair']==pair)
+                assert inv['missing']==report['missing'] and inv['eligible_hours']==report['qualification']['eligible_recovery_hours']
+                assert all(x['end']-x['start']<=MAX_SPAN for x in inv['ranges'])
                 print('RECEIPT: classified full historical review',pair,report['classification_hours'],report['archive_retention'],flush=True)
             controller.start('collect');deadline=time.monotonic()+90
             while time.monotonic()<deadline:
@@ -72,18 +76,18 @@ def main():
             # Exercise the production budget across two genuine large gaps.
             reports=[]
             for asset in ('BTC/USD','ETH/USD'):
-                source=next(r for r in StreamJournal(m).gap_reports() if r['pair']==asset)
-                targets=[r for r in source['ranges'] if r['reason']=='outside_rest_window' and 48*3600<=r['end']-r['start']<=MAX_SPAN]
+                source=next(r for r in recovery_inventory(m) if r['pair']==asset)
+                targets=[r for r in source['ranges'] if r['reason']=='verified_boundary_gap' and 48*3600<=r['end']-r['start']<=MAX_SPAN]
                 assert targets,asset
                 reports.append({'pair':asset,'ranges':[max(targets,key=lambda r:r['end']-r['start'])]})
             before=recovery_budget_status(m)['total_requests']
-            actual=recover_batch(m,reports,max_pages=2,total_pages=4)
-            assert len(actual)==2 and all(r['outcome']=='checkpointed' and r['pages']==2 for r in actual),actual
+            actual=recover_batch(m,reports,max_pages=12,total_pages=24)
+            assert len(actual)==2 and all(r['outcome']=='checkpointed' and r['pages']==12 for r in actual),actual
             budget=recovery_budget_status(MarketMemory(directory))
-            assert budget['total_requests']==before+4,budget
+            assert budget['total_requests']==before+24,budget
             for r in actual:
                 assert m.query(r['pair'],60,r['start'],r['end'],int(time.time()))['coverage']==0
-            print('RECEIPT: genuine two-market extended recovery under shared four-request budget; restart preserves counts and both durable cursors; no incomplete candles published',actual,budget,flush=True)
+            print('RECEIPT: genuine two-market extended recovery under shared 24-request budget; restart preserves counts and both durable cursors; no incomplete candles published',actual,budget,flush=True)
             receipt=backup(directory,root/'snapshot');restore(root/'snapshot',root/'restored',receipt['manifest_sha256'])
             restored=MarketMemory(root/'restored');restored_lake=HistoricalLake(restored);restored_e=EconomicMemory(root/'restored')
             now=int(time.time());end=now//3600*3600
