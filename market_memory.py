@@ -162,7 +162,7 @@ PRAGMA user_version=1;'''
             inserted += db.execute('INSERT OR IGNORE INTO candles VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (pair, interval, stamp, digest, source, observed_at, o,h,l,c,v,trades)).rowcount
         return inserted
 
-    def import_archive(self, path, pair, interval, sha256, *, fixture=False, now=None, max_batches=None):
+    def import_archive(self, path, pair, interval, sha256, *, fixture=False, now=None, max_batches=None, provenance=None):
         """Developer/operator-staged official CSV, not an automated downloader.
 
         Verify checksum; bind filename + source identity; copy into private
@@ -178,6 +178,14 @@ PRAGMA user_version=1;'''
         if sha256_file(path) != sha256:
             raise ValueError('archive checksum mismatch')
         kind = 'fixture' if fixture else 'archive'
+        if provenance is not None:
+            if not isinstance(provenance,dict) or provenance.get('validation') not in ({'fixture'} if fixture else {'publisher_full_sha256','https_range_member_crc32'}) or provenance.get('csv_sha256')!=sha256 or provenance.get('pair')!=pair or provenance.get('interval')!=interval or len(json.dumps(provenance))>32768:
+                raise ValueError('invalid archive provenance')
+        def publish_receipt(db,entry):
+            if provenance is None:return
+            receipt=provenance|{'source_id':entry['id'],'rows':entry['cursor'],'end':entry['last_ts']}
+            db.execute('CREATE TABLE IF NOT EXISTS archive_receipts(source_id TEXT,validation TEXT,metadata TEXT NOT NULL,PRIMARY KEY(source_id,validation))')
+            db.execute('INSERT OR IGNORE INTO archive_receipts VALUES(?,?,?)',(entry['id'],receipt['validation'],json.dumps(receipt,sort_keys=True)))
         source = hashlib.sha256(f'{kind}:{pair}:{interval}:{sha256}'.encode()).hexdigest()
         staging = self.root / f'{source}.csv'
         clock_override = now
@@ -186,6 +194,7 @@ PRAGMA user_version=1;'''
         with self.tx() as db:
             entry = db.execute('SELECT * FROM sources WHERE id=?', (source,)).fetchone()
             if entry and entry['state'] == 'complete':
+                publish_receipt(db,entry)
                 return dict(entry)
             if entry and entry['state'] != 'importing':
                 raise MemoryUnavailable('archive rejected; use independently verified replacement')
@@ -229,6 +238,9 @@ PRAGMA user_version=1;'''
                 if sha256_file(staging) != sha256: raise ValueError('archive integrity failure')
                 with self.tx() as db:
                     db.execute('UPDATE sources SET state=\'complete\',published_at=? WHERE id=? AND cursor=? AND state=\'importing\'', (max(int(time.time()) if clock_override is None else clock_override, observed),source, offset))
+                    entry=db.execute('SELECT * FROM sources WHERE id=?',(source,)).fetchone()
+                    if entry['state']!='complete':raise MemoryUnavailable('source publication failed')
+                    publish_receipt(db,entry)
         except (ValueError, UnicodeError, csv.Error):
             with self.tx() as db:
                 db.execute('UPDATE sources SET state=\'invalid\' WHERE id=? AND state=\'importing\' AND cursor=?', (source, offset))
@@ -250,9 +262,9 @@ PRAGMA user_version=1;'''
             raise ValueError('invalid observed candle count')
         rows = []
         for row in raw:
-            if not isinstance(row,list) or len(row) != 6 or type(row[0]) is not int or row[0] % 1000:
+            if not isinstance(row,list) or len(row) not in (6, 7) or type(row[0]) is not int or row[0] % 1000:
                 raise ValueError('invalid observed candle')
-            rows.append(normalize([row[0]//1000,*row[1:],None],interval,observed))
+            rows.append(normalize([row[0]//1000,*row[1:6],row[6] if len(row)==7 else None],interval,observed))
         if any(a[0]>=b[0] for a,b in zip(rows,rows[1:])) or observed-rows[-1][0]>step*2:
             raise ValueError('stale or reordered observation')
         key = hashlib.sha256(json.dumps([pair,interval,observed,rows],separators=(',',':')).encode()).hexdigest()

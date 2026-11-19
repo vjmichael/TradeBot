@@ -1,2 +1,5 @@
 # TB-04A native analytics dependency; no LLM or network data dependency.
 duckdb==1.4.4
+
+# Native public Kraken streaming client; no API credentials required.
+websockets==16.0
