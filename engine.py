@@ -7,7 +7,9 @@ from typing import Literal
 
 import httpx
 
-IMAGE = "ghcr.io/freqtrade/freqtrade@sha256:8ab9efee447bedb5b9e31eeaaca0b11252168d6d86c57404c3494d5b43f5538c"
+# Pin the published Linux/amd64 child manifest, not the broken GHCR index.
+IMAGE = "docker.io/freqtradeorg/freqtrade@sha256:deb1853f454761058b75251d4b5d6f6ce441bb89d248c6578d7c0bfee1a6f6c8"
+PLATFORM = "linux/amd64"
 SYMBOLS = {"BTC/USD": ("XBTUSD", "XXBTZUSD"), "ETH/USD": ("ETHUSD", "XETHZUSD"), "SOL/USD": ("SOLUSD", "SOLUSD")}
 INTERVALS = (5, 15, 60, 240, 1440)
 

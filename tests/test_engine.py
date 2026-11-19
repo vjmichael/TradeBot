@@ -6,7 +6,7 @@ from unittest.mock import patch
 import httpx
 from fastapi.testclient import TestClient
 
-from engine import IMAGE, MarketUnavailable, candles, paper_config, write_config
+from engine import IMAGE, PLATFORM, MarketUnavailable, candles, paper_config, write_config
 from tradebot import InstanceSpec, create_app
 
 NOW = 18000
@@ -60,6 +60,14 @@ class EngineTests(unittest.TestCase):
         p["result"]["XXBTZUSD"][0][0] = 7200
         with client(p) as c:
             self.assertEqual(candles("BTC/USD", client=c, now=NOW)["gap_count"], 1)
+
+    def test_runtime_image_pin(self):
+        self.assertEqual(PLATFORM, "linux/amd64")
+        self.assertEqual(IMAGE, "docker.io/freqtradeorg/freqtrade@sha256:deb1853f454761058b75251d4b5d6f6ce441bb89d248c6578d7c0bfee1a6f6c8")
+        from scripts.qualify_engine import docker
+        args = docker(Path("/tmp/tb-test"), "tb-test", ["--version"])
+        self.assertEqual(args[args.index("--platform") + 1], PLATFORM)
+        self.assertIn(IMAGE, args)
 
     def test_safe_config(self):
         spec = InstanceSpec(name="Test", pair="SOL/USD", virtual_cents=12500)

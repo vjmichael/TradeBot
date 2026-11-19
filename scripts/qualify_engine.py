@@ -13,14 +13,14 @@ from uuid import uuid4
 from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from engine import IMAGE, candles, write_config
+from engine import IMAGE, PLATFORM, candles, write_config
 from tradebot import InstanceSpec, PAIRS
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def docker(work, name, args):
-    return ["docker", "run", "--rm", "--name", name, "--user", f"{os.getuid()}:{os.getgid()}",
+    return ["docker", "run", "--rm", "--platform", PLATFORM, "--name", name, "--user", f"{os.getuid()}:{os.getgid()}",
             "--cap-drop=ALL", "--security-opt=no-new-privileges", "--cpus=2", "--memory=3g", "--pids-limit=256",
             "--env", "HOME=/tmp", "--mount", f"type=bind,source={work},target=/work", IMAGE, *args]
 
@@ -108,7 +108,7 @@ def backtest(work):
 
 
 def main():
-    subprocess.run(["docker", "pull", IMAGE], check=True, timeout=600)
+    subprocess.run(["docker", "pull", "--platform", PLATFORM, IMAGE], check=True, timeout=600)
     for pair in PAIRS:
         snapshot = candles(pair)
         print(f"RECEIPT: Kraken public {pair}: {len(snapshot['candles'])} closed candles, {snapshot['gap_count']} gaps")
