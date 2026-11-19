@@ -1,6 +1,6 @@
 # Master development ledger
 
-No automatic progression to real money. Design v0.7 plus the binding [v0.8 addendum](design-v0.8-addendum.md) and [decisions.md](decisions.md) govern every group. Acceptance must demonstrate behavior, not just source presence. Consolidate tests per task group. No live keys in CI; no paid resources without authorization.
+No automatic progression to real money. Design v0.7 plus the binding [v0.8 addendum](design-v0.8-addendum.md) the binding [TB-FIN-01 financial protection amendment](tb-fin-01.md), and [decisions.md](decisions.md) govern every group. Acceptance must demonstrate behavior, not just source presence. Consolidate tests per task group. No live keys in CI; no paid resources without authorization.
 
 | ID | Scope / acceptance | State |
 |---|---|---|
@@ -10,14 +10,26 @@ No automatic progression to real money. Design v0.7 plus the binding [v0.8 adden
 | TB-04 | AI-independent shared ingestion: actual historical backfill (5+ years where available), public incremental market streams, provenance/coverage/gaps, SQLite + partitioned Parquet + DuckDB query layer, resumable deduplication, storage/retention, deterministic 24-hour/168-bin per-asset session and volatility/liquidity profiles, dashboard heatmap, zero-Grok acceptance | TB-04A candidate: bounded OHLCVT import/restart, SQLite ingress/revision catalog, public REST polling, provenance/as-of queries, deterministic 24/168-bin activity profiles, GUI and provider-free plans; TB-04A accepted at 22e6b12f: all four workflows passed (foundation 44467214345, browser 44467214348, native engine 44467214415, native memory 44467214375). Native memory verified 720 actual closed hourly public candles per pair, 168 session bins and checksum-verified Parquet round-trips. Library DuckDB 1.4.4 wheel installed offline locally; 39/39 local tests passed, no skips, exact 11-source blob hashes matched. TB-04B candidate: official fixed-origin split archive acquisition (selective HTTPS range + member CRC/CSV SHA; optional complete downloaded part/full publisher SHA validation), closed-candle WebSocket/REST reconciliation, durable gap reports and checkpointed trade recovery with independent anchor checks. 54/54 local tests including native loopback WS + DuckDB; Exact-head 42cb7c4d native ingestion run 44469696481: actual archive and WS jobs passed; archive five-year window BTC 43779/43800, ETH 43778/43800, SOL 43777/43800; recent bridge still 483/484/485 missing hours including historical no-trade gaps. Trade bridge failed on overlapping/reordered public trade pages; TB-04B R1 open, no fabricated fill. TB-04C candidate: daily fine-resolution / UTC 30-day coarse immutable revision partitions, transactional epoch invalidation, bounded checksum-verified DuckDB and SQLite tail queries, disk policy/read-only storage UI, retention pins and crash orphan recovery. 63/63 local tests and offline Chromium fixture pass. Native synthetic 43800-hour/62-partition benchmark passed exact journal/reopen equivalence; native real-observation partition acceptance pending. TB-04B R1, complete historical coverage, sustained collector, macro/evidence, spread/depth/cost, whole-store backup/restore and raw source retention/quotas, measured readiness remain open. |
 | TB-05 | Optional Grok specialist; shared 1–3 sessions/day (default two, third material-event slot), DST-aware market-session schedule, global capped budget/reservations, typed evidence and proposals, cache and outage/expiry tests | Pending |
 | TB-06 | Numerical-only FreqAI/LightGBM first; session-aware features and no-session-filter ablation; rules vs numerical vs fundamental-enhanced cohorts; chronological purged splits, leakage controls, frozen all-cost replay | Pending |
-| TB-07 | Independent deterministic Gate, intent ledger, idempotent reconciliation, ownership, exposure limits, AI-independent protection and strategy-specific freshness, no AI execution authority; non-money drills | Pending |
-| TB-08 | Multi-instance shared data and research budget, isolated rules/numerical/fundamental paper portfolios, allocation/reservations, preparation lifecycle, paper switch with separate live confirmation and protected exits | Pending |
+| TB-07 | Independent deterministic Gate, intent ledger, idempotent reconciliation, ownership, exposure limits, AI-independent protection and strategy-specific freshness, no AI execution authority; TB-FIN-01B/C ledger and protected-reserve exclusion; non-money drills | Pending |
+| TB-08 | Multi-instance shared data and research budget, isolated rules/numerical/fundamental paper portfolios, allocation/reservations, preparation lifecycle, paper switch with separate live confirmation and protected exits; TB-FIN-01A/C/D/E financial goals, human-controlled reserve release and paper verification | Pending |
 | TB-09 | Central Telegram Desk, external Recovery bot, allowlisted chats, test messages, durable controls and secondary email | Pending |
 | TB-10 | Signed one-click DigitalOcean Linux VPS deployment with measured storage sizing, disk monitoring and consistent SQLite/Parquet/model restore, private APIs, HTTPS, external heartbeat/recovery, backups, upgrade/rollback; graphical fresh-host acceptance | Pending |
 | TB-11 | Consolidated functional/security and failure drills per design section 9 and v0.8; AI-absence, session/timezone and budget cap tests; real venue eligibility and stop/ownership qualification; 24h laptop-off check | Pending |
 | TB-12 | At least seven consecutive days real-time simulated trading after historical readiness; freeze evaluation and extend as needed, no automatic live promotion | Pending |
 
 The design's Phase 0 secure deployment gate precedes operational Phase 1 research and Phase 2 paper-loop acceptance. Code development of later modules does not waive that gate. Two-week research-quality evaluation and longer frozen forward tests remain required. Live canary is a separate explicitly authorized future decision, never a task completion side effect.
+
+## Financial protection subtasks (binding; mapped into core release)
+
+| ID | Scope | State |
+|---|---|---|
+| TB-FIN-01A | Daily USD and normalized return points, household/monthly targets, calendar/DST, planning-only goal progress | Pending — TB-08 UI |
+| TB-FIN-01B | Decimal durable balanced fill/fee/settlement/transfer ledger, unique events, corrections, reconciliation | Pending — TB-07 |
+| TB-FIN-01C | Immediate default profit protection, no automatic reinvestment, amount-specific authenticated approval, reserve isolation | Pending — TB-07/08 |
+| TB-FIN-01D | Paper acceptance: gain/loss/fee/partial fills, no double allocation, daily baseline, failure/restart, stale approval, optional entry pause | Pending — TB-08/11/12 |
+| TB-FIN-01E | Financial reports, reserve UI, verified security/custody/backup and gated live integration | Pending — TB-08/09/10/11/12 |
+
+TB-04B-R1 and TB-04C acceptance remain the immediate work. All financial subtasks require evidence; no change to live authority.
 
 ## Deferred research (not part of TB-01–TB-12)
 

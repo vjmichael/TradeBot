@@ -1,6 +1,6 @@
 # TradeBot
 
-A 24/7 cloud trading desk based on [design v0.7](docs/design-v0.7.md), the binding [v0.8 design addendum](docs/design-v0.8-addendum.md) and [implementation decisions](docs/decisions.md). See the [task ledger](docs/tasks.md).
+A 24/7 cloud trading desk based on [design v0.7](docs/design-v0.7.md), the binding [v0.8 design addendum](docs/design-v0.8-addendum.md) and [implementation decisions](docs/decisions.md). See the [task ledger](docs/tasks.md) and [financial goals and profit protection amendment](docs/tb-fin-01.md).
 
 **TB-03 and TB-04A accepted; TB-04B archive and stream passed, gap bridge repair pending; TB-04C partition storage candidate. Paper-only, paused on startup. TB-02 native engine mechanism accepted; the dashboard does not start or control a connected worker, and no deployed services or real order capability exist.** The localhost API requires a developer-supplied admin token. Do not expose it publicly or enter production credentials; production HTTPS, first-administrator authentication, provider verification and deployment are still release gates.
 
