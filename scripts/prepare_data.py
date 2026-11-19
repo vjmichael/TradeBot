@@ -14,6 +14,7 @@ from market_quality import QualityMemory
 from gap_schedule import repair_due
 from market_lake import HistoricalLake
 from economic_memory import EconomicMemory,SOURCES
+from storage_management import run as run_maintenance
 
 
 def run(directory,mode,job):
@@ -28,7 +29,10 @@ def run(directory,mode,job):
             try:e.collect(source)
             except Exception:failed=True
         return not failed
-    if mode=='prepare':
+    if mode in ('backup','preview-retention','retire'):
+        mark({'backup':'creating_recovery_copy','preview-retention':'reviewing_old_samples','retire':'retiring_reviewed_samples'}[mode])
+        run_maintenance(directory,mode,job)
+    elif mode=='prepare':
         mark('historical_archive')
         with public_client() as client:
             remote=RemoteParts(client)

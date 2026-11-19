@@ -1,0 +1,26 @@
+[Unit]
+Description=Maj Vaj Trade Bot public market data supervisor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=maj-vaj
+Group=maj-vaj
+WorkingDirectory=/opt/maj-vaj
+ExecStart=/opt/maj-vaj/venv/bin/python /opt/maj-vaj/scripts/schedule_data.py /var/lib/maj-vaj/data run
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=25s
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/maj-vaj
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

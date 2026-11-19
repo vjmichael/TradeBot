@@ -75,3 +75,7 @@ Approved public name: Maj Vaj Trade Bot (formerly TradeBot). Rename displayed ap
 ## TB-R01 independent data discovery research
 
 Document [Cognitum experiments](cognitum-research.md) for after Maj Vaj core acceptance: trading-data mining, learned representations/derived features, historical replay, isolated crypto or equity simulated venues. One-way/read-only data custody; independent virtual portfolios and risk limits, no Maj Vaj control, no production writes or live keys/orders. Generated data stays labeled as derived/synthetic. Separate authorization required before implementation; no changes to core sequence, forward paper gate or financial authority.
+
+## TB-04F2B scheduling and graphical storage boundary
+
+Saved data-collection consent is distinct from measured service health; authenticate explicit opt-in/out, independently observe scheduler lease/heartbeat, serialize manual and scheduled admissions. Ship fixed hardened systemd service template, no automatic installation or paid VPS. Add durable progress without relaxing independent full-range gap publication checks. Graphical local data-only backup with four-copy admission cap, exact reviewed old sampled-book selection bound to verified copy, confirm/revalidate before cleanup; never delete original candles, auto-remove backups or overwrite production. Full extended recovery, actual systemd acceptance, sustained whole-store capacity and protected offsite recovery remain gates.

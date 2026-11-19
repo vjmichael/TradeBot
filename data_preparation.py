@@ -5,6 +5,7 @@ try:
 except ImportError:  # Linux worker custody; other hosts retain read-only dashboard.
     fcntl=None
 import os
+import re
 import signal
 import sqlite3
 import subprocess
@@ -17,7 +18,7 @@ from uuid import uuid4
 
 from market_memory import MemoryUnavailable
 
-MODES=('prepare','repair','collect')
+MODES=('prepare','repair','collect','backup','preview-retention','retire')
 SCRIPT=Path(__file__).resolve().parent/'scripts'/'prepare_data.py'
 
 
@@ -46,6 +47,8 @@ class Preparation:
         self.lock=threading.RLock();self.child=None;self.job=None;self.stopping=False;self.closed=False
         with closing(_db(self.root)) as db,db:
             db.execute('CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,mode TEXT,state TEXT,stage TEXT,started INTEGER,updated INTEGER)')
+            db.execute('CREATE TABLE IF NOT EXISTS job_options(job TEXT PRIMARY KEY,preview_id TEXT)')
+            db.execute('CREATE TABLE IF NOT EXISTS maintenance_results(job TEXT PRIMARY KEY,result TEXT NOT NULL)')
         os.chmod(self.root/'jobs.sqlite3',0o600)
 
     def _lease(self):
@@ -69,8 +72,11 @@ class Preparation:
                 row=db.execute('SELECT * FROM jobs ORDER BY rowid DESC LIMIT 1').fetchone()
             return dict(row) if row else {'state':'idle','mode':None,'stage':None}
 
-    def start(self,mode):
+    def start(self,mode,*,preview_id=None):
         if mode not in MODES:raise ValueError('invalid preparation operation')
+        if mode=='retire':
+            if not isinstance(preview_id,str) or not re.fullmatch(r'[0-9a-f]{32}',preview_id):raise ValueError('cleanup review required')
+        elif preview_id is not None:raise ValueError('unexpected cleanup review')
         if fcntl is None or not sys.platform.startswith('linux'):raise MemoryUnavailable('Linux data worker unavailable')
         with self.lock:
             if self.closed:raise MemoryUnavailable('data job controller closed')
@@ -83,6 +89,7 @@ class Preparation:
                 with closing(_db(self.root)) as db,db:
                     if db.execute('SELECT count(*) FROM jobs').fetchone()[0]>=10000:raise MemoryUnavailable('data job history limit reached')
                     db.execute('INSERT INTO jobs VALUES(?,?,?,?,?,?)',(job,mode,'running','starting',now,now))
+                    if preview_id is not None:db.execute('INSERT INTO job_options VALUES(?,?)',(job,preview_id))
                 # No inherited API credentials, shell, arbitrary command, or client-provided paths.
                 env={'PATH':os.defpath,'LANG':'C.UTF-8','PYTHONUNBUFFERED':'1'}
                 self.child=subprocess.Popen([sys.executable,str(SCRIPT),str(self.directory),mode,job,str(os.getpid()),str(fd)],env=env,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,pass_fds=(fd,),start_new_session=True)

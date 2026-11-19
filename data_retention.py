@@ -1,6 +1,8 @@
 """Explicit bounded retirement of old sampled books after verified recovery copy.
 No source candle, economic record, model, or credential removal.
 """
+import hashlib
+import json
 import tempfile
 import time
 import sqlite3
@@ -14,7 +16,7 @@ from data_lifecycle import restore
 MIN_AGE=30*86400
 MAX_BATCH=1000
 
-def retire_books(directory,snapshot,digest,*,apply=False,limit=MAX_BATCH,now=None):
+def retire_books(directory,snapshot,digest,*,apply=False,limit=MAX_BATCH,now=None,expected_selection=None):
     if type(limit) is not int or not 1<=limit<=MAX_BATCH or type(apply) is not bool:raise ValueError('invalid retention bounds')
     now=int(time.time()) if now is None else now
     if type(now) is not int or now<=MIN_AGE:raise ValueError('invalid retention time')
@@ -34,8 +36,11 @@ def retire_books(directory,snapshot,digest,*,apply=False,limit=MAX_BATCH,now=Non
                 # Also preserve the latest successful observation of each pair.
                 if b is not None and b['slot']==db.execute('SELECT MAX(slot) FROM quality_books WHERE pair=?',(a['pair'],)).fetchone()[0]:continue
                 victims.append((key,b is not None))
+            selection=hashlib.sha256(json.dumps([digest,now-MIN_AGE,victims],separators=(',',':')).encode()).hexdigest()
+            if expected_selection is not None and (not apply or selection!=expected_selection):
+                raise MemoryUnavailable('cleanup selection changed; review again')
             if apply:
                 db.execute('CREATE TABLE IF NOT EXISTS quality_retired(pair TEXT NOT NULL,slot INTEGER NOT NULL,had_book INTEGER NOT NULL,retired_at INTEGER NOT NULL,manifest_sha256 TEXT NOT NULL,PRIMARY KEY(pair,slot))')
                 for (pair,slot),had in victims:
                     db.execute('INSERT INTO quality_retired VALUES(?,?,?,?,?)',(pair,slot,int(had),now,digest));db.execute('DELETE FROM quality_books WHERE pair=? AND slot=?',(pair,slot));db.execute('DELETE FROM quality_attempts WHERE pair=? AND slot=?',(pair,slot))
-            return {'state':'retired' if apply else 'preview','attempts':len(victims),'books':sum(had for _,had in victims),'before':now-MIN_AGE,'manifest_sha256':digest}
+            return {'state':'retired' if apply else 'preview','attempts':len(victims),'books':sum(had for _,had in victims),'before':now-MIN_AGE,'manifest_sha256':digest,'selection_sha256':selection}

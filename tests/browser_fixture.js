@@ -11,10 +11,14 @@ window.fetch=async (path,request)=>{
   if(path==='/api/calendar')return response(f.calendar);
   if(path.startsWith('/api/economic/statistics?'))return response({state:'observed',rows:[{period:'2026-04',title:'Fixture unemployment rate',value:'4.2',unit:'percent',evidence_id:'fixture'}],next_offset:null});
   if(path.startsWith('/api/economic/monetary?'))return response({state:'unavailable',rows:[],next_offset:null});
-  if(path==='/api/data-preparation')return response({state:'review_required',training_ready:false,markets:[{pair:'BTC/USD',expected:43800,coverage:0,missing:43800,conflicts:0}],job:f.job||{state:'idle'},streams:[]});
+  if(path==='/api/data-preparation')return response({state:'review_required',training_ready:false,markets:[{pair:'BTC/USD',expected:43800,coverage:0,missing:43800,conflicts:0}],job:f.job||{state:'idle'},streams:[],schedule:f.schedule||{enabled:false,service:'stopped',next_repair:null},recovery:[]});
   if(path==='/api/data-preparation/collect'){f.job={id:'fixture',state:'running',mode:'collect',stage:'continuous_public_data'};return response(f.job);}
   if(path==='/api/data-preparation/cancel'){f.job={id:'fixture',state:'cancelled',mode:'collect',stage:'stopping'};return response(f.job);}
-  if(path==='/api/market-storage')return response({market_memory_bytes:10485760,free_bytes:10737418240,state:'available',staging_retained:true});
+  if(path==='/api/data-schedule'){f.schedule={enabled:body.enabled,service:'stopped',next_repair:body.enabled?1795080000:null};return response(f.schedule);}
+  if(path==='/api/data-maintenance/backup'){f.maintenance={copies:1,max_copies:4,latest_backup:{id:'fixture',bytes:10485760,cutoff:1795075000},cleanup_preview:null,last_cleanup:null};f.job={id:'fixture-backup',state:'complete',mode:'backup'};return response(f.job);}
+  if(path==='/api/data-maintenance/preview-retention'){f.maintenance.cleanup_preview={id:'0123456789abcdef0123456789abcdef',attempts:2,books:1};f.job={id:'fixture-preview',state:'complete',mode:'preview-retention'};return response(f.job);}
+  if(path==='/api/data-maintenance/retire'){if(body.preview_id!==f.maintenance.cleanup_preview.id)return response({detail:'Review cleanup first'},409);f.maintenance.last_cleanup={books:1};f.maintenance.cleanup_preview=null;f.job={id:'fixture-retired',state:'complete',mode:'retire'};return response(f.job);}
+  if(path==='/api/market-storage')return response({market_memory_bytes:10485760,free_bytes:10737418240,state:'available',staging_retained:true,maintenance:f.maintenance||{copies:0,max_copies:4,latest_backup:null,cleanup_preview:null,last_cleanup:null}});
   if(path.startsWith('/api/markets/BTC/quality?'))return response({pair:'BTC/USD',rv_hours:0,expected_hours:72,book_samples:0,expected_books:864,bins:[],latest:null});
   if(path.startsWith('/api/markets/BTC/session-profile?'))return response({pair:'BTC/USD',coverage:0,expected:2160,missing:2160,conflicts:0,bins:[],state:'awaiting_history'});
   if(path==='/api/setup/credentials'){

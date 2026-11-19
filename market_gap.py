@@ -11,6 +11,7 @@ import time
 from contextlib import closing
 from decimal import Decimal, localcontext
 import sqlite3
+import shutil
 
 import httpx
 from engine import SYMBOLS, PUBLIC_HEADERS
@@ -23,6 +24,8 @@ STEP=3600
 MAX_SPAN=31*86400
 MAX_PAGES=256
 TAIL_LIMIT=1000
+MIN_FREE_BYTES=256*1024**2
+MAX_JOB_PAGES=200000
 
 
 def fetch_page(pair,cursor):
@@ -126,6 +129,8 @@ class GapBridge:
                 if job['state']=='complete':return job
                 if job['state']=='rejected':raise MemoryUnavailable('trade recovery rejected; independent review needed')
                 if job['state']=='ready':return self.publish(key,pair,start,end,first,last,int(clock()))
+                if job['pages']>=MAX_JOB_PAGES or shutil.disk_usage(self.memory.root).free<MIN_FREE_BYTES:
+                    raise MemoryUnavailable('trade recovery storage or page budget reached; checkpoint retained')
                 cursor=int(job['cursor']); nxt,rows=parse_page(pair,cursor,fetch(pair,cursor)); observed=int(clock())
                 if rows[0][0]<(start-STEP)*NS or rows[-1][0]>observed*NS+NS:raise ValueError('trade response outside observation boundary')
                 prior_id=job['last_trade'];prior_stamp=int(job['last_stamp'])

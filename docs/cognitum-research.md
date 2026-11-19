@@ -19,3 +19,7 @@ One-way data export or read-only scoped access from Maj Vaj to Cognitum; separat
 ## Relationship to core Maj Vaj
 
 Historical acquisition and feature preparation allow local numerical model bootstrap without waiting seven days merely to collect basic historical candles. TB-12 still requires genuine seven-day minimum forward paper evaluation; neither retrospective history nor a simulator substitutes for it. No claim of superiority over AI_Pirate or any particular trading system without controlled comparative evidence. Freqtrade remains the execution engine, FreqAI the numerical-learning component, optional Grok the contextual research specialist, independent deterministic Gate the authority. Cognitum is a later independent research consumer.
+
+## Study-only research priority
+
+The motivating question was whether Cognitum could learn to trade; study-only research is valuable on its own. Begin with TB-R01A read-only market data mining and mathematical learning, where no order intent or trading agent is required. Simulated-market experiments in TB-R01B/C are optional later research, not prerequisites or permission to trade. Cognitum may discover relationships or create derived data without any trading capability. No production integration/control of Maj Vaj is authorized.

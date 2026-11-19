@@ -18,10 +18,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from engine import candles, MarketUnavailable
 from market_memory import MarketMemory, MemoryUnavailable, session_profile
 from market_lake import HistoricalLake
-from market_quality import QualityMemory
+from market_quality import QualityMemory, MAX_SAMPLES
 from economic_memory import EconomicMemory, CALENDAR, MACRO, FED
 from data_lifecycle import coverage
 from data_preparation import Preparation
+from data_scheduler import Schedule
+from gap_schedule import recovery_progress
+from storage_management import status as maintenance_status
 from market_stream import StreamJournal
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
@@ -53,6 +56,16 @@ class InstanceSpec(BaseModel):
 class PaperCapital(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     virtual_cap_cents: int = Field(ge=0, le=MAX_CENTS)
+
+
+class DataScheduleSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    enabled: bool
+
+
+class CleanupSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    preview_id: str = Field(pattern=r"^[0-9a-f]{32}$")
 
 
 class CredentialSetup(BaseModel):
@@ -222,10 +235,12 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         app.state.market_quality = QualityMemory(app.state.market_memory)
         app.state.economic_memory = EconomicMemory(directory)
         app.state.preparation = Preparation(directory)
+        app.state.schedule = Schedule(directory)
         try:
             yield
         finally:
             app.state.preparation.close()
+            app.state.schedule.close()
 
     market_lock = Lock()
     market_cache = {}
@@ -375,6 +390,8 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
             result = coverage(app.state.market_memory)
             result["job"] = app.state.preparation.status()
             result["streams"] = StreamJournal(app.state.market_memory).status()
+            result["schedule"] = app.state.schedule.public_status()
+            result["recovery"] = recovery_progress(app.state.market_memory)
             return result
         except (MemoryUnavailable, sqlite3.Error, OSError, ValueError):
             raise HTTPException(503, "Data preparation status unavailable") from None
@@ -382,14 +399,47 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     @app.post("/api/data-preparation/{mode}", dependencies=[Depends(authorize)])
     def start_data_preparation(mode: Literal["prepare", "repair", "collect", "cancel"]):
         try:
-            return app.state.preparation.cancel() if mode == "cancel" else app.state.preparation.start(mode)
+            with app.state.schedule.command():
+                if app.state.schedule.status()['enabled']:
+                    raise MemoryUnavailable('disable scheduled collection before manual commands')
+                return app.state.preparation.cancel() if mode == "cancel" else app.state.preparation.start(mode)
         except (MemoryUnavailable, sqlite3.Error, OSError, ValueError):
             raise HTTPException(409, "Data preparation operation unavailable") from None
+
+    @app.post("/api/data-schedule", dependencies=[Depends(authorize)])
+    def set_data_schedule(spec: DataScheduleSpec):
+        try:
+            schedule=app.state.schedule
+            schedule.enable(spec.enabled,require_idle=True)
+            return schedule.public_status()
+        except (MemoryUnavailable, sqlite3.Error, OSError, ValueError):
+            raise HTTPException(409, "Scheduled collection setting unavailable; stop manual work first") from None
+
+    def maintenance_start(mode, preview_id=None):
+        try:
+            with app.state.schedule.command():
+                if app.state.schedule.status()['enabled']:raise MemoryUnavailable('disable scheduled collection first')
+                if mode=='retire':
+                    preview=maintenance_status(directory)['cleanup_preview']
+                    if not preview or not preview['attempts'] or preview['id']!=preview_id:raise MemoryUnavailable('review cleanup first')
+                return app.state.preparation.start(mode,preview_id=preview_id)
+        except (MemoryUnavailable, sqlite3.Error, OSError, ValueError):
+            raise HTTPException(409, "Storage operation unavailable; stop collection and review current storage first") from None
+
+    @app.post("/api/data-maintenance/retire", dependencies=[Depends(authorize)])
+    def apply_cleanup(spec: CleanupSpec):
+        return maintenance_start('retire',spec.preview_id)
+
+    @app.post("/api/data-maintenance/{mode}", dependencies=[Depends(authorize)])
+    def start_data_maintenance(mode: Literal["backup", "preview-retention"]):
+        return maintenance_start(mode)
 
     @app.get("/api/market-storage", dependencies=[Depends(authorize)])
     def market_storage():
         try:
-            return app.state.market_lake.status()
+            with app.state.market_memory.tx() as db:
+                samples=db.execute('SELECT count(*) FROM quality_attempts').fetchone()[0]
+            return app.state.market_lake.status() | {"maintenance":maintenance_status(directory),"sample_receipts":samples,"sample_limit":MAX_SAMPLES}
         except (MemoryUnavailable, sqlite3.Error, OSError):
             raise HTTPException(503, "Historical storage status unavailable") from None
 

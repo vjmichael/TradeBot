@@ -17,6 +17,11 @@ on:
       - 'data_lifecycle.py'
       - 'data_preparation.py'
       - 'data_scheduler.py'
+      - 'storage_management.py'
+      - 'market_gap.py'
+      - 'tests/test_data_operations.py'
+      - 'deploy/maj-vaj-data.service'
+      - 'scripts/qualify_data_service.py'
       - 'gap_schedule.py'
       - 'data_retention.py'
       - 'scripts/schedule_data.py'
@@ -34,7 +39,7 @@ permissions:
 jobs:
   native-market-memory:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,3 +56,4 @@ jobs:
       - run: python scripts/qualify_market_quality.py
 
       - run: python scripts/qualify_data_lifecycle.py
+      - run: python scripts/qualify_data_service.py

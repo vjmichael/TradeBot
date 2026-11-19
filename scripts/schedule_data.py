@@ -15,7 +15,7 @@ def main():
             stop=threading.Event()
             for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.set())
             with s.lease():
-                while not stop.is_set():s.tick();stop.wait(2)
+                while not stop.is_set():s.heartbeat();s.tick();stop.wait(2)
         else:print(json.dumps(s.status() if a.action=='status' else s.enable(a.action=='enable'),sort_keys=True))
     finally:s.close()
 if __name__=='__main__':main()

@@ -11,6 +11,8 @@ from market_lake import HistoricalLake
 from market_stream import StreamJournal
 from economic_memory import EconomicMemory,SOURCES
 from engine import SYMBOLS
+from market_gap import GapBridge,MAX_SPAN
+from gap_schedule import repair_due,recovery_progress
 
 
 def wait(controller, timeout, predicate):
@@ -40,6 +42,24 @@ def main():
             else:raise RuntimeError('no genuine streaming updates for all markets')
             controller.cancel();wait(controller,20,lambda r:r['state']=='cancelled')
             print('RECEIPT: genuine continuous worker collected all three market updates and terminated under owner control',flush=True)
+            # Exercise the actual archive-to-REST gap, not a deliberately
+            # omitted recent candle or a fixture. Bound this native run to two
+            # four-page batches: progress is evidence, not full completion.
+            pair='SOL/USD';report=next(r for r in StreamJournal(m).gap_reports() if r['pair']==pair)
+            candidates=[r for r in report['ranges'] if r['reason']=='outside_rest_window' and 48*3600<=r['end']-r['start']<=MAX_SPAN]
+            if not candidates:raise RuntimeError('no eligible actual multi-day gap; review pinned archive and scope')
+            target=max(candidates,key=lambda r:r['end']-r['start']);start,end=target['start'],target['end']
+            initial=m.query(pair,60,start,end,int(time.time()));assert initial['coverage']==0 and initial['conflicts']==0
+            first=repair_due(m,[{'pair':pair,'ranges':[target]}],max_pages=4)[0]
+            assert first['outcome']=='checkpointed' and first['pages']==4,first
+            reopened=MarketMemory(directory);bridge=GapBridge(reopened)
+            second=bridge.run(pair,start,end,max_pages=4)
+            assert second['pages']==8 and int(second['cursor'])>int(first['cursor']) and second['state']=='recovering',second
+            with reopened.tx() as db:
+                pages=db.execute('SELECT old_cursor,new_cursor FROM gap_pages WHERE job=? ORDER BY page',(second['id'],)).fetchall()
+                assert len(pages)==8 and pages[4]['old_cursor']==first['cursor'] and all(a['new_cursor']==b['old_cursor'] for a,b in zip(pages,pages[1:]))
+            assert recovery_progress(reopened)[0]['pages']==8 and reopened.query(pair,60,start,end,int(time.time()))['coverage']==0
+            print(f'RECEIPT: actual SOL archive-to-REST gap {((end-start)//3600)} hours; eight durable public trade pages across two reopened batches, cursor advanced; no premature publication; remaining recovery unfinished',flush=True)
             receipt=backup(directory,root/'snapshot');restore(root/'snapshot',root/'restored',receipt['manifest_sha256'])
             restored=MarketMemory(root/'restored');restored_lake=HistoricalLake(restored);restored_e=EconomicMemory(root/'restored')
             now=int(time.time());end=now//3600*3600
