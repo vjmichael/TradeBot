@@ -3,6 +3,10 @@ on:
   push:
     paths:
       - 'market_memory.py'
+      - 'market_quality.py'
+      - 'scripts/ingest_quality.py'
+      - 'scripts/qualify_market_quality.py'
+      - 'tests/test_market_quality.py'
       - 'market_lake.py'
       - 'scripts/manage_history.py'
       - 'scripts/qualify_market_lake.py'
@@ -31,3 +35,5 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: python scripts/qualify_market_memory.py
       - run: python scripts/qualify_market_lake.py
+
+      - run: python scripts/qualify_market_quality.py

@@ -12,6 +12,7 @@ window.fetch=async (path,request)=>{
   if(path.startsWith('/api/economic/statistics?'))return response({state:'observed',rows:[{period:'2026-04',title:'Fixture unemployment rate',value:'4.2',unit:'percent',evidence_id:'fixture'}],next_offset:null});
   if(path.startsWith('/api/economic/monetary?'))return response({state:'unavailable',rows:[],next_offset:null});
   if(path==='/api/market-storage')return response({market_memory_bytes:10485760,free_bytes:10737418240,state:'available',staging_retained:true});
+  if(path.startsWith('/api/markets/BTC/quality?'))return response({pair:'BTC/USD',rv_hours:0,expected_hours:72,book_samples:0,expected_books:864,bins:[],latest:null});
   if(path.startsWith('/api/markets/BTC/session-profile?'))return response({pair:'BTC/USD',coverage:0,expected:2160,missing:2160,conflicts:0,bins:[],state:'awaiting_history'});
   if(path==='/api/setup/credentials'){
     for(const key of Object.keys(body))f.setup.credentials[key]='stored_unverified';

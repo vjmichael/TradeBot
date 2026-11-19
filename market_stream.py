@@ -27,11 +27,11 @@ RECONNECT=(5,10,20,40,60)
 
 def exact_closed(pair, interval=60, *, client=None, now=None):
     """Same qualified public endpoint, but retain exact source decimals/count."""
-    if pair not in SYMBOLS or interval!=60: raise ValueError('unsupported repair market')
+    if pair not in SYMBOLS or interval not in (5,60): raise ValueError('unsupported repair market')
     if client is None:
         with httpx.Client(timeout=12,follow_redirects=False,trust_env=False) as c:
             return exact_closed(pair,interval,client=c,now=now)
-    symbol,alias=SYMBOLS[pair]; payload=_public_ohlc(client,symbol,interval)
+    step=interval*60; symbol,alias=SYMBOLS[pair]; payload=_public_ohlc(client,symbol,interval)
     observed=int(time.time()) if now is None else now
     data=payload.get('result')
     if not isinstance(data,dict) or set(data)!={alias,'last'}: raise ValueError('incorrect REST identity')
@@ -41,14 +41,14 @@ def exact_closed(pair, interval=60, *, client=None, now=None):
     for r in raw:
         if not isinstance(r,list) or len(r)!=8 or type(r[0]) is not int or r[0]<=last: raise ValueError('malformed REST candle')
         last=r[0]
-        if r[0]%STEP or r[0]>observed: raise ValueError('invalid REST timestamp')
+        if r[0]%step or r[0]>observed: raise ValueError('invalid REST timestamp')
         # Forming candle is validated using an artificial close bound, never emitted.
-        normalized=normalize([r[0],r[1],r[2],r[3],r[4],r[6],r[7]],60,max(observed,r[0]+STEP))
+        normalized=normalize([r[0],r[1],r[2],r[3],r[4],r[6],r[7]],interval,max(observed,r[0]+step))
         rows.append([r[0]*1000,*normalized[1:6],normalized[6]])
-    if rows[-1][0]//1000!=observed//STEP*STEP: raise ValueError('REST forming hour missing; retry')
+    if rows[-1][0]//1000!=observed//step*step: raise ValueError('REST forming hour missing; retry')
     rows=rows[:-1]
-    if observed-rows[-1][0]//1000>2*STEP: raise ValueError('stale REST observation')
-    return {'exchange':'kraken','product':'spot','pair':pair,'interval_minutes':60,'observed_at':observed,'candles':rows}
+    if observed-rows[-1][0]//1000>2*step: raise ValueError('stale REST observation')
+    return {'exchange':'kraken','product':'spot','pair':pair,'interval_minutes':interval,'observed_at':observed,'candles':rows}
 
 
 class StreamJournal:

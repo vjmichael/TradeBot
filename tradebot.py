@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from engine import candles, MarketUnavailable
 from market_memory import MarketMemory, MemoryUnavailable, session_profile
 from market_lake import HistoricalLake
+from market_quality import QualityMemory
 from economic_memory import EconomicMemory, CALENDAR, MACRO, FED
 
 PAIRS = ("BTC/USD", "ETH/USD", "SOL/USD")
@@ -215,6 +216,7 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         store.boot()
         app.state.market_memory = MarketMemory(directory)
         app.state.market_lake = HistoricalLake(app.state.market_memory)
+        app.state.market_quality = QualityMemory(app.state.market_memory)
         app.state.economic_memory = EconomicMemory(directory)
         yield
 
@@ -349,6 +351,16 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
             raise HTTPException(503, "Historical market memory unavailable") from None
         profile["state"] = "observed" if profile["coverage"] else "awaiting_history"
         return profile
+
+    @app.get("/api/markets/{asset}/quality", dependencies=[Depends(authorize)])
+    def market_quality(asset: Literal["BTC", "ETH", "SOL"], days: Literal["1", "3", "7"] = "3", zone: Literal["UTC", "America/Phoenix", "America/New_York", "Europe/London", "Asia/Tokyo", "Asia/Hong_Kong"] = "UTC", fee_bps: int | None = None):
+        now = int(time.time()); end = now // 3600 * 3600
+        try:
+            return app.state.market_quality.profile(asset+"/USD", end-int(days)*86400, end, now, zone, fee_bps)
+        except ValueError:
+            raise HTTPException(422, "Invalid market quality settings") from None
+        except (MemoryUnavailable, sqlite3.Error, OSError):
+            raise HTTPException(503, "Market quality data unavailable") from None
 
     @app.get("/api/market-storage", dependencies=[Depends(authorize)])
     def market_storage():
