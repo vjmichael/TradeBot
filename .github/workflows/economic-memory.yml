@@ -3,6 +3,9 @@ on:
   push:
     paths:
       - 'economic_memory.py'
+      - 'vintage_memory.py'
+      - 'scripts/qualify_vintages.py'
+      - 'tests/test_vintage_memory.py'
       - 'scripts/ingest_economic.py'
       - 'scripts/qualify_economic.py'
       - 'tests/test_economic_memory.py'
@@ -28,3 +31,5 @@ jobs:
       - run: python -m pip install -r requirements.txt -r requirements-market.txt
       - run: python -m unittest discover -s tests -v
       - run: python scripts/qualify_economic.py ${{ matrix.source }}
+      - if: matrix.source == 'bls_statistics'
+        run: python scripts/qualify_vintages.py

@@ -9,6 +9,8 @@ on:
       - 'recovery_budget.py'
       - 'tests/test_recovery_budget.py'
       - 'market_memory.py'
+      - 'data_lifecycle.py'
+      - 'tests/test_long_retention.py'
       - 'scripts/ingest_market.py'
       - 'scripts/qualify_market_ingestion.py'
       - 'tests/test_market_ingestion.py'

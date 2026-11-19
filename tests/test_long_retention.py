@@ -16,7 +16,7 @@ T=1795000200
 class LongRetentionTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
-        self.root=Path(self.tmp.name);self.data=self.root/'data'
+        self.root=Path(self.tmp.name);self.data=self.root/'data';self.data.mkdir(mode=0o700)
         self.m=MarketMemory(self.data);self.e=EconomicMemory(self.data);self.q=QualityMemory(self.m)
     def test_multi_market_margin_and_preview_exact_copy_across_reopen(self):
         # Bound arithmetic is a design limit, not a measured 35-day run.

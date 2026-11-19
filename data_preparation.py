@@ -18,7 +18,7 @@ from uuid import uuid4
 
 from market_memory import MemoryUnavailable
 
-MODES=('prepare','repair','collect','backup','preview-retention','retire')
+MODES=('prepare','repair','collect','backup','preview-retention','retire','consolidate','preview-rotation','rotate','vintages')
 SCRIPT=Path(__file__).resolve().parent/'scripts'/'prepare_data.py'
 
 
@@ -74,7 +74,7 @@ class Preparation:
 
     def start(self,mode,*,preview_id=None):
         if mode not in MODES:raise ValueError('invalid preparation operation')
-        if mode=='retire':
+        if mode in ('retire','rotate'):
             if not isinstance(preview_id,str) or not re.fullmatch(r'[0-9a-f]{32}',preview_id):raise ValueError('cleanup review required')
         elif preview_id is not None:raise ValueError('unexpected cleanup review')
         if fcntl is None or not sys.platform.startswith('linux'):raise MemoryUnavailable('Linux data worker unavailable')

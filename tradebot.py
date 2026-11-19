@@ -493,6 +493,9 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
                 if mode=='retire':
                     preview=maintenance_status(directory)['cleanup_preview']
                     if not preview or not preview['attempts'] or preview['id']!=preview_id:raise MemoryUnavailable('review cleanup first')
+                if mode=='rotate':
+                    preview=maintenance_status(directory)['rotation_preview']
+                    if not preview or not preview['eligible'] or preview['id']!=preview_id:raise MemoryUnavailable('review rotation first')
                 return app.state.preparation.start(mode,preview_id=preview_id)
         except (MemoryUnavailable, sqlite3.Error, OSError, ValueError):
             raise HTTPException(409, "Storage operation unavailable; stop collection and review current storage first") from None
@@ -501,9 +504,20 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     def apply_cleanup(spec: CleanupSpec):
         return maintenance_start('retire',spec.preview_id)
 
+    @app.post("/api/data-maintenance/rotate", dependencies=[Depends(authorize)])
+    def apply_rotation(spec: CleanupSpec):
+        return maintenance_start('rotate',spec.preview_id)
+
     @app.post("/api/data-maintenance/{mode}", dependencies=[Depends(authorize)])
-    def start_data_maintenance(mode: Literal["backup", "preview-retention"]):
+    def start_data_maintenance(mode: Literal["backup", "preview-retention", "consolidate", "preview-rotation", "vintages"]):
         return maintenance_start(mode)
+
+    @app.get("/api/economic/vintages/{series}/{vintage}", dependencies=[Depends(authorize)])
+    def historical_vintage(series: str,vintage: str,retrieved_by: int | None = None,replay_at: int | None = None):
+        from vintage_memory import VintageMemory
+        try:return VintageMemory(directory).view(series,vintage,retrieved_by=retrieved_by,replay_at=replay_at)
+        except ValueError:raise HTTPException(422,'Invalid vintage query') from None
+        except (MemoryUnavailable,sqlite3.Error,OSError):raise HTTPException(503,'Vintage unavailable') from None
 
     @app.get("/api/market-storage", dependencies=[Depends(authorize)])
     def market_storage():

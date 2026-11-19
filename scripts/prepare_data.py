@@ -22,7 +22,7 @@ from storage_management import run as run_maintenance
 
 def run(directory,mode,job):
     root=directory/'preparation';registry=MarketDirectory(directory)
-    maintenance=mode in ('backup','preview-retention','retire')
+    maintenance=mode in ('backup','preview-retention','retire','consolidate','preview-rotation','rotate','vintages')
     symbols=registry.retained_symbols() if maintenance else registry.active_symbols(refresh_stale=True)
     m=MarketMemory(directory,symbols=symbols);e=EconomicMemory(directory);q=QualityMemory(m);journal=StreamJournal(m,symbols)
     scope_lock=threading.Lock()
@@ -41,8 +41,8 @@ def run(directory,mode,job):
             try:e.collect(source)
             except Exception:failed=True
         return not failed
-    if mode in ('backup','preview-retention','retire'):
-        mark({'backup':'creating_recovery_copy','preview-retention':'reviewing_old_samples','retire':'retiring_reviewed_samples'}[mode])
+    if maintenance:
+        mark({'backup':'creating_recovery_copy','preview-retention':'reviewing_old_samples','retire':'retiring_reviewed_samples','consolidate':'archiving_old_samples','preview-rotation':'reviewing_recovery_copies','rotate':'rotating_reviewed_copy','vintages':'collecting_vintages'}[mode])
         run_maintenance(directory,mode,job)
     elif mode=='prepare':
         mark('historical_archive')

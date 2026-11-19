@@ -12,6 +12,10 @@ from pathlib import Path
 from data_preparation import _db
 from data_lifecycle import backup
 from data_retention import retire_books, MIN_AGE
+from sample_archive import consolidate,status as archive_status
+from recovery_rotation import preview as rotation_preview,apply as rotate
+from market_memory import MarketMemory
+from vintage_memory import VintageMemory
 from market_memory import MemoryUnavailable
 
 MAX_COPIES=4
@@ -45,12 +49,13 @@ def _latest(db,mode):
 def status(directory):
     directory=Path(directory).resolve();root=_root(directory)
     with closing(_db(directory/'preparation')) as db:
-        saved=_latest(db,'backup');preview=_latest(db,'preview-retention');applied=_latest(db,'retire')
+        saved=_latest(db,'backup');preview=_latest(db,'preview-retention');applied=_latest(db,'retire');rotation=_latest(db,'preview-rotation');rotated=_latest(db,'rotate');vintage=_latest(db,'vintages')
     # Do not present a missing copy or a preview bound to an older copy as valid.
     if saved and (not ID.fullmatch(saved['id']) or not (root/saved['id']).is_dir() or (root/saved['id']).is_symlink()):saved=None
     if preview and (not saved or preview['backup_id']!=saved['id'] or (applied and applied['preview_id']==preview['id'])):preview=None
+    if rotation and rotated and rotated.get('preview_id')==rotation['id']:rotation=None
     count=_count(root)
-    return {'copies':count,'max_copies':MAX_COPIES,'latest_backup':saved,'cleanup_preview':preview,'last_cleanup':applied}
+    return {'copies':count,'max_copies':MAX_COPIES,'latest_backup':saved,'cleanup_preview':preview,'last_cleanup':applied,'rotation_preview':rotation,'last_rotation':rotated,'archive':archive_status(MarketMemory(directory)),'vintages':VintageMemory(directory).status(),'last_vintage_batch':vintage}
 
 
 def run(directory,mode,job):
@@ -63,6 +68,31 @@ def run(directory,mode,job):
     if mode=='backup':
         if _count(root)>=MAX_COPIES:raise MemoryUnavailable('recovery copy capacity reached')
         result=backup(directory,root/job)
+    elif mode=='vintages':
+        result=VintageMemory(directory).collect_batch()
+    elif mode=='preview-rotation':
+        result=rotation_preview(directory,root)
+    elif mode=='rotate':
+        with closing(_db(journal)) as db:
+            option=db.execute('SELECT preview_id FROM job_options WHERE job=?',(job,)).fetchone()
+            reviewed=_latest(db,'preview-rotation')
+        if not option or not reviewed or option['preview_id']!=reviewed['id']:raise MemoryUnavailable('review rotation first')
+        plan={k:v for k,v in reviewed.items() if k!='id'}
+        result=rotate(directory,root,plan)|{'preview_id':reviewed['id']}
+    elif mode=='consolidate':
+        with closing(_db(journal)) as db:
+            copies=db.execute("SELECT j.id,m.result FROM jobs j JOIN maintenance_results m ON m.job=j.id WHERE j.mode='backup' AND j.state='complete' ORDER BY j.rowid DESC LIMIT 10000").fetchall()
+        m=MarketMemory(directory)
+        with m.tx() as db:
+            pending=set(r[0] for r in db.execute('SELECT DISTINCT manifest_sha256 FROM quality_retired')) if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quality_retired'").fetchone() else set()
+        result={'archived':0}
+        if archive_status(m)['unconsolidated'] and not copies:raise MemoryUnavailable('original recovery copies unavailable')
+        for copy in copies:
+            digest=json.loads(copy['result'])['manifest_sha256']
+            if digest in pending and ID.fullmatch(copy['id']) and (root/copy['id']).is_dir() and not (root/copy['id']).is_symlink():
+                result=consolidate(directory,root/copy['id'],digest)
+                if result['archived']:break
+        if not result['archived'] and archive_status(m)['unconsolidated']:raise MemoryUnavailable('original retired sample archive unavailable')
     else:
         current=status(directory);saved=current['latest_backup']
         if not saved:raise MemoryUnavailable('create a verified recovery copy first')
