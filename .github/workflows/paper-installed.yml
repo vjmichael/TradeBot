@@ -1,0 +1,48 @@
+name: TB-07A2 installed paper and public market qualification
+on:
+  push:
+    paths:
+      - 'scripts/qualify_installed_paper.py'
+      - 'scripts/qualify_installed_paper.sh'
+      - '.github/workflows/paper-installed.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: installed-paper-qualification
+  cancel-in-progress: false
+jobs:
+  installed-public-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 105
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install exact qualification source and native engine
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test ! -e /opt/maj-vaj
+          test ! -e /var/lib/maj-vaj
+          mkdir -p r3r1-evidence
+          sudo install -d -m 0755 /opt/maj-vaj
+          git archive "$GITHUB_SHA" | sudo tar -x --no-same-owner -C /opt/maj-vaj
+          sudo "$(command -v python)" -m venv /opt/maj-vaj/venv
+          sudo /opt/maj-vaj/venv/bin/python -m pip install --disable-pip-version-check -r /opt/maj-vaj/requirements.txt -r /opt/maj-vaj/requirements-market.txt 'freqtrade @ git+https://github.com/freqtrade/freqtrade.git@4cf0351e08d26e96a6429ef48103b726bb230cf8'
+          sudo /opt/maj-vaj/venv/bin/python -m pip check
+          /opt/maj-vaj/venv/bin/python -m pip freeze > r3r1-evidence/installed-dependencies.txt
+          /opt/maj-vaj/venv/bin/python -c "import importlib.metadata as m,json; d=m.distribution('freqtrade'); p=json.loads(d.read_text('direct_url.json')); assert p['vcs_info']['commit_id']=='4cf0351e08d26e96a6429ef48103b726bb230cf8'; assert d.version.startswith('2026.10'); print(d.version, p['vcs_info']['commit_id'])" | tee r3r1-evidence/native-source.txt
+          printf '%s\n' "$GITHUB_SHA" > r3r1-evidence/project-sha.txt
+      - name: Qualify installed worker and real one-hour public PAPER fixture
+        run: sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted bash /opt/maj-vaj/scripts/qualify_installed_paper.sh "$GITHUB_WORKSPACE/r3r1-evidence"
+      - name: Publish non-secret evidence, including incomplete results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-paper-evidence-${{ github.sha }}
+          path: r3r1-evidence/
+          if-no-files-found: error

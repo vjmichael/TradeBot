@@ -234,7 +234,7 @@ def gate_native_bridge(work):
     if "RECEIPT: R3 real Freqtrade ORM workspace initialization and idempotent private provisioning" not in result.splitlines():
         raise AssertionError("missing native provisioning receipt")
     for kind in ("zero","partial"):
-        if f"RECEIPT: R3 native {kind} cancellation recovery after ORM reopen, signed snapshot and verified wallet" not in result.splitlines():
+        if f"RECEIPT: R3 native {kind} cancellation recovery after SIGKILL and ORM reopen, signed snapshot and verified wallet" not in result.splitlines():
             raise AssertionError("missing R3 cancellation receipt: " + kind)
 
 

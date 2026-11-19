@@ -9,6 +9,10 @@ from decimal import Decimal, ROUND_DOWN
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from datetime import datetime, timezone
+import os
+import signal
+import select
+import traceback
 
 from ccxt import TICK_SIZE
 from freqtrade.enums import State, TradingMode, RunMode
@@ -136,13 +140,38 @@ def qualify(protection=None, authenticated=False, cancel=None):
                 bot._exit_reason_cache={}
                 worker=RecoveryWorker(h.tx,driver,clock=lambda:h.now)
                 with h.tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
-                # Interrupt immediately after signed cancellation commit but
-                # before native ORM mutation; reopen the original native file.
-                def interrupted(*args):raise RuntimeError('cancel-cut')
-                driver._apply_frozen=interrupted
-                try:worker.tick(intent['intent_id'])
-                except RuntimeError as exc:assert str(exc)=='cancel-cut'
-                else:raise AssertionError('missing simulated process interruption')
+                # Actual Linux process death after durable signed cancellation,
+                # before native ORM mutation. No private network or live wallet.
+                # Disconnect pooled database handles before spawning the child.
+                engine=Trade.session.get_bind()
+                Trade.session.remove()
+                engine.dispose()
+                read_fd,write_fd=os.pipe()
+                child=os.fork()
+                if child==0:
+                    os.close(read_fd)
+                    try:
+                        init_db(config['db_url'])
+                        def interrupted(*args):
+                            os.write(write_fd,b'COMMITTED')
+                            while True:signal.pause()
+                        driver._apply_frozen=interrupted
+                        worker.tick(intent['intent_id'])
+                    except BaseException:
+                        traceback.print_exc()
+                    finally:
+                        os.close(write_fd)
+                        os._exit(1)
+                os.close(write_fd)
+                try:
+                    ready,_,_=select.select([read_fd],[],[],20)
+                    assert ready and os.read(read_fd,64)==b'COMMITTED','missing durable cancellation cut'
+                finally:
+                    os.close(read_fd)
+                    try:os.kill(child,signal.SIGKILL)
+                    except ProcessLookupError:pass
+                    _,status=os.waitpid(child,0)
+                assert os.WIFSIGNALED(status) and os.WTERMSIG(status)==signal.SIGKILL,'child was not killed'
                 Trade.session.remove()
                 init_db(config['db_url'])
                 bot.exchange=BookFixture(config);bot.exchange.mid=120.
@@ -158,7 +187,7 @@ def qualify(protection=None, authenticated=False, cancel=None):
                     assert recovered['state']=='EXIT_REQUESTED' and recovered['reason']=='target',recovered
                     assert worker.tick(intent['intent_id'])['state']=='ACCOUNTED'
                     state=f.snapshot('a');assert state['qty']==state['pending']==state['gate_reserved']==0 and state['protected']>0,state
-                print('RECEIPT: R3 native '+cancel+' cancellation recovery after ORM reopen, signed snapshot and verified wallet',flush=True)
+                print('RECEIPT: R3 native '+cancel+' cancellation recovery after SIGKILL and ORM reopen, signed snapshot and verified wallet',flush=True)
                 return
             assert trade.stop_loss>=95 and trade.stop_loss<100
             if protection:
