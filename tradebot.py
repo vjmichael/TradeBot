@@ -34,6 +34,7 @@ from risk_gate import Gate, initialize as initialize_gate, restrictive_transitio
 from paper_execution import PaperBridge
 import financial_goals
 import financial_history
+import reserve_preview
 from goal_control import entry_guard
 from paper_custody import authenticated_projection, workspace_key
 from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial, gate_projection, replay as replay_financial, CENT as FIN_CENT
@@ -82,6 +83,44 @@ class GoalSettings(BaseModel):
     pause_on_goal: bool = False
     conservative_bps: int = Field(default=0, ge=0, le=9900)
     expected_version: int = Field(ge=0, le=20000)
+
+
+class ReserveDraftPolicy(BaseModel):
+    # Money inputs use integer cents; the server alone converts ledger units.
+    model_config = ConfigDict(extra="forbid", strict=True)
+    rate_bps: int = Field(gt=0, le=10000)
+    floor_mode: Literal["fixed","percent","combined"]
+    floor_fixed: int = Field(ge=0, le=MAX_CENTS)
+    floor_bps: int = Field(ge=0, le=10000)
+    ceiling: int = Field(gt=0, le=MAX_CENTS)
+    cycle_cap: int = Field(gt=0, le=MAX_CENTS)
+    lifetime_cap: int = Field(gt=0, le=MAX_CENTS)
+    anchor: int = Field(ge=0, lt=86400)
+    start: int = Field(gt=0, lt=4102444800)
+    end: int = Field(gt=0, lt=4102444800)
+    expiry: int = Field(gt=0, lt=4102444800)
+
+    def units(self):
+        p=self.model_dump()
+        for k in reserve_preview.DOLLARS:p[k]*=FIN_CENT
+        return p
+
+
+class ReserveExperiment(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    policy: ReserveDraftPolicy
+    hypothetical_gain_cents: int = Field(ge=0, le=MAX_CENTS)
+
+
+class ReserveDraftSave(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    policy: ReserveDraftPolicy
+    expected_version: int = Field(ge=0, le=20000)
+
+
+class ReserveDraftReview(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expected_version: int = Field(gt=0, le=20000)
 
 
 class DataScheduleSpec(BaseModel):
@@ -168,6 +207,7 @@ class Store:
             # Always verify the existing journal; never recreate a missing v4 ledger.
             start_financial(db)
             financial_goals.initialize(db)
+            reserve_preview.initialize(db)
             db.execute("PRAGMA user_version=4")
 
     def status(self):
@@ -398,6 +438,35 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
             return financial_goals.report(store.transaction,instance,key_for=lambda i:workspace_key(directory,i))
         except (ValueError, sqlite3.Error, OSError):
             raise HTTPException(409, "Financial report unavailable; verified records are required.") from None
+
+    @app.get("/api/reserve-drafts/{instance}", dependencies=[Depends(authorize)])
+    def reserve_draft_status(instance: str):
+        try:
+            return reserve_preview.status(store.transaction,instance)
+        except (ValueError, sqlite3.Error, OSError):
+            raise HTTPException(409, "Reinvestment records unavailable.") from None
+
+    @app.post("/api/reserve-drafts/{instance}/preview", dependencies=[Depends(authorize)])
+    def reserve_experiment(instance: str, spec: ReserveExperiment):
+        try:
+            return reserve_preview.preview(store.transaction,instance,spec.policy.units(),spec.hypothetical_gain_cents*FIN_CENT,
+                verify=authenticated_projection(lambda i:workspace_key(directory,i)))
+        except (ValueError, sqlite3.Error, OSError):
+            raise HTTPException(409, "Check the policy limits, dates and financial records.") from None
+
+    @app.post("/api/reserve-drafts/{instance}/save", dependencies=[Depends(authorize)])
+    def reserve_save_draft(instance: str, spec: ReserveDraftSave):
+        try:
+            return reserve_preview.save(store.transaction,instance,spec.policy.units(),spec.expected_version)
+        except (ValueError, sqlite3.Error, OSError):
+            raise HTTPException(409, "Settings could not be saved. Check values and refresh the saved version.") from None
+
+    @app.post("/api/reserve-drafts/{instance}/review", dependencies=[Depends(authorize)])
+    def reserve_review_draft(instance: str, spec: ReserveDraftReview):
+        try:
+            return reserve_preview.review(store.transaction,instance,spec.expected_version)
+        except (ValueError, sqlite3.Error, OSError):
+            raise HTTPException(409, "Saved policy review unavailable. Refresh and check the expiry.") from None
 
     @app.get("/api/financial-history/{instance}", dependencies=[Depends(authorize)])
     def financial_history_report(instance: str, days: int = Query(7, ge=1, le=31), end_day: str | None = Query(None, min_length=10, max_length=10)):

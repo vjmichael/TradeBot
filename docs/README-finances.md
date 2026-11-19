@@ -86,3 +86,8 @@ Three candidate behaviors: continue within approved limits (default), stop new e
 ### Can I review my earlier paper-trading results?
 
 The Financial history candidate under Financial Goals shows the selected paper portfolio's recorded daily gains/losses, settlements, fees, reserve transfers, active cash and protected profit, pending proceeds and position cost basis. Choose 7, 14, 30 or 31 days and an ending date. These are historical booked figures in your reporting time zone, not a new exchange statement or actual household income. Fees already included in net trading P/L are not deducted twice; released reserves are transfers, not profit. Partial funding/today and pre-funding days are labeled; disputed figures are unavailable. See [TB-FIN-01E-A](tb-fin-01e-a.md); full API and browser acceptance pending.
+
+
+### Can I experiment with reinvestment before approving it?
+
+The guided reinvestment candidate lets you preview a conditional future gain, save or update inactive settings, discard edits and review the exact saved limits. No funds move during those actions. A separately supervised human approval service remains necessary for activation and revocation, so the switch is disabled and there is no graphical authority to release reserves yet. See [TB-FIN-01E-B](tb-fin-01e-b.md); actual API/browser and broker integration acceptance remain open.

@@ -111,6 +111,37 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(c.get('/api/status',headers=AUTH).json(),before)
             with store.transaction() as db:self.assertEqual(tuple(db.execute('SELECT * FROM fin_head').fetchone()),head)
 
+    def test_reserve_draft_api_does_not_authorize(self):
+        import time
+        from tradebot import InstanceSpec
+        with self.app() as c:
+            self.assertEqual(c.post('/api/setup/paper-capital',json={'virtual_cap_cents':20000},headers=AUTH).status_code,200)
+            store=Store(self.directory,0)
+            a=store.add(InstanceSpec(name='Reserve A',pair='BTC/USD',virtual_cents=10000,provider='none',strategy_family='numerical-baseline'))['id']
+            path='/api/reserve-drafts/'+a
+            now=int(time.time())
+            p=dict(rate_bps=1000,floor_mode='fixed',floor_fixed=5000,floor_bps=0,ceiling=12500,cycle_cap=2000,lifetime_cap=2500,anchor=0,start=now,end=now+86400*7,expiry=now+86400*7)
+            self.assertEqual(c.get(path).status_code,401)
+            initial=c.get(path,headers=AUTH).json()
+            self.assertEqual(initial['current_state'],'off')
+            self.assertFalse(initial['approval_available'])
+            self.assertEqual(initial['version'],0)
+            before=c.get('/api/status',headers=AUTH).json()
+            with store.transaction() as db:head=tuple(db.execute('SELECT * FROM fin_head').fetchone())
+            self.assertEqual(c.post(path+'/preview',json={'policy':p,'hypothetical_gain_cents':10000},headers=AUTH).status_code,200)
+            self.assertEqual(c.post(path+'/save',json={'policy':p,'expected_version':0},headers=AUTH|{'Origin':'https://evil.invalid'}).status_code,403)
+            self.assertEqual(c.post(path+'/save',json={'policy':p,'expected_version':0},headers=AUTH).status_code,200)
+            self.assertEqual(c.post(path+'/save',json={'policy':p,'expected_version':0},headers=AUTH).status_code,409)
+            r=c.post(path+'/review',json={'expected_version':1},headers=AUTH).json()
+            self.assertFalse(r['authorized'] or r['approval_available'])
+            self.assertEqual(c.get(path,headers=AUTH).json()['current_state'],'off')
+            self.assertEqual(c.post(path+'/activate',json={},headers=AUTH).status_code,404)
+            self.assertEqual(c.get('/api/status',headers=AUTH).json(),before)
+            with store.transaction() as db:self.assertEqual(tuple(db.execute('SELECT * FROM fin_head').fetchone()),head)
+        with self.app() as c:
+            self.assertEqual(c.get(path,headers=AUTH).json()['version'],1)
+            self.assertFalse(c.get(path,headers=AUTH).json()['approval_available'])
+
     def test_credentials_write_only_atomic_and_wrong_key(self):
         values={'grok':'synthetic-grok','kraken_read_key':'synthetic-key','kraken_read_secret':'synthetic-secret'}
         with self.app() as c:

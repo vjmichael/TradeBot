@@ -6,6 +6,8 @@ on:
       - 'tradebot.py'
       - 'financial_goals.py'
       - 'financial_history.py'
+      - 'reserve_preview.py'
+      - 'tests/test_reserve_preview.py'
       - 'tests/test_financial_history.py'
       - 'goal_control.py'
       - 'goal_evidence.py'
