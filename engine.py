@@ -152,6 +152,9 @@ def paper_config(spec, *, qualification=False):
         # Backtesting only, never used by the paused runtime. Synthetic data, not a strategy recommendation.
         config.update(strategy="FreqAIQualification", minimal_roi={"0": 0.015}, fee=0.008, freqaimodel="LightGBMRegressor", freqai={
             "enabled": True, "identifier": "tb02-smoke", "train_period_days": 7, "backtest_period_days": 2,
+            # 2026.10 schema documents the singular key; Exchange.validate_freqai reads the plural.
+            # Only the isolated synthetic replay may bypass the REST-history check.
+            "override_exchange_check": True, "override_exchange_checks": True,
             "save_backtest_models": True, "data_kitchen_thread_count": 2,
             "feature_parameters": {"include_timeframes": ["1h"], "include_corr_pairlist": [], "label_period_candles": 3, "include_shifted_candles": 1, "indicator_periods_candles": [6, 12]},
             "data_split_parameters": {"test_size": 0.2, "shuffle": False},

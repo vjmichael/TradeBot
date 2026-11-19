@@ -82,6 +82,9 @@ assert config['initial_state'] == 'stopped' and config['force_entry_enable'] is 
 assert not config['exchange']['key'] and not config['exchange']['secret']
 assert config['telegram']['enabled'] is False and config['api_server']['enabled'] is False
 assert config['freqai']['enabled'] is backtest
+for key in ('override_exchange_check', 'override_exchange_checks'):
+    assert config['freqai'].get(key, False) is backtest
+assert config['strategy'] == ('FreqAIQualification' if backtest else 'NoEntry')
 config['runmode'] = RunMode.BACKTEST if backtest else RunMode.DRY_RUN
 if backtest:
     config['timerange'] = '20250112-20250122'
@@ -129,18 +132,33 @@ def stopped_runtime(work):
     print("RECEIPT: real Freqtrade stopped dry-run, zero trades")
 
 
-def backtest(work):
-    setup(work, qualification=True)
-    validate_native_config(work, qualification=True)
-    directory = work / "data" / "kraken"
-    directory.mkdir(parents=True)
+def synthetic_rows():
+    """Exact deterministic fixture; never claim this is Kraken history."""
     rows = []
     start = 1735689600000  # 2025-01-01 UTC
     for i in range(24 * 32):
         price = 90000 + 4000 * math.sin(i / 7) + 1800 * math.cos(i / 19) + 12 * i
         close = price + 250 * math.sin(i / 3)
         rows.append([start + i * 3600000, price, max(price, close) + 500, min(price, close) - 500, close, 10 + i % 17])
-    (directory / "BTC_USD-1h.json").write_text(json.dumps(rows))
+    return rows
+
+
+def verify_synthetic_fixture(path):
+    """Reject missing, modified or truncated replay input before enabling the override."""
+    if json.loads(path.read_text()) != synthetic_rows():
+        raise AssertionError("synthetic history fixture mismatch")
+
+
+def backtest(work):
+    directory = work / "data" / "kraken"
+    directory.mkdir(parents=True)
+    fixture = directory / "BTC_USD-1h.json"
+    with fixture.open("x") as file:
+        json.dump(synthetic_rows(), file, allow_nan=False)
+    verify_synthetic_fixture(fixture)
+    setup(work, qualification=True)
+    validate_native_config(work, qualification=True)
+    print("RECEIPT: verified 768 synthetic hourly rows for offline replay; not Kraken history", flush=True)
     result = run(work, ["backtesting", "--config", "/work/config.json", "--userdir", "/work", "--strategy-path", "/work/strategies", "--freqaimodel", "LightGBMRegressor", "--timerange", "20250112-20250122", "--cache", "none", "--export", "trades"], timeout=600)
     print(result)
     models = list((work / "models").rglob("*_model.*"))

@@ -189,6 +189,35 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(args[args.index("--entrypoint") + 1], "/usr/local/bin/python")
         self.assertIn("--cap-drop=ALL", args)
 
+    def test_history_override_is_qualification_only(self):
+        spec = InstanceSpec(name="Test", pair="BTC/USD", virtual_cents=100000)
+        for qualify in (False, True):
+            config = paper_config(spec, qualification=qualify)
+            for key in ("override_exchange_check", "override_exchange_checks"):
+                self.assertIs(config["freqai"].get(key, False), qualify)
+            self.assertTrue(config["dry_run"])
+            self.assertEqual(config["initial_state"], "stopped")
+            self.assertEqual(config["strategy"], "FreqAIQualification" if qualify else "NoEntry")
+
+    def test_synthetic_fixture_required(self):
+        import json
+        from scripts.qualify_engine import synthetic_rows, verify_synthetic_fixture, backtest
+        rows = synthetic_rows()
+        self.assertEqual(len(rows), 768)
+        self.assertTrue(all(b[0] - a[0] == 3600000 for a, b in zip(rows, rows[1:])))
+        with tempfile.TemporaryDirectory() as tmp:
+            file = Path(tmp) / "fixture.json"
+            file.write_text(json.dumps(rows))
+            verify_synthetic_fixture(file)
+            file.write_text(json.dumps(rows[:-1]))
+            with self.assertRaisesRegex(AssertionError, "fixture mismatch"):
+                verify_synthetic_fixture(file)
+        with tempfile.TemporaryDirectory() as tmp, patch("scripts.qualify_engine.verify_synthetic_fixture", side_effect=AssertionError("fixture mismatch")), patch("scripts.qualify_engine.setup") as setup, patch("scripts.qualify_engine.run") as run:
+            with self.assertRaisesRegex(AssertionError, "fixture mismatch"):
+                backtest(Path(tmp))
+            setup.assert_not_called()
+            run.assert_not_called()
+
     def test_safe_config(self):
         spec = InstanceSpec(name="Test", pair="SOL/USD", virtual_cents=12500)
         for qualify in (False, True):
