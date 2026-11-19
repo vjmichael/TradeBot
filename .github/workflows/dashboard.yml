@@ -5,6 +5,8 @@ on:
       - 'dashboard/**'
       - 'tradebot.py'
       - 'financial_goals.py'
+      - 'financial_history.py'
+      - 'tests/test_financial_history.py'
       - 'goal_control.py'
       - 'goal_evidence.py'
       - 'tests/test_financial_goals.py'

@@ -10,7 +10,7 @@ from threading import Lock
 import time
 
 from cryptography.fernet import Fernet, InvalidToken
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -33,6 +33,7 @@ from market_stream import StreamJournal
 from risk_gate import Gate, initialize as initialize_gate, restrictive_transition as restrict_gate
 from paper_execution import PaperBridge
 import financial_goals
+import financial_history
 from goal_control import entry_guard
 from paper_custody import authenticated_projection, workspace_key
 from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial, gate_projection, replay as replay_financial, CENT as FIN_CENT
@@ -397,6 +398,13 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
             return financial_goals.report(store.transaction,instance,key_for=lambda i:workspace_key(directory,i))
         except (ValueError, sqlite3.Error, OSError):
             raise HTTPException(409, "Financial report unavailable; verified records are required.") from None
+
+    @app.get("/api/financial-history/{instance}", dependencies=[Depends(authorize)])
+    def financial_history_report(instance: str, days: int = Query(7, ge=1, le=31), end_day: str | None = Query(None, min_length=10, max_length=10)):
+        try:
+            return financial_history.report(store.transaction,instance,days,end_day)
+        except (ValueError, sqlite3.Error, OSError, OverflowError):
+            raise HTTPException(409, "Financial history unavailable. Review the reporting dates or financial records.") from None
 
     @app.post("/api/financial-goals/{instance}", dependencies=[Depends(authorize)])
     def save_financial_goal(instance: str, spec: GoalSettings):

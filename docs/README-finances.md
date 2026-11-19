@@ -81,3 +81,8 @@ The optional daily entry pause is OFF by default. A verified positive target can
 ### Can I continue after reaching a daily profit goal, but with more caution?
 
 Three candidate behaviors: continue within approved limits (default), stop new entries for the day, or continue with reduced limits. The third explicitly selected mode keeps 1–99% of approved order, exposure and loss ceilings after a verified positive goal. It cannot guarantee keeping the day's profit or capturing every opportunity. No increased capital, reinvestment of protected proceeds, disabled protective exits or override of manual/risk pauses. The restriction lasts through that reporting day even if profit falls. See [TB-FIN-01D-R2](tb-fin-01d-r2.md). Native reduced-order and protective settlement, authenticated API and Chromium acceptance passed at 5e547c84 on controlled paper inputs; the installed consolidated public workflow remains pending.
+
+
+### Can I review my earlier paper-trading results?
+
+The Financial history candidate under Financial Goals shows the selected paper portfolio's recorded daily gains/losses, settlements, fees, reserve transfers, active cash and protected profit, pending proceeds and position cost basis. Choose 7, 14, 30 or 31 days and an ending date. These are historical booked figures in your reporting time zone, not a new exchange statement or actual household income. Fees already included in net trading P/L are not deducted twice; released reserves are transfers, not profit. Partial funding/today and pre-funding days are labeled; disputed figures are unavailable. See [TB-FIN-01E-A](tb-fin-01e-a.md); full API and browser acceptance pending.

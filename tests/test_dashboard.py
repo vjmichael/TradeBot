@@ -81,6 +81,36 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(c.get(other_path,headers=AUTH).json()['settings']['version'],1)
             self.assertEqual(c.get(other_path,headers=AUTH).json()['conservative_bps'],5000)
 
+    def test_history_api_read_only_and_portfolio_scoped(self):
+        from tradebot import InstanceSpec
+        from financial_ledger import FinancialLedger
+        with self.app() as c:
+            self.assertEqual(c.post('/api/setup/paper-capital',json={'virtual_cap_cents':20000},headers=AUTH).status_code,200)
+            store=Store(self.directory,0)
+            a=store.add(InstanceSpec(name='History A',pair='BTC/USD',virtual_cents=10000,provider='none',strategy_family='numerical-baseline'))['id']
+            b=store.add(InstanceSpec(name='History B',pair='ETH/USD',virtual_cents=10000,provider='none',strategy_family='numerical-baseline'))['id']
+            path='/api/financial-history/'+a
+            self.assertEqual(c.get(path).status_code,401)
+            self.assertEqual(c.post(path,json={},headers=AUTH).status_code,405)
+            for query in ('?days=32','?days=0','?end_day=bad'):
+                self.assertEqual(c.get(path+query,headers=AUTH).status_code,422)
+            self.assertEqual(c.get(path+'?end_day=2099-01-01',headers=AUTH).status_code,409)
+            self.assertEqual(c.get('/api/financial-history/'+'f'*32,headers=AUTH).status_code,409)
+            initial=c.get(path+'?days=7',headers=AUTH).json()
+            self.assertEqual(initial['reported_days'],0)
+            self.assertIsNone(initial['totals']['realized_usd'])
+            # Direct internal ledger fixture, not funding through a reporting API.
+            FinancialLedger(store.transaction).fund('history-fund',a)
+            before=c.get('/api/status',headers=AUTH).json()
+            with store.transaction() as db:head=tuple(db.execute('SELECT * FROM fin_head').fetchone())
+            r=c.get(path+'?days=7',headers=AUTH).json()
+            self.assertEqual((r['instance'],r['mode'],r['real_income'],r['reported_days']),(a,'PAPER',False,1))
+            self.assertEqual(r['days'][-1]['active_usd'],'100.00000000')
+            self.assertEqual(r['days'][-1]['status'],'partial')
+            self.assertEqual(c.get('/api/financial-history/'+b,headers=AUTH).json()['reported_days'],0)
+            self.assertEqual(c.get('/api/status',headers=AUTH).json(),before)
+            with store.transaction() as db:self.assertEqual(tuple(db.execute('SELECT * FROM fin_head').fetchone()),head)
+
     def test_credentials_write_only_atomic_and_wrong_key(self):
         values={'grok':'synthetic-grok','kraken_read_key':'synthetic-key','kraken_read_secret':'synthetic-secret'}
         with self.app() as c:
