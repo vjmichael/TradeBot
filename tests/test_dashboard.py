@@ -35,6 +35,30 @@ class DashboardTests(unittest.TestCase):
             calendar=c.get('/api/calendar',headers=AUTH).json()
             self.assertEqual((calendar['state'],calendar['events']),('not_connected',[]))
 
+    def test_goal_api_is_authenticated_versioned_and_reporting_only(self):
+        from tradebot import InstanceSpec
+        from financial_goals import DEFAULT
+        with self.app() as c:
+            self.assertEqual(c.post('/api/setup/paper-capital',json={'virtual_cap_cents':10000},headers=AUTH).status_code,200)
+            store=Store(self.directory,0)
+            instance=store.add(InstanceSpec(name='Goal fixture',pair='BTC/USD',virtual_cents=10000,provider='none',strategy_family='numerical-baseline'))['id']
+            path='/api/financial-goals/'+instance
+            p=DEFAULT|dict(expenses_cents=250000,income_cents=150000,savings_cents=50000,tax_bps=2000,target_kind='usd',target_value=100,expected_version=0)
+            before=c.get('/api/status',headers=AUTH).json()
+            self.assertEqual(c.get(path).status_code,401)
+            self.assertEqual(c.post(path,json=p).status_code,401)
+            self.assertEqual(c.post(path,json=p|{'mode':'LIVE'},headers=AUTH).status_code,422)
+            self.assertEqual(c.get(path,headers=AUTH).json()['settings']['version'],0)
+            self.assertEqual(c.post(path,json=p,headers=AUTH).status_code,200)
+            self.assertEqual(c.post(path,json=p,headers=AUTH).status_code,409)
+            r=c.get(path,headers=AUTH).json()
+            self.assertEqual(r['plan']['monthly_pre_tax_usd'],'1875.00000000')
+            self.assertIsNone(r['daily_realized_usd'])
+            self.assertFalse(r['real_income'] or r['goal_pause_enabled'])
+            self.assertEqual(c.get('/api/status',headers=AUTH).json(),before)
+        with self.app() as c:
+            self.assertEqual(c.get(path,headers=AUTH).json()['settings']['version'],1)
+
     def test_credentials_write_only_atomic_and_wrong_key(self):
         values={'grok':'synthetic-grok','kraken_read_key':'synthetic-key','kraken_read_secret':'synthetic-secret'}
         with self.app() as c:

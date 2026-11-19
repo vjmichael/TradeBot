@@ -23,3 +23,8 @@ Historical acquisition and feature preparation allow local numerical model boots
 ## Study-only research priority
 
 The motivating question was whether Cognitum could learn to trade; study-only research is valuable on its own. Begin with TB-R01A read-only market data mining and mathematical learning, where no order intent or trading agent is required. Simulated-market experiments in TB-R01B/C are optional later research, not prerequisites or permission to trade. Cognitum may discover relationships or create derived data without any trading capability. No production integration/control of Maj Vaj is authorized.
+
+
+### Multi-scale discovery hypothesis (deferred)
+
+Explore bottom-up aggregation of market observations and derived features into regimes, relationships and hierarchies, then top-down decomposition of candidate associations into supporting or contradictory lower-level events. HDC association retrieval and KAN mathematical modeling may expose previously unseen patterns, including null or spurious associations; neither proves causality or profitability. Freeze time-consistent real history as the observed timeline, generate separately labeled counterfactual trajectories with source lineage, seeds and calibrated assumptions, and test discoveries against untouched genuine observations with controls for multiple comparisons and leakage. Study-only first; no production feedback, financial authority or implementation approval.

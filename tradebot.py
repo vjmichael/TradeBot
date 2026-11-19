@@ -32,6 +32,7 @@ from storage_management import status as maintenance_status
 from market_stream import StreamJournal
 from risk_gate import Gate, initialize as initialize_gate, restrictive_transition as restrict_gate
 from paper_execution import PaperBridge
+import financial_goals
 from paper_custody import authenticated_projection, workspace_key
 from financial_ledger import FinancialLedger, initialize as initialize_financial, start as start_financial, gate_projection, replay as replay_financial, CENT as FIN_CENT
 
@@ -64,6 +65,19 @@ class InstanceSpec(BaseModel):
 class PaperCapital(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     virtual_cap_cents: int = Field(ge=0, le=MAX_CENTS)
+
+
+class GoalSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expenses_cents: int = Field(ge=0, le=MAX_CENTS)
+    income_cents: int = Field(ge=0, le=MAX_CENTS)
+    savings_cents: int = Field(ge=0, le=MAX_CENTS)
+    extra_costs_cents: int = Field(ge=0, le=MAX_CENTS)
+    tax_bps: int = Field(ge=0, lt=10000)
+    zone: str = Field(min_length=1, max_length=100)
+    target_kind: Literal["none","usd","points"]
+    target_value: int = Field(ge=0, le=MAX_CENTS)
+    expected_version: int = Field(ge=0, le=20000)
 
 
 class DataScheduleSpec(BaseModel):
@@ -147,6 +161,7 @@ class Store:
                 initialize_financial(db)
             # Always verify the existing journal; never recreate a missing v4 ledger.
             start_financial(db)
+            financial_goals.initialize(db)
             db.execute("PRAGMA user_version=4")
 
     def status(self):
@@ -370,6 +385,22 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
     @app.get("/api/instances", dependencies=[Depends(authorize)])
     def instances():
         return store.instances()
+
+    @app.get("/api/financial-goals/{instance}", dependencies=[Depends(authorize)])
+    def financial_goal_report(instance: str):
+        try:
+            return financial_goals.report(store.transaction,instance,key_for=lambda i:workspace_key(directory,i))
+        except (ValueError, sqlite3.Error, OSError):
+            raise HTTPException(409, "Financial report unavailable; verified records are required.") from None
+
+    @app.post("/api/financial-goals/{instance}", dependencies=[Depends(authorize)])
+    def save_financial_goal(instance: str, spec: GoalSettings):
+        p=spec.model_dump()
+        version=p.pop("expected_version")
+        try:
+            return financial_goals.save(store.transaction,instance,p,version)
+        except (ValueError, sqlite3.Error, OSError):
+            raise HTTPException(409, "Goal settings could not be saved. Check values, reporting time zone, or refresh the saved version.") from None
 
     @app.post("/api/instances", status_code=201, dependencies=[Depends(authorize)])
     def add(spec: InstanceSpec):

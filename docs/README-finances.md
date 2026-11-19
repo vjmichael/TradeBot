@@ -66,3 +66,8 @@ See [binding financial design](tb-fin-01.md) and [reserve engine](tb-fin-01c.md)
 ### What happens when I switch between paper and live trading?
 
 The planned Paper Trading switch defaults ON. The current build cannot trade real money. In the future, turning it OFF will display a separate real-money loss/no-guaranteed-profit warning and require explicit authenticated approval, exact capital and risk limits, and all readiness checks. Once live and authorized to RUN, Maj Vaj may trade autonomously within those limits only. Turning it ON will warn that new real-money entries will stop and unresolved positions may incur losses or fees. Real positions are not silently abandoned or liquidated: the system retains live-exit-only protection until verified resolution or authorized manual handoff. Cancel leaves the current state unchanged. Paper and live accounts remain separate. See [TB-LIVE-01](tb-live-01.md) for the full warning and release requirements.
+
+
+### How do my monthly expenses and daily goals relate?
+
+The Financial Goals candidate separates monthly expenses, desired savings, other take-home income, an estimated tax reserve and any additional costs not already counted. For example, $2,500 expenses + $500 savings - $1,500 income leaves a $1,500 after-tax gap. A 20% estimated tax reserve implies a $1,875 pre-tax planning target (about $62.50 per day in a 30-day month). A personal daily target can instead be dollars or return points; 2 points on $100 verified opening active capital means $2. Daily points are unavailable if an authenticated day-start baseline is missing; a $100 principal or daily target never changes capital authority. Paper results are not actual income. Goal settings remain reporting-only. See [TB-FIN-01A](tb-fin-01a.md).
