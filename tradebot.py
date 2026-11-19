@@ -22,6 +22,7 @@ from market_lake import HistoricalLake
 from market_quality import QualityMemory, MAX_SAMPLES
 from economic_memory import EconomicMemory, CALENDAR, MACRO, FED
 from data_lifecycle import coverage
+from historical_readiness import historical_report
 from data_preparation import Preparation
 from data_scheduler import Schedule
 from gap_schedule import recovery_progress
@@ -428,6 +429,19 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
             raise HTTPException(422, "Invalid market quality settings") from None
         except (DirectoryUnavailable, MemoryUnavailable, sqlite3.Error, OSError):
             raise HTTPException(503, "Market quality data unavailable") from None
+
+    @app.get("/api/markets/{asset}/readiness", dependencies=[Depends(authorize)])
+    def market_readiness(asset: str, as_of: int | None = None, offset: int = 0, report_id: str | None = None):
+        try:
+            pair=asset+"/USD"
+            if pair not in app.state.market_directory.selected_symbols():
+                raise HTTPException(422,"Market not selected")
+            return historical_report(app.state.market_memory,app.state.economic_memory,pair,
+                                     as_of=as_of,offset=offset,report_id=report_id)
+        except ValueError:
+            raise HTTPException(409,"History review changed or invalid; refresh the report") from None
+        except (DirectoryUnavailable,MemoryUnavailable,sqlite3.Error,OSError):
+            raise HTTPException(503,"Historical readiness evidence unavailable") from None
 
     @app.get("/api/data-preparation", dependencies=[Depends(authorize)])
     def data_preparation():

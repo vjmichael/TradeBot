@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from data_preparation import Preparation
 from data_lifecycle import backup,restore,coverage
+from historical_readiness import historical_report
 from market_memory import MarketMemory
 from market_lake import HistoricalLake
 from market_stream import StreamJournal
@@ -34,6 +35,13 @@ def main():
             m=MarketMemory(directory);lake=HistoricalLake(m);e=EconomicMemory(directory)
             v=coverage(m);assert not v['training_ready'] and all(r['coverage']>40000 and r['conflicts']==0 for r in v['markets'])
             print('RECEIPT: actual graphical preparation worker; '+str(v['markets']),flush=True)
+            for pair in SYMBOLS:
+                report=historical_report(m,e,pair,as_of=v['as_of'])
+                expected=next(r for r in v['markets'] if r['pair']==pair)
+                assert (report['coverage'],report['missing'],report['conflicts'])==(expected['coverage'],expected['missing'],expected['conflicts'])
+                assert sum(n for label,n in report['classification_hours'].items() if label!='conflicting_trade_counts')==report['missing']
+                assert report['archive_retention']['integrity'].get('verified',0)>0 and not report['training_ready']
+                print('RECEIPT: classified full historical review',pair,report['classification_hours'],report['archive_retention'],flush=True)
             controller.start('collect');deadline=time.monotonic()+90
             while time.monotonic()<deadline:
                 if controller.status()['state']!='running':raise RuntimeError('continuous worker exited')

@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - 'market_memory.py'
+      - 'historical_readiness.py'
+      - 'tests/test_historical_readiness.py'
       - 'market_directory.py'
       - 'tests/test_market_directory.py'
       - 'tests/test_dynamic_markets.py'
