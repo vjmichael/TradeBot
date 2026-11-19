@@ -161,6 +161,34 @@ class EngineTests(unittest.TestCase):
         with patch("scripts.qualify_engine.os.getuid", return_value=1000):
             self.assertNotIn("u:1000:rwx", workspace_acl(Path("/tmp/tb-test"))[2].split(","))
 
+    def test_required_disabled_config_sections(self):
+        spec = InstanceSpec(name="Test", pair="BTC/USD", virtual_cents=100000)
+        for qualify in (False, True):
+            c = paper_config(spec, qualification=qualify)
+            self.assertEqual(c["telegram"], {"enabled": False, "token": "", "chat_id": ""})
+            api = c["api_server"]
+            self.assertEqual((api["enabled"], api["listen_ip_address"], api["username"], api["password"]), (False, "127.0.0.1", "", ""))
+            self.assertGreaterEqual(len(api["jwt_secret_key"]), 32)
+            self.assertTrue({"enabled", "train_period_days", "backtest_period_days", "identifier", "feature_parameters", "data_split_parameters"}.issubset(c["freqai"]))
+            self.assertTrue({"include_timeframes", "include_corr_pairlist"}.issubset(c["freqai"]["feature_parameters"]))
+            self.assertEqual(c["minimal_roi"], {"0": 0.015 if qualify else 0.01})
+            self.assertTrue({"last_stake_amount_min_ratio", "stoploss", "internals", "dataformat_trades"}.issubset(c))
+
+    def test_native_config_preflight_requires_receipt(self):
+        from scripts.qualify_engine import validate_native_config, docker
+        work = Path("/tmp/tb-test")
+        for qualify, mode in ((False, "paper"), (True, "backtest")):
+            with patch("scripts.qualify_engine.run", return_value=f"RECEIPT: upstream config validated: {mode}\n") as run:
+                validate_native_config(work, qualification=qualify)
+                self.assertEqual(run.call_args.args[1][-1], mode)
+                self.assertEqual(run.call_args.kwargs["entrypoint"], "/usr/local/bin/python")
+            with patch("scripts.qualify_engine.run", return_value=""):
+                with self.assertRaisesRegex(AssertionError, "no receipt"):
+                    validate_native_config(work, qualification=qualify)
+        args = docker(work, "tb-test", ["-c", "pass"], entrypoint="/usr/local/bin/python")
+        self.assertEqual(args[args.index("--entrypoint") + 1], "/usr/local/bin/python")
+        self.assertIn("--cap-drop=ALL", args)
+
     def test_safe_config(self):
         spec = InstanceSpec(name="Test", pair="SOL/USD", virtual_cents=12500)
         for qualify in (False, True):

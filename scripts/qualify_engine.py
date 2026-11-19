@@ -38,9 +38,9 @@ def prepare_workspace(work):
     subprocess.run(workspace_acl(work), check=True, timeout=15)
 
 
-def docker(work, name, args):
+def docker(work, name, args, *, entrypoint=ENGINE_ENTRYPOINT):
     return ["docker", "run", "--rm", "--platform", PLATFORM, "--name", name, "--pull=never", "--user", f"{ENGINE_UID}:{ENGINE_GID}",
-            "--entrypoint", ENGINE_ENTRYPOINT,
+            "--entrypoint", entrypoint,
             "--cap-drop=ALL", "--security-opt=no-new-privileges", "--cpus=2", "--memory=3g", "--pids-limit=256",
             "--env", f"HOME={ENGINE_HOME}", "--mount", f"type=bind,source={work},target=/work", IMAGE, *args]
 
@@ -49,10 +49,10 @@ def cleanup(name):
     subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
 
 
-def run(work, args, timeout=240):
+def run(work, args, timeout=240, *, entrypoint=ENGINE_ENTRYPOINT):
     name = "tb02-" + uuid4().hex
     try:
-        result = subprocess.run(docker(work, name, args), check=True, timeout=timeout, capture_output=True, text=True)
+        result = subprocess.run(docker(work, name, args, entrypoint=entrypoint), check=True, timeout=timeout, capture_output=True, text=True)
         print(result.stderr, file=sys.stderr, flush=True)
         return result.stdout
     except subprocess.CalledProcessError as exc:
@@ -71,8 +71,36 @@ def setup(work, qualification=False):
     shutil.copyfile(ROOT / "engine_strategies" / name, strategies / name)
 
 
+NATIVE_CONFIG_CHECK = """import json, sys
+from freqtrade.configuration.config_validation import validate_config_consistency
+from freqtrade.enums import RunMode
+with open('/work/config.json') as file:
+    config = json.load(file)
+backtest = sys.argv[1] == 'backtest'
+assert config['dry_run'] is True and config['trading_mode'] == 'spot'
+assert config['initial_state'] == 'stopped' and config['force_entry_enable'] is False
+assert not config['exchange']['key'] and not config['exchange']['secret']
+assert config['telegram']['enabled'] is False and config['api_server']['enabled'] is False
+assert config['freqai']['enabled'] is backtest
+config['runmode'] = RunMode.BACKTEST if backtest else RunMode.DRY_RUN
+if backtest:
+    config['timerange'] = '20250112-20250122'
+validate_config_consistency(config)
+print('RECEIPT: upstream config validated: ' + sys.argv[1])
+"""
+
+
+def validate_native_config(work, *, qualification=False):
+    mode = "backtest" if qualification else "paper"
+    result = run(work, ["-c", NATIVE_CONFIG_CHECK, mode], entrypoint="/usr/local/bin/python")
+    print(result, flush=True)
+    if f"RECEIPT: upstream config validated: {mode}" not in result.splitlines():
+        raise AssertionError("native config validation produced no receipt")
+
+
 def stopped_runtime(work):
     setup(work)
+    validate_native_config(work)
     name = "tb02-" + uuid4().hex
     cmd = docker(work, name, ["trade", "--config", "/work/config.json", "--userdir", "/work", "--strategy-path", "/work/strategies"])
     with (work / "runtime.log").open("w") as log:
@@ -82,7 +110,7 @@ def stopped_runtime(work):
             while time.monotonic() < deadline:
                 if proc.poll() is not None:
                     raise RuntimeError("Freqtrade exited before stopped initialization")
-                if (work / "paper.sqlite").exists() and "STOPPED" in (work / "runtime.log").read_text():
+                if (work / "paper.sqlite").exists() and "state='STOPPED'" in (work / "runtime.log").read_text():
                     break
                 time.sleep(1)
             else:
@@ -103,6 +131,7 @@ def stopped_runtime(work):
 
 def backtest(work):
     setup(work, qualification=True)
+    validate_native_config(work, qualification=True)
     directory = work / "data" / "kraken"
     directory.mkdir(parents=True)
     rows = []

@@ -127,6 +127,8 @@ def paper_config(spec, *, qualification=False):
         "initial_state": "stopped", "force_entry_enable": False, "max_open_trades": 1,
         "stake_currency": "USD", "stake_amount": "unlimited", "tradable_balance_ratio": 0.95,
         "timeframe": "1h", "strategy": "NoEntry", "db_url": "sqlite:////work/paper.sqlite",
+        "last_stake_amount_min_ratio": 0.5, "stoploss": -0.05, "minimal_roi": {"0": 0.01},
+        "internals": {"process_throttle_secs": 5},
         "cancel_open_orders_on_exit": True,
         "exchange": {"name": "kraken", "key": "", "secret": "", "pair_whitelist": [spec.pair], "pair_blacklist": []},
         "pairlists": [{"method": "StaticPairList"}],
@@ -135,12 +137,20 @@ def paper_config(spec, *, qualification=False):
         "unfilledtimeout": {"entry": 10, "exit": 10, "exit_timeout_count": 0, "unit": "minutes"},
         "order_types": {"entry": "market", "exit": "market", "stoploss": "market", "stoploss_on_exchange": False},
         "order_time_in_force": {"entry": "GTC", "exit": "GTC"},
-        "telegram": {"enabled": False}, "api_server": {"enabled": False}, "dataformat_ohlcv": "json",
-        "freqai": {"enabled": False},
+        # Upstream validates required nested fields even with enabled=false.
+        # These are inert placeholders, not credentials; no RPC listener is permitted.
+        "telegram": {"enabled": False, "token": "", "chat_id": ""},
+        "api_server": {"enabled": False, "listen_ip_address": "127.0.0.1", "listen_port": 8080,
+                       "username": "", "password": "", "jwt_secret_key": "disabled-not-a-secret-unused-by-rpc"},
+        "dataformat_ohlcv": "json", "dataformat_trades": "feather",
+        "freqai": {"enabled": False, "identifier": "tb02-disabled", "train_period_days": 7,
+                   "backtest_period_days": 2,
+                   "feature_parameters": {"include_timeframes": ["1h"], "include_corr_pairlist": []},
+                   "data_split_parameters": {"shuffle": False}},
     }
     if qualification:
         # Backtesting only, never used by the paused runtime. Synthetic data, not a strategy recommendation.
-        config.update(strategy="FreqAIQualification", fee=0.008, freqaimodel="LightGBMRegressor", freqai={
+        config.update(strategy="FreqAIQualification", minimal_roi={"0": 0.015}, fee=0.008, freqaimodel="LightGBMRegressor", freqai={
             "enabled": True, "identifier": "tb02-smoke", "train_period_days": 7, "backtest_period_days": 2,
             "save_backtest_models": True, "data_kitchen_thread_count": 2,
             "feature_parameters": {"include_timeframes": ["1h"], "include_corr_pairlist": [], "label_period_candles": 3, "include_shifted_candles": 1, "indicator_periods_candles": [6, 12]},
