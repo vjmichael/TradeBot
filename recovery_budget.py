@@ -18,7 +18,16 @@ BACKGROUND_TOTAL=48
 
 def _schema(db):
     db.execute('CREATE TABLE IF NOT EXISTS recovery_admission(id INTEGER PRIMARY KEY AUTOINCREMENT,pair TEXT NOT NULL,requested_ms INTEGER NOT NULL)')
-    db.execute('CREATE INDEX IF NOT EXISTS recovery_admission_clock ON recovery_admission(requested_ms)')
+    # SQLite indexes and tables share a global namespace. Repair only the
+    # exact obsolete index if a pre-release partial schema left it behind.
+    legacy=db.execute("SELECT type,tbl_name FROM sqlite_master WHERE name='recovery_admission_clock'").fetchone()
+    if legacy and legacy[0]=='index':
+        if legacy[1]!='recovery_admission' or [r[2] for r in db.execute('PRAGMA index_info(recovery_admission_clock)')]!=['requested_ms']:
+            raise RecoveryDeferred('unexpected recovery clock schema; review required')
+        if db.execute('SELECT count(*) FROM recovery_admission').fetchone()[0]:
+            raise RecoveryDeferred('incomplete recovery accounting schema; review required')
+        db.execute('DROP INDEX recovery_admission_clock')
+    db.execute('CREATE INDEX IF NOT EXISTS recovery_admission_requested_ms_idx ON recovery_admission(requested_ms)')
     db.execute('CREATE TABLE IF NOT EXISTS recovery_request_totals(pair TEXT PRIMARY KEY,requests INTEGER NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS recovery_admission_clock(id INTEGER PRIMARY KEY CHECK(id=1),last_ms INTEGER NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS recovery_cooldown(id INTEGER PRIMARY KEY CHECK(id=1),until_ms INTEGER NOT NULL)')

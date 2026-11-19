@@ -19,6 +19,33 @@ class RecoveryBudgetTests(unittest.TestCase):
     def budget(self):
         def sleep(seconds):self.ms+=round(seconds*1000)
         return RecoveryBudget(MarketMemory(self.root),clock_ms=lambda:self.ms,sleep=sleep)
+    def test_fresh_schema_and_reopen_use_distinct_sqlite_names(self):
+        self.budget().reserve('BTC/USD')
+        self.budget().reserve('ETH/USD')
+        with self.memory.tx() as db:
+            names=dict(db.execute("SELECT name,type FROM sqlite_master WHERE name LIKE 'recovery_%'"))
+            self.assertEqual(names['recovery_admission_clock'],'table')
+            self.assertEqual(names['recovery_admission_requested_ms_idx'],'index')
+            self.assertEqual(db.execute('SELECT count(*) FROM recovery_admission').fetchone()[0],2)
+        self.assertEqual(recovery_budget_status(self.memory,self.ms)['total_requests'],2)
+    def test_legacy_empty_index_repaired_and_reopen_preserves_accounting(self):
+        with self.memory.tx() as db:
+            db.execute('CREATE TABLE recovery_admission(id INTEGER PRIMARY KEY AUTOINCREMENT,pair TEXT NOT NULL,requested_ms INTEGER NOT NULL)')
+            db.execute('CREATE INDEX recovery_admission_clock ON recovery_admission(requested_ms)')
+        self.budget().reserve('BTC/USD')
+        self.budget().reserve('SOL/USD')
+        self.assertEqual(recovery_budget_status(self.memory,self.ms)['total_requests'],2)
+        with self.memory.tx() as db:
+            self.assertEqual(db.execute("SELECT type FROM sqlite_master WHERE name='recovery_admission_clock'").fetchone()[0],'table')
+    def test_incomplete_nonempty_legacy_schema_refuses_to_reset_budget(self):
+        with self.memory.tx() as db:
+            db.execute('CREATE TABLE recovery_admission(id INTEGER PRIMARY KEY AUTOINCREMENT,pair TEXT NOT NULL,requested_ms INTEGER NOT NULL)')
+            db.execute('CREATE INDEX recovery_admission_clock ON recovery_admission(requested_ms)')
+            db.execute('INSERT INTO recovery_admission(pair,requested_ms) VALUES(?,?)',('BTC/USD',self.ms))
+        with self.assertRaises(RecoveryDeferred):self.budget()
+        with self.memory.tx() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM recovery_admission').fetchone()[0],1)
+            self.assertEqual(db.execute("SELECT type FROM sqlite_master WHERE name='recovery_admission_clock'").fetchone()[0],'index')
     def test_rolling_admission_restart_and_pacing(self):
         with patch('recovery_budget.HOURLY_LIMIT',3):
             self.budget().reserve('BTC/USD')
