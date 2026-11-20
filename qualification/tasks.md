@@ -554,3 +554,15 @@ User requires ordinary installation, startup, restart and manual recovery throug
 Published harness-only repair [b08f4d0c13e348cffb07aaddf7696976bb15497a](https://github.com/vjmichael/TradeBot/commit/b08f4d0c13e348cffb07aaddf7696976bb15497a): preserve greeter UID and display-cookie check, use anchored argv matching, capture bounded non-secret service/greeter readiness status on failure. Actual PAM, active local X11, native dispatch and credential-operator enrollment checks unchanged. Exact retry [44809605680](https://github.com/vjmichael/TradeBot/actions/runs/44809605680) confirmed in progress at reconciliation, no duplicate dispatch. No terminal pass claimed. Candidate tree remains a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b. No main change, actual credentials, LIVE authorization, paid infrastructure or Library upload.
 
 Immediate task remains D2 closeout on the exact retry, then R2B, then R2C. Carry GUI/recovery contract forward at source convergence.
+
+### Financial user experience and lifecycle safety refinement (2026-11-20)
+
+Binding user requirement: ordinary users must see financial consequences before approval and manage Maj Vaj entirely via graphical controls. [Specification](resource/requirements.md). Reuse the existing reviewed TB-FIN-01C policy workflow and independent Gate; do not create a competing execution path.
+
+| ID | Scope | State |
+|---|---|---|
+| TB-08-UX-01 | Authoritative before/after financial preview, bounded automated policy authorization, exact reviewed proposal binding, safe default PAPER, stale/duplicate/unauthorized confirmation refusal, cancellation without mutation, plain-language actual result | Planned under TB-08/TB-FIN-01C/D/E and TB-07 |
+| TB-10-GUI-INSTALL/RECOVERY refinement | One graphical lifecycle manager including uninstall; exposure-aware stop/repair, preserved data and models by default, separately confirmed destructive removal, no CLI, no automatic live resume | Planned in existing GUI tasks |
+| TB-11-UX-01 | Non-developer installed end-to-end financial/lifecycle acceptance, accessibility, state changes, repeated/stale confirmation, interruptions, zero unintended financial mutation | Planned within consolidated qualification |
+
+D2 closeout reconciliation: [run 44809605680](https://github.com/vjmichael/TradeBot/actions/runs/44809605680), job 136542456059, exact harness b08f4d0c, still in progress at latest check. Exact candidate restore/locked dashboard build, VM prerequisites and disposable Debian Chromium/LightDM image construction passed. Integrated graphical step remains active; no terminal proof of corrected greeter detection, browser handoff, or enrollment yet. No additional CI triggered; no production code, mainline, real credentials, or LIVE changes. Current task unchanged; recheck terminal run before R2B/R2C. UX refinements deferred to their existing dependencies; carry into authoritative design at convergence.
