@@ -1,0 +1,40 @@
+name: TB-FIN-01C R1 exact source restoration
+on:
+  push:
+    branches:
+      - 'maj-vaj/tb-fin-01c-r1-source-restore-20261119'
+    paths:
+      - '.github/workflows/tb-fin-01c-r1-source-restore.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tb-fin-01c-r1-source-restore
+  cancel-in-progress: false
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: '4d9c2e897587368113ac4a2539871cc82e7e8764'
+          persist-credentials: false
+      - name: Export exact committed project source only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "4d9c2e897587368113ac4a2539871cc82e7e8764"
+          mkdir -p "$RUNNER_TEMP/source-restore"
+          cd "$GITHUB_WORKSPACE"
+          git archive --format=tar.gz -o "$RUNNER_TEMP/source-restore/TradeBot-exact-source.tar.gz" HEAD
+          git ls-tree -r HEAD > "$RUNNER_TEMP/source-restore/git-tree.txt"
+          git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/source-restore/identity.txt"
+          cd "$RUNNER_TEMP/source-restore"
+          sha256sum TradeBot-exact-source.tar.gz git-tree.txt identity.txt > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maj-vaj-tb-fin-01c-r1-exact-source-4d9c2e897587
+          path: ${{ runner.temp }}/source-restore/
+          if-no-files-found: error
+          retention-days: 3
