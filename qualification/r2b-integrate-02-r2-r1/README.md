@@ -31,3 +31,11 @@ The upcoming single exact-source qualification run is scoped to Python contract/
 5. Combined exact installed process isolation, secret-canary non-disclosure, provider mock/sandbox endpoint constraints, rate/cost and resource limits, manual GUI recovery, rollback/nonce retention and R2C before any production release.
 
 No CI claims until an actual workflow result is observed. No prior D2 acceptance status is promoted or overridden. All provider verification remains disabled and all financial trading stays independently gated.
+
+
+## Terminal exact-source CI evidence — PASS
+[Run 44826388014](https://github.com/vjmichael/TradeBot/actions/runs/44826388014), job 136599956049, commit `d182f5b6dc1cd65e407c2ebb33284272d7ae2ab4` completed **success** on 2026-11-20. The unmodified D2 restore rebuilt the exact D2 candidate tree `a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b`; the locked independent R2B overlay produced exact tree `250310b3409dd4c0feffa33eba1fe74d8b4ca54a`. Reproducible overlay and module blobs checked by `restore-r2b.sh` before execution.
+
+Actual restored `PaperVault` with synthetic credentials and remaining targeted health/dispatch regression: **77/77 Python unittest PASS**, no failures/errors or skips shown. Node parsed the actual modified `dashboard/app.js`; the existing account-connection render guard passed (no browser credential entry in installed branch); `npm ci --ignore-scripts` installed the 5 package-lock-pinned dependencies, `npm run build` built pinned local React assets and the checked package-lock Git hash remained `2e72c5a32098c7d503b2bf0e35fac28b607a02d7`. Scope: **source-level test, not native Debian/Windows install**, no real browser protocol dispatch/PAM, no actual protected provider test, no real Kraken/Telegram/Grok credentials, no internet-service readiness witness. CI source code group unchanged by later ledger/documentation-only changes; no duplicate CI dispatched.
+
+Still blocked: D2 graphical native journey, operator-authenticated one-use verification, actual provider adapter receipt custody, reviewed migration of existing vault credentials, independent protected tag-key provisioning, authorized readiness witnesses, installed offline UI/native canary and R2C. Do not claim this successful source CI authorizes any production deployment or financial action.
