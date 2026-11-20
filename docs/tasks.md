@@ -365,3 +365,7 @@ Operator requirement: private API credentials and wallet keys must not be disclo
 ## TB-FIN-01C / TB-08-R1 — minimized reviewed native snapshot
 
 TB-SEC-KEY-01 linked in the master table and binding design/decisions. Reconstruct a bounded read-only native financial snapshot instead of copying the desk database, excluding vault, claim tokens and nonrequired evidence/logs. Eight focused SQLite/UID fixture checks passed; actual financial replay and native Freqtrade acceptance remain open. See [snapshot evidence](tb-fin-01c-minimized-snapshot.md). Next restore qualified cp312 and exact project source, exercise actual projected replay, signed wallet reconciliation and reserve operations, retaining independent native custody. No new CI, release, or actual desk changes.
+
+## TB-FIN-01C / TB-08-R1 — actual native runtime preflight
+
+Python 3.12.16 and Freqtrade 2026.10 restored offline from verified Library uploads; 3.11.18 also integrity/runtime verified. 5/5 genuine native dry-run wallet/persistence/signature tests passed, synthetic book and fee inputs, exact test script 5ea9f16ca9bcae81602953ebf2f69f879df3fe0d. Actual migrated native producer, real financial-ledger reconciliation and protected reserve operations remain pending exact project checkout; see [runtime evidence](tb-fin-01c-native-runtime.md). No additional dependency download. No actual desk mutation or live authorization.
