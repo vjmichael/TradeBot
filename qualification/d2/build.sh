@@ -39,4 +39,4 @@ cleanup
 trap - EXIT
 truncate -s 8G "$out/guest.ext4"
 mkfs.ext4 -q -F -d "$root" "$out/guest.ext4"
-chown "${SUDO_UID:-1000}:${SUDO_GID:-1000}" "$out/guest.ext4" "$out/vmlinuz" "$out/initrd.img" "$out/packages.txt" "$out/dpkg-audit.txt"
+chown "${SUDO_UID:-1000}:${SUDO_GID:-1000}" "$out" "$out/guest.ext4" "$out/vmlinuz" "$out/initrd.img" "$out/packages.txt" "$out/dpkg-audit.txt"

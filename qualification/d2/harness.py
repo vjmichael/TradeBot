@@ -6,7 +6,7 @@ from pathlib import Path
 import pexpect
 vm=Path(sys.argv[1]); out=Path(sys.argv[2]); out.mkdir(exist_ok=True,parents=True)
 qmp=str(vm/'qmp.sock')
-accel=['-accel','kvm','-cpu','host'] if os.access('/dev/kvm',os.R_OK|os.W_OK) else ['-accel','tcg','-cpu','max']
+accel=['-accel','tcg','-cpu','max'] # exact disposable QEMU fixture, not host virtualization
 args=accel+['-m','4096','-smp','4','-drive',f'file={vm}/guest.ext4,format=raw,if=virtio','-kernel',str(vm/'vmlinuz'),'-initrd',str(vm/'initrd.img'),'-append','root=/dev/vda rw console=ttyS0 loglevel=3','-nic','none','-display','none','-vga','std','-qmp',f'unix:{qmp},server=on,wait=off','-serial','stdio','-no-reboot']
 s=pexpect.spawn('qemu-system-x86_64',args,encoding='utf-8',timeout=180,maxread=8192)
 def command(c,timeout=90,ok=True):
@@ -61,6 +61,8 @@ def find(text):
     key('ctrl+f');type_text(text);time.sleep(.5);key('Escape')
 try:
     s.expect('login:',timeout=240);s.sendline('root');s.expect('Password:');s.sendline('d2-serial-fixture-714');s.expect(r'root@[^\r\n]+#',timeout=80)
+    s.sendline("stty -echo; unset PROMPT_COMMAND; PS1=''; bind 'set enable-bracketed-paste off'; printf '\\nD2_%s\\n' READY")
+    s.expect(r'D2_READY\r?\n')
     command('bash /root/d2-setup.sh',timeout=160)
     print('PASS installed Debian guest preflight, isolated display and vault',flush=True)
     greeter();shot('01-greeter')
