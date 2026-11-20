@@ -25,7 +25,7 @@ jobs:
           set -euo pipefail
           mkdir -p receipt
           bash qualification/r2b-integrate-02-r2-r2/restore-r2.sh "$RUNNER_TEMP/r2b-installed" | tee receipt/source-tree.txt
-          test "$(git -C "$RUNNER_TEMP/r2b-installed" hash-object dashboard/app.js)" = 9142d3780d9bdedde9f21ca332d8e7383ad4223a
+          test "$(git -C "$RUNNER_TEMP/r2b-installed" hash-object dashboard/app.js)" = 1f001a6c1c567237b0bb79683ab4cfb5af603de3
           cd "$RUNNER_TEMP/r2b-installed/dashboard"
           npm ci --ignore-scripts --no-audit --no-fund
           npm run build
