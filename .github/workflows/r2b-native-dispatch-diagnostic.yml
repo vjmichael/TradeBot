@@ -1,3 +1,4 @@
+# Diagnostic R3: wait for observed browser-owned external-app prompt before consent.
 name: R2B exact Chromium to native guard diagnostic (fixture instrumentation only)
 on:
   push:
