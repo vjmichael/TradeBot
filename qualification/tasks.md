@@ -535,3 +535,22 @@ User prioritizes lean unattended 24/7 operation and explicitly requires one feat
 | TB-10-RESOURCE-04A | Installed lean 24/7 resilience acceptance with actual recovery times/data-loss bounds, resource/deadline budgets, 24-hour computer-off test and existing seven-day PAPER requirement; fail safe under faults | Planned within RESOURCE-04 and TB-11/12 |
 
 **Scope freeze:** current immediate task remains TB-SEC-KEY-01-R2A-R1-D2 closeout, then R2B and R2C; no parallel resource implementation initiated. Existing qualified recovery evidence remains valid only for its tested scope. Carry forward to authoritative design and ledger on source convergence. Documentation-only change; no CI dispatch, production source change, LIVE authorization, Library upload or paid VPS.
+
+### TB-10 / TB-09 — GUI-only operation and independent recovery notification (2026-11-20)
+
+User requires ordinary installation, startup, restart and manual recovery through simple graphical controls; no scripts, terminal commands, batch files or manual multi-service startup. Self-healing is bounded recovery from known faults, not code/policy changes. [Design amendment](resource/requirements.md). Extend existing groups, no new parallel work.
+
+| ID | Scope | State |
+|---|---|---|
+| TB-10-GUI-INSTALL | Signed graphical guided install/upgrade/repair of headless Debian VPS, automated ordered service supervision, progress and safe rollback preserving data/models/vault | Planned under TB-10 |
+| TB-10-GUI-RECOVERY | Independently reachable authorized operator controls for Start, Restart, Repair/Recover, Stop safely, Retry; no CLI; safe reconciliation, no automatic LIVE resumption, distinguish application and unavailable host | Planned under TB-10/RESOURCE-03B |
+| TB-09-RECOVERY | Separate Desk and Recovery Telegram identities; independent heartbeat observer, safe failure/intervention alerts and trusted graphical management route; no default remote restart command or trading authority | Planned under TB-09 after R2B |
+| TB-10-RESOURCE-04A refinement | Fresh graphical installation and restart after failed automatic recovery with dashboard unavailable, external alert and preserved state; no end-user scripts | Planned, integrated acceptance |
+
+### TB-SEC-KEY-01-R2A-R1-D2 closeout — greeter readiness correction (2026-11-20)
+
+**OPEN.** Exact-source retry [44804194245](https://github.com/vjmichael/TradeBot/actions/runs/44804194245) (job 136523771357; harness d9562126) completed failure. Unchanged candidate restoration/dashboard build, Debian image, VM boot, serial framing and installed isolated service/vault preflight passed. Greeter readiness timed out before PAM login. Receipt artifact [14662532456](https://github.com/vjmichael/TradeBot/actions/runs/44804194245/artifacts/14662532456), 11,503 bytes. The harness used pgrep -x on a process name longer than Linux's 15-character comm limit. Local regression demonstrated the old predicate's failure, anchored full-command match and decoy refusal (3/3). This identifies a definite fixture defect, not evidence of a greeter/application failure; actual greeter state on the failed run was not independently established.
+
+Published harness-only repair [b08f4d0c13e348cffb07aaddf7696976bb15497a](https://github.com/vjmichael/TradeBot/commit/b08f4d0c13e348cffb07aaddf7696976bb15497a): preserve greeter UID and display-cookie check, use anchored argv matching, capture bounded non-secret service/greeter readiness status on failure. Actual PAM, active local X11, native dispatch and credential-operator enrollment checks unchanged. Exact retry [44809605680](https://github.com/vjmichael/TradeBot/actions/runs/44809605680) confirmed in progress at reconciliation, no duplicate dispatch. No terminal pass claimed. Candidate tree remains a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b. No main change, actual credentials, LIVE authorization, paid infrastructure or Library upload.
+
+Immediate task remains D2 closeout on the exact retry, then R2B, then R2C. Carry GUI/recovery contract forward at source convergence.
