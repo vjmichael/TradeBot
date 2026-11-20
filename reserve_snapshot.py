@@ -17,8 +17,8 @@ TABLES = {
     'fin_conflicts': ('id TEXT, attempted_hash TEXT', ''),
     'desk': ('id INTEGER PRIMARY KEY, paused INTEGER, human_pause INTEGER, virtual_cap_cents INTEGER', ''),
     'instances': ('id TEXT, pair TEXT, virtual_cents INTEGER, mode TEXT', ''),
-    'gate_intents': ('id TEXT, instance_id TEXT, state TEXT, reserved INTEGER', ''),
-    'gate_events': ('seq INTEGER PRIMARY KEY, intent_id TEXT, action TEXT, at INTEGER, detail TEXT', "WHERE action IN ('workspace_provisioned','native_released')"),
+    'gate_intents': ('id TEXT, instance_id TEXT, state TEXT, reserved INTEGER, entry INTEGER, stop INTEGER, target INTEGER, expires INTEGER', ''),
+    'gate_events': ('seq INTEGER PRIMARY KEY, intent_id TEXT, action TEXT, at INTEGER, detail TEXT', "WHERE action IN ('workspace_provisioned','native_released','native_bound','native_attempt')"),
     'gate_current': ('kind TEXT, scope TEXT, receipt TEXT', "WHERE kind='policy' AND scope='desk'"),
     'gate_inputs': ('kind TEXT, scope TEXT, receipt TEXT, body TEXT, hash TEXT', "WHERE kind='policy' AND scope='desk' AND receipt IN (SELECT receipt FROM gate_current WHERE kind='policy' AND scope='desk')"),
     'reserve_drafts': ('instance TEXT, version INTEGER, id TEXT, at INTEGER, body TEXT, previous TEXT, digest TEXT', ''),
@@ -53,7 +53,10 @@ def project(source):
             available={r[1] for r in source.execute(f'PRAGMA table_info({name})')}
             require(set(cols)<=available,'snapshot_source_columns_missing')
             target.execute(f'CREATE TABLE {name}({definition})')
-            read=source.execute(f'SELECT {",".join(cols)} FROM {name} {where} LIMIT {MAX_ROWS+1}')
+            select=",".join(cols)
+            if name=='gate_events':
+                select="seq,intent_id,action,at,CASE WHEN action IN ('native_bound','native_attempt') THEN json_object('binding',json_extract(detail,'$.binding')) ELSE detail END"
+            read=source.execute(f'SELECT {select} FROM {name} {where} LIMIT {MAX_ROWS+1}')
             count=0
             while batch:=read.fetchmany(256):
                 count+=len(batch)

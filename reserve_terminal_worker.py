@@ -51,7 +51,7 @@ def native_driver_context(instance,pair,cents,work):
     finally:bot.cleanup()
 
 
-def native_step(producer,inbox,store,relay_pin,native_gid,mailbox,*,factory=native_driver_context):
+def native_step(producer,inbox,store,relay_pin,native_gid,mailbox,*,factory=native_driver_context,protected=False):
     require(os.geteuid()==producer.uid==mailbox.owner,'terminal_native_identity')
     if mailbox.read() is not None:
         return 'retired' if mailbox.retire(producer,inbox,store,relay_pin,native_gid) else 'awaiting_commit'
@@ -63,7 +63,12 @@ def native_step(producer,inbox,store,relay_pin,native_gid,mailbox,*,factory=nati
         if not pending:return 'idle'
         require(len(pending)==1 and pending[0][1]==instance,'terminal_unresolved_scope')
         intent=pending[0][0]
-    packet=produce(producer,inbox,store,relay_pin,native_gid,instance,intent,partial(factory,instance,pair,cents))
+    create=partial(factory,instance,pair,cents)
+    if protected:
+        from reserve_exit_custody import step
+        result=step(producer,inbox,store,relay_pin,native_gid,instance,intent,create)
+        if result!='closed':return result
+    packet=produce(producer,inbox,store,relay_pin,native_gid,instance,intent,create,protected=protected)
     mailbox.publish(packet)
     return 'published'
 
@@ -92,7 +97,7 @@ def main():
     workspace='installed-paper'
     if a.role=='native':
         producer=NativeProducer(workspace,'/var/lib/maj-vaj-native','/var/lib/maj-vaj-native-signing',native_pin=native_pin,human_pin=human_pin,rebind_dir=records,rebind_pin=rebind_pin,**ids)
-        result=native_step(producer,'/var/lib/maj-vaj-native-inbox',store,relay_pin,native.pw_gid,mailbox)
+        result=native_step(producer,'/var/lib/maj-vaj-native-inbox',store,relay_pin,native.pw_gid,mailbox,protected=Path('/etc/maj-vaj/protected-exit-enabled').is_file())
     else:
         require(os.geteuid()==desk.pw_uid,'terminal_desk_identity')
         result=desk_step(desk_transaction('/var/lib/maj-vaj/data'),mailbox,rebound_bindings(records,rebind_pin,**ids),pinned_key(native_pin),workspace,store,desk_uid=desk.pw_uid)

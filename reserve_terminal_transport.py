@@ -17,7 +17,7 @@ DOMAIN=b'maj-vaj:PAPER:terminal-settlement:v1\0'
 LIMIT=256*1024
 
 
-def _body(workspace,instance,intent,binding,count,head,view,rounding):
+def _body(workspace,instance,intent,binding,count,head,view,rounding,exits=None):
     ident(instance);ident(intent)
     require(type(count) is int and count>0 and all(type(x) is str and len(x)==64 and set(x)<=set('0123456789abcdef') for x in (binding,head)),'terminal_scope')
     checked_view(view,{'id':intent})
@@ -28,13 +28,17 @@ def _body(workspace,instance,intent,binding,count,head,view,rounding):
     fields=('id','side','gross','fee')
     require([{k:o[k] for k in fields} for o in rounding]==
             [{k:o[k] for k in fields} for o in view['orders'] if o['qty']],'terminal_rounding_scope')
-    return dict(v=1,workspace=scope(workspace),instance=instance,intent=intent,binding=binding,count=count,head=head,view=view,rounding=rounding)
+    body=dict(v=1,workspace=scope(workspace),instance=instance,intent=intent,binding=binding,count=count,head=head,view=view,rounding=rounding)
+    if exits is not None:
+        require(type(exits) is list and 0<len(exits)<=256,'terminal_exit_attempts')
+        body.update(v=2,exits=exits)
+    return body
 
 
 def verify(public,workspace,packet):
     require(type(packet) is dict and set(packet)=={'body','signature'} and type(public) is bytes and len(public)==32,'terminal_packet')
-    b=packet['body'];require(type(b) is dict and set(b)=={'v','workspace','instance','intent','binding','count','head','view','rounding'},'terminal_body')
-    require(b==_body(workspace,b['instance'],b['intent'],b['binding'],b['count'],b['head'],b['view'],b['rounding']),'terminal_scope')
+    b=packet['body'];require(type(b) is dict and (set(b)=={'v','workspace','instance','intent','binding','count','head','view','rounding'} or set(b)=={'v','workspace','instance','intent','binding','count','head','view','rounding','exits'}),'terminal_body')
+    require(b==_body(workspace,b['instance'],b['intent'],b['binding'],b['count'],b['head'],b['view'],b['rounding'],b.get('exits')),'terminal_scope')
     sig=packet['signature'];require(type(sig) is str and len(sig)==128 and set(sig)<=set('0123456789abcdef'),'terminal_signature')
     try:Ed25519PublicKey.from_public_bytes(public).verify(bytes.fromhex(sig),DOMAIN+canonical(b))
     except (InvalidSignature,ValueError) as exc:raise ValueError('terminal_signature') from exc
@@ -50,7 +54,7 @@ def _scope(db,b,binding_for):
     require(binding_for(db,b['instance'])==b['binding'],'terminal_binding_changed')
 
 
-def produce(producer,directory,store,relay_pin,native_gid,instance,intent,driver_context):
+def produce(producer,directory,store,relay_pin,native_gid,instance,intent,driver_context,*,protected=False):
     """Only actual terminal native evidence under independent exclusive custody."""
     from reserve_native_handoff import open_reviewed
     from reserve_native_rebind import verify as verify_rebind
@@ -76,7 +80,13 @@ def produce(producer,directory,store,relay_pin,native_gid,instance,intent,driver
                 view=driver.view(context)
                 require(view['closed'] and view['position']==0,'terminal_not_settled')
                 proof=driver.rounding_proof(context,view)
-                body=_body(producer.workspace,instance,intent,binding,count,head,view,proof)
+                exits=None
+                if protected:
+                    from reserve_exit_custody import authorized_row,ExitJournal,check_requests
+                    row=authorized_row(db,instance,intent,binding)
+                    exits=ExitJournal(work,key,binding,intent).read()
+                    check_requests(row,exits,view,now=int(producer.clock()),complete=True)
+                body=_body(producer.workspace,instance,intent,binding,count,head,view,proof,exits)
                 packet={'body':body,'signature':Ed25519PrivateKey.from_private_bytes(producer._key()).sign(DOMAIN+canonical(body)).hex()}
         require(len(canonical(packet))<=LIMIT,'terminal_packet_size')
     return packet
@@ -88,6 +98,23 @@ def consume(transaction,packet,binding_for,public,workspace,*,store,clock=time.t
     with transaction() as db:
         witness=store.verify(db)
         _scope(db,b,binding_for)
+        if 'exits' in b:
+            from paper_execution import append_event
+            from paper_supervisor import events
+            from reserve_exit_custody import check_requests
+            # If already settled, read exact prior attempt history; authorize_row
+            # intentionally rejects terminal records. New imports require a live hold.
+            row=db.execute('SELECT id,entry,stop,target,expires FROM gate_intents WHERE id=?',(b['intent'],)).fetchone()
+            require(row is not None,'terminal_exit_scope')
+            context=dict(zip(('id','entry','stop','target','expires'),row))
+            check_requests(context,b['exits'],b['view'],now=int(clock()),complete=True)
+            prior=events(db,b['intent'],'native_exit_attempt')
+            require(prior==b['exits'][:len(prior)] and len(prior)<=len(b['exits']),'terminal_exit_conflict')
+            if released(db,b['intent']):require(prior==b['exits'],'terminal_exit_conflict')
+            else:
+                from reserve_exit_custody import authorized_row
+                authorized_row(db,b['instance'],b['intent'],b['binding'])
+                for request in b['exits'][len(prior):]:append_event(db,b['intent'],'native_exit_attempt',request,int(clock()))
         old=released(db,b['intent'])
         if old:
             require(old['binding']==b['binding'] and old['view']==sha(b['view']),'terminal_release_conflict')
