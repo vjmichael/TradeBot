@@ -57,9 +57,31 @@ def greeter():
         (out/'greeter-readiness.txt').write_text(report+'\n')
         raise
     time.sleep(3)
+def fixture_physical_keys(text):
+    # Only these disposable fixture passwords have this deliberately limited alphabet.
+    if not re.fullmatch(r'[a-z0-9-]+',text):
+        raise ValueError('unsupported fixture key')
+    for char in text:
+        keyname='minus' if char=='-' else char
+        mon('sendkey '+keyname+' 100')
+        time.sleep(.18)
 def login(user,password):
     greeter()
-    key('ctrl+a');type_text(user);key('Tab');time.sleep(.5);type_text(password);key('Return')
+    # Observed greeter layout, centered username/password fields. Explicitly focus
+    # the username; wait for the asynchronous PAM username transition before typing.
+    width,height=map(int,x('getdisplaygeometry').split())
+    click(width//2+8,height//2-40)
+    key('ctrl+a');type_text(user);key('Tab');time.sleep(3)
+    key('ctrl+a')
+    # Use actual virtual keyboard key events, not synthesized X text, for the password.
+    fixture_physical_keys(password);time.sleep(1)
+    key('Return')
+    try:
+        return assert_active(user)
+    except RuntimeError:
+        _, state=command("passwd -S "+shlex.quote(user)+" | awk '{print \"fixture_password_status=\" $2}'; loginctl list-sessions --no-legend --no-pager; systemctl show lightdm -p ActiveState -p SubState -p Result",ok=False)
+        (out/('login-readiness-'+user+'.txt')).write_text(state+'\n')
+        raise
 def read_status():
     c="import sys,json;sys.path.insert(0,'/opt/maj-vaj');from paper_credential_vault import send,STATUS_SOCKET;print(json.dumps(send({'op':'status'},STATUS_SOCKET)))"
     raw=command("runuser -u maj-vaj -- /opt/maj-vaj/venv/bin/python -I -B -c "+shlex.quote(c))[1]
@@ -73,8 +95,7 @@ try:
     command('bash /root/d2-setup.sh',timeout=160)
     print('PASS installed Debian guest preflight, isolated display and vault',flush=True)
     greeter();shot('01-greeter')
-    login('maj-vaj-console','d2-console-fixture-813')
-    console_id=assert_active('maj-vaj-console')
+    console_id=login('maj-vaj-console','d2-console-fixture-813')
     print('PASS real PAM console login',flush=True)
     wait_cmd("pgrep -u maj-vaj-console -f '/usr/lib/chromium/chromium' >/dev/null",90)
     win=wait_window('Maj Vaj Trade Bot',90)
@@ -103,8 +124,7 @@ try:
     assert not session('maj-vaj-credential-operator')
     print('PASS confirmed sign-out; no automatic credential login',flush=True)
     # Fresh independent login, not credential impersonation or direct vault enrollment.
-    login('maj-vaj-credential-operator','d2-operator-fixture-916')
-    operator_id=assert_active('maj-vaj-credential-operator')
+    operator_id=login('maj-vaj-credential-operator','d2-operator-fixture-916')
     assert operator_id!=console_id
     win=wait_window('Maj Vaj.*Account connections',30)
     assert read_status()['kraken_read_key']=='not_configured'
