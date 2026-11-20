@@ -34,9 +34,12 @@ def event_checkpoint(event):
     return cp
 
 
-def verify_packet(public,workspace,packet,now,*,historical=False):
+def verify_packet(public,workspace,packet,now,*,historical=False,native_public=None):
     require(type(packet) is dict and set(packet)=={'event','permit'}, 'recovery_packet_schema')
     cp=event_checkpoint(packet['event'])
+    if packet['event']['kind']=='reserve_tick':
+        require(type(native_public) is bytes and len(native_public)==32 and native_public!=public,'independent_tick_key_required')
+        public=native_public
     # Historical validation is only for a packet retrieved for the CURRENT
     # already-advanced witness. Never use historical validation to advance.
     permit=packet['permit']
@@ -52,8 +55,12 @@ def name_for(cp):
 
 
 class RecoveryStore:
-    def __init__(self,store,workspace,pin):
+    def __init__(self,store,workspace,pin,native_pin=None):
         self.store,self.workspace,self.pin=store,workspace,Path(pin)
+        self.native_pin=Path(native_pin) if native_pin is not None else None
+
+    def native_public(self,packet):
+        return pinned_key(self.native_pin) if packet['event']['kind']=='reserve_tick' and self.native_pin is not None else None
 
     def _read(self,fd,cp):
         f=os.open(name_for(cp),os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC,dir_fd=fd)
@@ -62,7 +69,7 @@ class RecoveryStore:
             require(stat.S_ISREG(s.st_mode) and s.st_uid==self.store.uid and s.st_nlink==1 and
                     stat.S_IMODE(s.st_mode)==0o600 and 0<s.st_size<=MAX,'recovery_record_custody')
             packet=strict(stream.read(MAX+1))
-        require(verify_packet(pinned_key(self.pin),self.workspace,packet,0,historical=True)[1]==cp,'recovery_record_identity')
+        require(verify_packet(pinned_key(self.pin),self.workspace,packet,0,historical=True,native_public=self.native_public(packet))[1]==cp,'recovery_record_identity')
         return packet
 
     def _persist(self,fd,cp,packet):
@@ -87,7 +94,7 @@ class RecoveryStore:
 
     def advance(self,packet,now,*,before_publish=lambda:None):
         self.store._writer()
-        prev,nxt=verify_packet(pinned_key(self.pin),self.workspace,packet,now)
+        prev,nxt=verify_packet(pinned_key(self.pin),self.workspace,packet,now,native_public=self.native_public(packet))
         with self.store._directory() as fd,self.store._lock(fd):
             require(self.store._read(fd)==prev,'checkpoint_compare_and_swap')
             self._persist(fd,nxt,packet)
@@ -105,11 +112,15 @@ class RecoveryStore:
 
 class RecoverableAuthorityService(AuthorityService):
     """Strict new lane: legacy digest-only advance is NOT accepted."""
+    def __init__(self,*args,native_pin=None,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.native_pin=native_pin
+
     def dispatch(self,request):
         require(set(request)=={'v','nonce','op','workspace','permit'} and type(request['v']) is int and request['v']==1 and
                 type(request['nonce']) is str and re.fullmatch('[0-9a-f]{32}',request['nonce']) and
                 request['workspace']==self.workspace,'request_identity')
-        op=request['op']; payload=request['permit']; journal=RecoveryStore(self.store,self.workspace,self.pin)
+        op=request['op']; payload=request['permit']; journal=RecoveryStore(self.store,self.workspace,self.pin,self.native_pin)
         if op=='checkpoint':return super().dispatch(request)
         response={'v':1,'nonce':request['nonce'],'workspace':self.workspace}
         if op=='advance_recoverable':
@@ -134,8 +145,8 @@ class RecoveryClient(AuthorityClient):
                 reply['nonce']==nonce and reply['workspace']==self.workspace,'recovery_reply')
         return checkpoint(reply['checkpoint']),reply['packet']
 
-    def advance_event(self,db,expected,packet,public,replay,*,clock=time.time):
-        prev,nxt=verify_packet(public,self.workspace,packet,int(clock()))
+    def advance_event(self,db,expected,packet,public,replay,*,clock=time.time,native_public=None):
+        prev,nxt=verify_packet(public,self.workspace,packet,int(clock()),native_public=native_public)
         require(prev==expected,'permit_predecessor')
         verify_prefix(db,expected)
         require(reserve_events(db,expected.seq)==[nxt],'exact_next_event_required')
@@ -143,12 +154,12 @@ class RecoveryClient(AuthorityClient):
         require(self.request('advance_recoverable',packet)==nxt,'checkpoint_response_mismatch')
         return nxt
 
-    def recover_event(self,db,public,replay,reconcile):
+    def recover_event(self,db,public,replay,reconcile,*,native_public=None):
         """Explicit recovery only. Restore precisely the authorized event, never
         recompute a release against new financial evidence. Commit is caller-owned.
         """
         require(db.in_transaction,'serialized_desk_transaction_required')
-        cp,packet=self.recovery_packet();prev,nxt=verify_packet(public,self.workspace,packet,0,historical=True)
+        cp,packet=self.recovery_packet();prev,nxt=verify_packet(public,self.workspace,packet,0,historical=True,native_public=native_public)
         require(cp==nxt,'recovery_checkpoint_mismatch')
         # Full replay of the local journal precedes any mutation.
         _,_,count,head=replay(db);event=packet['event']
@@ -178,8 +189,9 @@ class RecoveryClient(AuthorityClient):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('socket-dir','witness','authority-user','desk-user','workspace','pin'):p.add_argument('--'+name,required=True)
+    p.add_argument('--native-pin',required=True)
     a=p.parse_args();authority=pwd.getpwnam(a.authority_user).pw_uid;desk=pwd.getpwnam(a.desk_user).pw_uid
     store=AuthorityStore(a.witness,authority_uid=authority,desk_uid=desk)
-    RecoverableAuthorityService(store,a.socket_dir,authority_uid=authority,desk_uid=desk,workspace=a.workspace,pin=a.pin).serve()
+    RecoverableAuthorityService(store,a.socket_dir,authority_uid=authority,desk_uid=desk,workspace=a.workspace,pin=a.pin,native_pin=a.native_pin).serve()
 
 if __name__=='__main__':main()

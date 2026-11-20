@@ -74,7 +74,8 @@ def run(data,instance):
         owned.append(driver)
         return driver
     keys=lambda i:workspace_key(data,i)
-    projection=authenticated_projection(keys)
+    from reserve_protected import guard_installed_projection
+    projection=guard_installed_projection(data,authenticated_projection(keys))
     def report(ready):
         # Notification processing never interrupts risk-reducing protection.
         if not ready:

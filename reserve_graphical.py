@@ -193,6 +193,8 @@ def main():
     import tkinter as tk
     from paper_custody import authenticated_projection, workspace_key
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('data_dir',type=Path);p.add_argument('--credentials',required=True,type=Path);a=p.parse_args()
+    from reserve_protected import refuse_legacy_installed
+    refuse_legacy_installed(a.data_dir)
     data=private_directory(a.data_dir);creds=private_directory(a.credentials)
     require(not creds.resolve().is_relative_to(data.resolve()) and not data.resolve().is_relative_to(creds.resolve()),'separate_approval_directory_required')
     broker=GraphicalBroker(desk_transaction(data),creds,authenticated_projection(lambda i:workspace_key(data,i)),authority_public=pinned_public())

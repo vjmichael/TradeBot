@@ -161,6 +161,8 @@ def tick_all(transaction, *, clock=time.time, verify=None, verify_authority=None
 
 
 def run_worker(directory):
+    from reserve_protected import refuse_legacy_installed
+    refuse_legacy_installed(directory)
     p=private_directory(directory)
     with os.fdopen(private_open(p/'reserve-scheduler.lock',os.O_CREAT|os.O_RDWR),'r+') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -178,6 +180,8 @@ def main():
     parser.add_argument('data_dir',type=Path); parser.add_argument('command',choices=['init','review','status','tick'])
     parser.add_argument('--credentials',type=Path); parser.add_argument('--instance'); parser.add_argument('--action',choices=sorted(ACTIONS)); parser.add_argument('--payload',type=Path)
     args=parser.parse_args()
+    from reserve_protected import refuse_legacy_installed
+    refuse_legacy_installed(args.data_dir)
     if args.command=='tick':
         require(args.credentials is None,'worker_must_not_have_credentials'); result=run_worker(args.data_dir)
     elif args.command=='status':result=status(desk_transaction(args.data_dir))
