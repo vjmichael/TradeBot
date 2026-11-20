@@ -148,7 +148,7 @@ class ApprovalBroker:
         return ReserveManager(self.tx,key,clock=self.clock).submit(receipt,instance,action,payload,grant)
 
 
-def tick_all(transaction, *, clock=time.time):
+def tick_all(transaction, *, clock=time.time, verify=None):
     """Keyless worker; immutable per-policy/cycle receipt, no activation path."""
     snapshot=status(transaction,clock=clock); result={}
     for instance,r in sorted(snapshot['instances'].items()):
@@ -156,7 +156,7 @@ def tick_all(transaction, *, clock=time.time):
         version=r['active']['version']; p=r['active']['policy']; cycle=(int(clock())-p['anchor'])//DAY
         if cycle<=r['last_cycle'] or r['last_cycle']>=(min(p['end'],p['expiry'])-p['anchor'])//DAY+1:continue
         receipt='cycle:'+sha([instance,version,cycle])
-        result[instance]=ReserveManager(transaction,clock=clock).submit(receipt,instance,'tick',{})
+        result[instance]=ReserveManager(transaction,clock=clock,verify=verify).submit(receipt,instance,'tick',{'version':version,'cycle':cycle})
     return result
 
 
@@ -164,7 +164,10 @@ def run_worker(directory):
     p=private_directory(directory)
     with os.fdopen(private_open(p/'reserve-scheduler.lock',os.O_CREAT|os.O_RDWR),'r+') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        return tick_all(desk_transaction(p))
+        def verify(db,now):
+            from paper_custody import authenticated_projection, workspace_key
+            return authenticated_projection(lambda i:workspace_key(p,i))(db,now)
+        return tick_all(desk_transaction(p),verify=verify)
 
 
 def main():

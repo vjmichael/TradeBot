@@ -74,6 +74,10 @@ def apply_event(s,kind,body):
     action=kind.removeprefix('reserve_'); p=body['payload']
     if action=='save':
         r['saved']={'version':ident(p['version']),'policy':validate(p['policy'])}
+    elif action=='adopt':
+        # One signed event makes the reviewed saved version active atomically.
+        apply_event(s,'reserve_save',body)
+        apply_event(s,'reserve_activate',body)
     elif action=='activate':
         require(r['saved'] is not None and r['saved']['version']==p['version'] and r['saved']['policy']==p['policy'],'unsaved_policy')
         policy=validate(p['policy'])
@@ -116,7 +120,8 @@ class ReserveManager:
 
     No default key, no public HTTP route, no model access. Test keys are fixtures.
     """
-    def __init__(self, transaction, approval_key=None, *, clock=time.time):
+    def __init__(self, transaction, approval_key=None, *, clock=time.time, verify=None):
+        self.verify=verify
         require(approval_key is None or type(approval_key) is bytes and len(approval_key)>=32,'invalid_approval_broker_key')
         self.tx=transaction; self.key=approval_key; self.clock=clock
 
@@ -165,7 +170,7 @@ class ReserveManager:
                 'free_surplus':free,'desk_room':room,'next_cycle':((now-p['anchor'])//DAY+1)*DAY+p['anchor']}
 
     def submit(self,receipt,instance,action,payload,grant=None):
-        ident(receipt); ident(instance); require(action in ('save','activate','revoke','earmark','tick','once'),'invalid_reserve_action')
+        ident(receipt); ident(instance); require(action in ('save','activate','adopt','revoke','earmark','tick','once'),'invalid_reserve_action')
         request=sha([instance,action,payload,grant])
         with self.tx() as db:
             now=amount(int(self.clock()),True)
@@ -182,18 +187,25 @@ class ReserveManager:
             if action=='save':
                 require(type(p) is dict and set(p)=={'version','policy'},'invalid_saved_policy')
                 ident(p['version']); validate(p['policy'])
-                require(not db.execute("SELECT 1 FROM fin_events WHERE instance=? AND kind='reserve_save' AND json_extract(body,'$.payload.payload.version')=?",(instance,p['version'])).fetchone(),'policy_version_reused')
-            if action=='activate':
+                require(not db.execute("SELECT 1 FROM fin_events WHERE instance=? AND kind IN ('reserve_save','reserve_adopt') AND json_extract(body,'$.payload.payload.version')=?",(instance,p['version'])).fetchone(),'policy_version_reused')
+            if action in ('activate','adopt'):
                 require(type(p) is dict and set(p)=={'version','policy'},'invalid_activation')
+                if action=='adopt':
+                    require(self.verify is not None,'independent_evidence_required')
+                    self.verify(db,now)
+                    require(not db.execute("SELECT 1 FROM fin_events WHERE instance=? AND kind IN ('reserve_save','reserve_adopt') AND json_extract(body,'$.payload.payload.version')=?",(instance,p['version'])).fetchone(),'policy_version_reused')
                 self._limits(db,states,now)
             if action=='tick':
-                require(p=={} and r['active'] is not None,'reinvestment_off')
+                require(r['active'] is not None,'reinvestment_off')
                 policy=r['active']['policy']; cycle=(now-policy['anchor'])//DAY
+                require(p=={} or p=={'version':r['active']['version'],'cycle':cycle},'cycle_authority_changed')
                 require(now>=r['last_time'],'reserve_clock_rollback')
                 if cycle<=r['last_cycle']:
                     return {'duplicate':True,'receipt':receipt,'release':0}
-                try: room=self._limits(db,states,now); allowed=True
-                except (AccountingError,KeyError,ValueError): room=0; allowed=False
+                try:
+                    if self.verify is not None:self.verify(db,now)
+                    room=self._limits(db,states,now); allowed=True
+                except (AccountingError,OSError,KeyError,ValueError): room=0; allowed=False
                 p={'version':r['active']['version'],'room':room,'allowed':allowed,
                    'result':evaluate(s,policy,now=now,room=room,allowed=allowed)}
             if action=='revoke':
