@@ -579,6 +579,8 @@ class Gate:
             row = db.execute("SELECT * FROM gate_intents WHERE id=?",(ident,)).fetchone()
             if not row or row["claim_token"] != token:
                 raise GateRefusal("claim_mismatch")
+            if db.execute("SELECT 1 FROM gate_events WHERE intent_id=? AND action IN ('native_bound','native_attempt') LIMIT 1",(ident,)).fetchone():
+                raise GateRefusal("protected_native_resolution_required")
             if row["resolution_receipt"] == receipt and row["state"] == outcome:
                 return outcome
             if row["state"] not in ("CLAIMED","UNKNOWN"):

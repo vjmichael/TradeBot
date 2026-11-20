@@ -91,14 +91,16 @@ def run(mode):
         directory('fence',mode=0o755)
         lock=r/'fence'/'entry.lock';lock.touch();os.chown(lock,0,TRANSFER);lock.chmod(0o640)
         directory('terminal',uid=NATIVE,mode=0o750,gid=TRANSFER)
+        directory('recovery-proof',uid=NATIVE,mode=0o750,gid=65530)
+        directory('recovery-human',uid=AUTH,mode=0o750,gid=65530)
         relay,rebind,native=[os.urandom(32) for _ in range(3)]
         for n,s in [('relay',relay),('rebind',rebind),('native',native)]:
             p=r/(n+'.pub');p.write_bytes(Ed25519PrivateKey.from_private_bytes(s).public_key().public_bytes(Encoding.Raw,PublicFormat.Raw));p.chmod(0o644)
         key=r/'native-keys'/'native-ed25519.key';key.write_bytes(native);os.chown(key,NATIVE,NATIVE)
         now=int(time.time());(r/'clock').write_text(str(now));(r/'clock').chmod(0o644)
-        env={'PATH':'/usr/bin:/bin','PYTHONPATH':':'.join(map(str,[ROOT,ROOT/'scripts',ROOT/'engine_strategies',ROOT/'tests'])),'PYTHONDONTWRITEBYTECODE':'1','HOME':'/nonexistent','OPENBLAS_NUM_THREADS':'1'}
+        env={'PATH':'/usr/bin:/bin','PYTHONPATH':':'.join(map(str,[ROOT,ROOT/'scripts',ROOT/'engine_strategies',ROOT/'tests'])),'PYTHONDONTWRITEBYTECODE':'1','HOME':'/nonexistent','OPENBLAS_NUM_THREADS':'1','DISPLAY':os.environ.get('DISPLAY','')}
         prefix=f'from qualify_independent_entry import *;r=Path({str(r)!r});os.umask(0o077);'
-        def cmd(uid,code):return ['setpriv',f'--reuid={uid}',f'--regid={uid}',f'--groups={TRANSFER}' if uid in (DESK,NATIVE) else '--clear-groups',sys.executable,'-B','-c',prefix+code]
+        def cmd(uid,code):return ['setpriv',f'--reuid={uid}',f'--regid={uid}',f'--groups={TRANSFER},65530' if uid in (DESK,NATIVE) else '--groups=65530',sys.executable,'-B','-c',prefix+code]
         def sub(uid,code):
             p=subprocess.run(cmd(uid,code),env=env,capture_output=True,text=True,timeout=30);assert p.returncode==0,p.stderr;return p.stdout.strip()
         result=sub(AUTH,'s=AuthorityStore(r/"witness",authority_uid=AUTH,desk_uid=DESK);c=sqlite3.connect(":memory:");c.execute("CREATE TABLE fin_events(seq INTEGER,kind TEXT,digest TEXT)");c.execute("BEGIN");s.initialize(c);print(enroll(r/"credentials",PASSWORD,authority_uid=AUTH,desk_uid=DESK).hex())')
@@ -142,6 +144,12 @@ def run(mode):
                 print(sub(NATIVE,native_prefix+f'assert {native_call}=="submitted";print("PASS actual independent Freqtrade entry")'))
                 out,err=server.communicate(timeout=10);assert server.returncode==0,err
                 with tx() as db:assert __import__('paper_execution').event_detail(db,intent,'native_return') is not None
+            elif mode=='review':
+                cut='import reserve_no_effect\ndef cut(*a,**kw):os.kill(os.getpid(),9)\nreserve_no_effect.possible=cut'
+                child=subprocess.run(cmd(NATIVE,native_prefix+'exec('+repr(cut)+');'+native_call),env=env,capture_output=True,text=True,timeout=30)
+                assert child.returncode==-9,child.stderr
+                out,err=server.communicate(timeout=10);assert server.returncode!=0
+                print('PASS independently authorized attempt interrupted after durable PREPARED, before possible effect',flush=True)
             elif mode=='partial':
                 # The dry-run simulator normally fills all-or-none. Inject a known
                 # cumulative partial observation into the genuine pending buy;
@@ -184,13 +192,52 @@ def run(mode):
                     if child.poll() is None:child.kill();child.wait()
             with tx() as db:
                 from financial_ledger import gate_reserve
-                assert db.execute('SELECT state FROM gate_intents WHERE id=?',(intent,)).fetchone()[0]==('UNKNOWN' if mode in ('after','partial') else 'CLAIMED')
+                assert db.execute('SELECT state FROM gate_intents WHERE id=?',(intent,)).fetchone()[0]==('UNKNOWN' if mode in ('after','partial','review') else 'CLAIMED')
                 assert gate_reserve(db,I)>0
             # Read persisted native records in a fresh unprivileged process.
-            expected=0 if mode=='kill' else 1
+            expected=0 if mode in ('kill','review') else 1
             sub(NATIVE,f'intent={intent!r};expected={expected};exec('+repr('with closing(sqlite3.connect(r/"native-data"/"paper"/I/"paper.sqlite")) as db:\n assert db.execute("SELECT COUNT(*) FROM trades WHERE enter_tag=?",("mv:"+intent,)).fetchone()[0]==expected\n assert db.execute("SELECT COUNT(*) FROM orders").fetchone()[0]==expected') +')')
             sub(DESK,common+f'assert not Gate(tx,clock=clock,account_projection=verify).claim({intent!r},"paper-worker",1)["claimed"]')
             print('PASS no repeat authorization; in-flight principal remains reserved',flush=True)
+            if mode in ('review','kill'):
+                with tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
+                snapshot()
+                getproof='from reserve_no_effect import produce;print(json.dumps(produce(p,r/"inbox",store,r/"relay.pub",NATIVE,factory=lambda i,p,c,w:driver_context(w))))'
+                if mode=='kill':
+                    refused=subprocess.run(cmd(NATIVE,common+producer+getproof),env=env,capture_output=True,text=True,timeout=30)
+                    assert refused.returncode!=0 and 'effect_possible_or_unproven' in refused.stderr,refused.stderr
+                    print('PASS possible effect cannot be certified as non-invocation, even with flat wallet',flush=True)
+                else:
+                    boxes='proofbox=TerminalMailbox(r/"recovery-proof",NATIVE,65530);approvalbox=TerminalMailbox(r/"recovery-human",AUTH,65530);'
+                    sub(NATIVE,common+producer+boxes+'from reserve_no_effect import produce;proofbox.publish(produce(p,r/"inbox",store,r/"relay.pub",NATIVE,factory=lambda i,p,c,w:driver_context(w)))')
+                    # Actual GUI and encrypted authority key; automated synthetic credentials.
+                    auth='from reserve_no_effect import Review;review=Review(W,r/"credentials",r/"native.pub",r/"human.pub",authority_uid=AUTH,desk_uid=DESK,clock=clock);'
+                    bad=auth+boxes+'v=review.begin(proofbox.read());review.confirm("WRONG",PASSWORD)'
+                    refused=subprocess.run(cmd(AUTH,common+bad),env=env,capture_output=True,text=True,timeout=10)
+                    assert refused.returncode!=0
+                    with tx() as db:assert gate_reserve(db,I)>0
+                    apply='from reserve_no_effect_worker import desk_once;'
+                    call='desk_once(tx,proofbox,approvalbox,bindings,public,human,W,store,clock=clock)'
+                    sub(DESK,common+boxes+apply+f'assert {call}=="review_required"')
+                    if os.environ.get('DISPLAY'):
+                        gui='from reserve_no_effect_worker import review_window;import tkinter as tk;t=tk.Tk();v=review_window(t,review,proofbox.read(),approvalbox.publish);t.update();v["challenge"].set(v["review"]["challenge"]);v["password"].set(PASSWORD);v["confirm"].invoke();t.update();assert approvalbox.read() is not None and "Approval recorded" in v["status"].get();t.destroy()'
+                        sub(AUTH,common+boxes+auth+gui)
+                        print('PASS actual graphical local review and independent protected mailbox delivery',flush=True)
+                    else:
+                        sub(AUTH,common+boxes+auth+'v=review.begin(proofbox.read());approvalbox.publish(review.confirm(v["challenge"],PASSWORD))')
+                    reviewed=json.loads(sub(DESK,boxes+'print(json.dumps(approvalbox.read()))'))
+                    altered=json.loads(json.dumps(reviewed));altered['approval']['body']['proof']='a'*64
+                    bad=common+'from reserve_no_effect import consume;'+f'consume(tx,{altered!r},bindings,public,human,W,store=store,clock=clock)'
+                    refused=subprocess.run(cmd(DESK,bad),env=env,capture_output=True,text=True,timeout=10);assert refused.returncode!=0
+                    with tx() as db:assert gate_reserve(db,I)>0;db.execute('UPDATE desk SET paused=0,human_pause=0')
+                    refused=subprocess.run(cmd(DESK,common+boxes+apply+call),env=env,capture_output=True,text=True,timeout=10);assert refused.returncode!=0
+                    with tx() as db:assert gate_reserve(db,I)>0;db.execute('UPDATE desk SET paused=1,human_pause=1')
+                    sub(DESK,common+boxes+apply+f'assert {call}=="accounted";assert {call}=="already_accounted"')
+                    with tx() as db:
+                        assert gate_reserve(db,I)==0 and db.execute('SELECT state FROM gate_intents WHERE id=?',(intent,)).fetchone()[0]=='NO_FILL'
+                        v=__import__('financial_ledger').observed(replay(db)[0][I]);assert v['active']==100*SCALE and v['protected']==v['qty']==v['pending']==0
+                        assert tuple(db.execute('SELECT paused,human_pause FROM desk').fetchone())==(1,1)
+                    print('PASS exact independent review, modified approval refusal, duplicate nonmutation, principal preserved and desk paused',flush=True)
             if mode=='kill':
                 # Missing native order is not proof of no fill. Even an accepted
                 # permit with no observed open exposure cannot release capital.
@@ -222,4 +269,4 @@ def run(mode):
         finally:
             if server.poll() is None:server.kill();server.wait()
 
-if __name__=='__main__':run('outage' if '--outage' in sys.argv else 'partial' if '--partial' in sys.argv else 'after' if '--after' in sys.argv else 'kill' if '--kill' in sys.argv else 'normal')
+if __name__=='__main__':run('review' if '--review' in sys.argv else 'outage' if '--outage' in sys.argv else 'partial' if '--partial' in sys.argv else 'after' if '--after' in sys.argv else 'kill' if '--kill' in sys.argv else 'normal')

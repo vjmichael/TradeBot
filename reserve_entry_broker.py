@@ -129,6 +129,10 @@ def execute(conn,driver,row_id,work,lock,*,desk_uid,native_uid,pair,instance,clo
             require(not select.select([conn],[],[],0)[0],'entry_guardian_disconnected')
             from reserve_outage_protection import save_grant
             save_grant(work,driver.key,row,nonce,binding,int(clock()),p['until'])
+            from reserve_no_effect import prepared,possible
+            prepared(work,driver.key,row,binding,receipt)
+            require(int(clock())<p['until'] and not select.select([conn],[],[],0)[0],'entry_permit_lost')
+            possible(work,driver.key,row,binding,receipt)
             require(int(clock())<p['until'] and not select.select([conn],[],[],0)[0],'entry_permit_lost')
             return operation()
         result=driver.entry(row,guard)

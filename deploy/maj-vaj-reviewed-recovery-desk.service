@@ -1,0 +1,31 @@
+[Unit]
+Description=Maj Vaj staged PAPER reviewed recovery (desk)
+ConditionPathExists=/etc/maj-vaj/reviewed-recovery-enabled
+ConditionPathExists=/etc/maj-vaj/protected-entry-enabled
+ConditionPathExists=/etc/maj-vaj/entry-fence.lock
+
+[Service]
+Type=oneshot
+User=maj-vaj
+Group=maj-vaj
+SupplementaryGroups=maj-vaj-transfer maj-vaj-recovery
+WorkingDirectory=/opt/maj-vaj
+ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from reserve_no_effect_worker import main;main()' desk
+TimeoutStartSec=30s
+TimeoutStopSec=5s
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/maj-vaj/data
+InaccessiblePaths=-/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-reserve-approval -/var/lib/maj-vaj-reserve-relay -/var/lib/maj-vaj-native-inbox
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+LimitCORE=0
+MemoryMax=512M
+TasksMax=16
+StandardOutput=null
+StandardError=null
