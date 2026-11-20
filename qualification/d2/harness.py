@@ -11,8 +11,8 @@ args=accel+['-m','4096','-smp','4','-drive',f'file={vm}/guest.ext4,format=raw,if
 s=pexpect.spawn('qemu-system-x86_64',args,encoding='utf-8',timeout=180,maxread=8192)
 def command(c,timeout=90,ok=True):
     s.sendline("stty -echo; "+c+"; rc=$?; printf '\\nD2_%s=%s\\n' END \"$rc\"")
-    s.expect(r'D2_END=(\d+)\r?\n',timeout=timeout)
-    found=int(s.match.group(1)); result=s.before.strip()
+    s.expect(r'D2_END=(\d+)\r*\n',timeout=timeout)
+    found=int(s.match.group(1)); result=s.before.replace('\r','').strip()
     if ok and found:raise RuntimeError(f'guest command failed ({found}): {result[-800:]}')
     return found,result
 def mon(c):
@@ -62,7 +62,7 @@ def find(text):
 try:
     s.expect('login:',timeout=240);s.sendline('root');s.expect('Password:');s.sendline('d2-serial-fixture-714');s.expect(r'root@[^\r\n]+#',timeout=80)
     s.sendline("stty -echo; unset PROMPT_COMMAND; PS1=''; bind 'set enable-bracketed-paste off'; printf '\\nD2_%s\\n' READY")
-    s.expect(r'D2_READY\r?\n')
+    s.expect(r'D2_READY\r*\n')
     command('bash /root/d2-setup.sh',timeout=160)
     print('PASS installed Debian guest preflight, isolated display and vault',flush=True)
     greeter();shot('01-greeter')
