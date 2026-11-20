@@ -32,7 +32,9 @@ def _source(root):
 def extract(data):
     from reserve_runtime import desk_transaction
     from reserve_snapshot import project
-    require(os.geteuid()>0,'relay_extractor_identity')
+    require(os.getuid()==os.geteuid()>0,'relay_extractor_identity')
+    status=dict(line.split(':',1) for line in Path('/proc/self/status').read_text().splitlines() if ':' in line)
+    require(all(int(status[name].strip(),16)==0 for name in ('CapPrm','CapEff','CapAmb')),'relay_extractor_privileged')
     import resource
     resource.setrlimit(resource.RLIMIT_FSIZE,(MAX_DB,MAX_DB))
     with desk_transaction(Path(data))() as db:

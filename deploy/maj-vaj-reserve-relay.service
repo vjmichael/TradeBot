@@ -19,6 +19,7 @@ ProtectHome=yes
 ReadWritePaths=/var/lib/maj-vaj-native-inbox /var/lib/maj-vaj/data
 InaccessiblePaths=-/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-reserve-approval -/var/lib/maj-vaj-terminal-outbox
 CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_CHOWN
+AmbientCapabilities=CAP_SETUID
 RestrictAddressFamilies=AF_UNIX
 LimitCORE=0
 MemoryMax=512M
