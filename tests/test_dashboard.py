@@ -167,10 +167,14 @@ class DashboardTests(unittest.TestCase):
     def test_credential_canary_not_echoed_on_backend_failure(self):
         from unittest.mock import patch
         secret = 'synthetic-credential-canary-never-a-real-key'
-        with self.client() as c:
+        with self.app() as c:
             for field in ('wallet_private_key', 'seed_phrase', 'kraken_trade_key'):
                 res = c.post('/api/setup/credentials', json={field:secret}, headers=AUTH)
                 self.assertEqual(res.status_code,422)
+                self.assertNotIn(secret,res.text)
+            with patch.object(Vault,'presence',side_effect=RuntimeError(secret)):
+                res = c.get('/api/setup',headers=AUTH)
+                self.assertEqual(res.status_code,503)
                 self.assertNotIn(secret,res.text)
             with patch.object(Vault,'setup',side_effect=RuntimeError(secret)):
                 res = c.post('/api/setup/credentials',json={'grok':secret},headers=AUTH)

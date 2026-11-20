@@ -493,7 +493,10 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
 
     @app.get("/api/setup", dependencies=[Depends(authorize)])
     def setup_status():
-        presence = vault.presence() if vault else {slot: "unavailable" for slot in sorted(SLOTS)}
+        try:
+            presence = vault.presence() if vault else {slot: "unavailable" for slot in sorted(SLOTS)}
+        except Exception:
+            raise HTTPException(503, "Secure credential storage unavailable") from None
         return {"vault_available": vault is not None and "unavailable" not in presence.values(), "credentials": presence, "connections_verified": False, "deployment_ready": False}
 
     @app.post("/api/setup/credentials", dependencies=[Depends(authorize)])
