@@ -1,0 +1,580 @@
+diff --git a/deploy/49-maj-vaj-paper-review.rules b/deploy/49-maj-vaj-paper-review.rules
+new file mode 100644
+index 0000000..e5835b0
+--- /dev/null
++++ b/deploy/49-maj-vaj-paper-review.rules
+@@ -0,0 +1,9 @@
++// Install only on the dedicated, administrator-reviewed PAPER approval seat.
++polkit.addRule(function(action, subject) {
++    if (action.id === "org.freedesktop.systemd1.manage-units" &&
++        action.lookup("unit") === "maj-vaj-reviewed-recovery-review.service" &&
++        action.lookup("verb") === "start" &&
++        subject.user === "maj-vaj-approval" && subject.local && subject.active) {
++        return polkit.Result.YES;
++    }
++});
+diff --git a/deploy/maj-vaj-reviewed-recovery-review.service b/deploy/maj-vaj-reviewed-recovery-review.service
+new file mode 100644
+index 0000000..ed0a2f6
+--- /dev/null
++++ b/deploy/maj-vaj-reviewed-recovery-review.service
+@@ -0,0 +1,32 @@
++[Unit]
++Description=Maj Vaj PAPER recovery approval (dedicated local approval session)
++ConditionPathExists=/etc/maj-vaj/reviewed-recovery-enabled
++ConditionPathExists=/etc/maj-vaj/review-desktop-enabled
++
++[Service]
++Type=exec
++User=maj-vaj-approval
++Group=maj-vaj-approval
++SupplementaryGroups=maj-vaj-recovery
++WorkingDirectory=/opt/maj-vaj
++ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from reserve_review_launcher import serve;serve()'
++UMask=0077
++NoNewPrivileges=yes
++ProtectSystem=strict
++ProtectHome=yes
++ReadWritePaths=/var/lib/maj-vaj-recovery-human
++InaccessiblePaths=-/var/lib/maj-vaj -/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-reserve-relay
++CapabilityBoundingSet=
++RestrictAddressFamilies=AF_UNIX
++PrivateNetwork=yes
++PrivateDevices=yes
++ProtectKernelTunables=yes
++ProtectKernelModules=yes
++ProtectControlGroups=yes
++LimitCORE=0
++TimeoutStopSec=5s
++RuntimeMaxSec=600s
++KillMode=control-group
++Restart=no
++StandardOutput=null
++StandardError=null
+diff --git a/deploy/maj-vaj-reviewed-recovery.desktop b/deploy/maj-vaj-reviewed-recovery.desktop
+new file mode 100644
+index 0000000..accbd38
+--- /dev/null
++++ b/deploy/maj-vaj-reviewed-recovery.desktop
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Type=Application
++Name=Maj Vaj — Review interrupted PAPER order
++Comment=Review an interrupted simulated order in the dedicated approval session
++Exec=/opt/maj-vaj/venv/bin/python -I -B -c "import sys;sys.path.insert(0,'/opt/maj-vaj');from reserve_review_launcher import launch;launch()"
++Terminal=false
++Categories=Office;Finance;
++StartupNotify=false
+diff --git a/docs/tasks.md b/docs/tasks.md
+index 4af371e..22e0228 100644
+--- a/docs/tasks.md
++++ b/docs/tasks.md
+@@ -413,3 +413,9 @@ Exact R5-R2 parent 4efd6ff17196bdf8281d21d4f2cb70719a1ad015; all 199 deployed co
+ ## TB-FIN-01C / TB-08-R2-R5-R4 — installed reviewed recovery and repeatable authenticated lifecycle (scoped PASS)
+ 
+ Warm exclusive native proof generation before snapshot deadline; verified minimal snapshot acknowledgment, native signed archival of exact approved resolution, independent authority copy, ordered mailbox locks and durable retirement/reuse. Expired proof archived only with hold intact after expiry plus snapshot-age grace, fresh proof required; no mutation by archival. Final 7/7 local checkpoints including expiry renewal and stale snapshot refusal, full repository 486 passed / 2 optional skips / 0 failed before final narrow guard; final focused 15/15 PASS host and guest. Genuine offline systemd installed two complete consecutive reviewed non-invocation cycles using the same $100 PAPER portfolio/keys/mailboxes. Authenticated graphical authority launch (desk display attach refused), cancel/wrong challenge refusal, exact approvals and duplicate import prevention, two signed archive pairs, zero orders/reservations/P&L, principal unchanged/paused; 205/205 exact final file hashes, final archive revalidation and clean shutdown/disk integrity PASS. Synthetic GUI inputs and fixture override; production desktop session integration, installed snapshot-expiry/checkpoint-change protection, public-market sustained PAPER, migrated goals and full credential-security acceptance remain open. [Evidence](tb-fin-01c-r2-r5-r4-reviewed-lifecycle.md). No real desk changes, main merge, CI or LIVE authorization.
++
++## TB-FIN-01C / TB-08-R2-R5-R5 — dedicated approval desktop and snapshot protection (local candidate)
++
++Dedicated local X11 approval launcher, fixed service and narrow polkit start rule with independent approval UID and session/cookie revalidation; root-reviewed provisioning required. Narrow native snapshot availability routing; invalid trust material remains fail-closed. Exact-parent local candidate: 498/500 regression tests passed, 2 optional skips, 0 failures; genuine separate-UID retained-driver PAPER expiry and checkpoint-change controlled-book cases 8/8 each PASS. No live permission, actual desk change, new CI or main merge. [Qualification and deployment limits](tb-fin-01c-r2-r5-r5-snapshot-desktop.md). Installed production desktop positive authorization and actual named-service in-flight snapshot-expiry/checkpoint-change qualification remain open; preserve earlier scoped R5-R4 acceptance. Public sustained PAPER, migrated goals, forward validation and credential-security acceptance still required.
++
++Offline systemd guest follow-up: 209/209 code/deployment hashes matched, graphical service syntax and missing-opt-in refusal PASS. Transient cross-UID expiry failed its warm-runtime test deadline; checkpoint transient case stopped after signed wallet verification, not accepted. Clean guest poweroff, child integrity PASS, immutable base unchanged. Production installed positive approval and named-service wall-clock snapshot/checkpoint tests still open.
+diff --git a/docs/tb-fin-01c-r2-r5-r5-snapshot-desktop.md b/docs/tb-fin-01c-r2-r5-r5-snapshot-desktop.md
+new file mode 100644
+index 0000000..3ae5e14
+--- /dev/null
++++ b/docs/tb-fin-01c-r2-r5-r5-snapshot-desktop.md
+@@ -0,0 +1,23 @@
++# TB-FIN-01C / TB-08-R2-R5-R5 — dedicated approval desktop and snapshot protection
++
++Parent: `867e58a87fd0a27aeea693739646b36edfa7f113` (tree `87c5f6da6768efb64858d7889e18d4b2b0ea66cf`). PAPER only. Local candidate; no main merge, live authorization or real desk changes.
++
++## Deployment contract
++
++The desktop entry starts only the fixed review service; it does not accept commands, credentials, display identifiers or approval payloads from the caller. The service runs under the existing independent `maj-vaj-approval` account and recovery group, with no network, no capabilities, narrow write access and no desk/native-private access. The exact polkit rule permits only the active local approval account to start the named unit. This is not an invitation to give normal desk users access to the approval account.
++
++Deployment requires an administrator-provisioned dedicated local X11 seat with logind reporting exactly one active, unlocked, nonremote user session for that account, a local display and seat, and an owner-only private Xauthority cookie in `/run/maj-vaj-review-display/Xauthority`. Provision the X server with TCP listening disabled, no broad `xhost` grants, and exclusive authorization for the review account. Do not copy that cookie into the normal desk session. Confirm the display is genuinely isolated. Install the fixed desktop entry, polkit rule and service only after that review; the separate root-owned `/etc/maj-vaj/review-desktop-enabled` marker is an explicit opt-in, in addition to the existing reviewed-recovery marker. Do not enable a timer or automatic approval. Session and cookie identity are rechecked before confirmation and publication. Missing/ambiguous/locked/remote/Wayland sessions refuse. This candidate does not provision the seat itself; positive operator desktop acceptance remains mandatory.
++
++## Protection routing
++
++Both native workers narrowly distinguish missing snapshot file and typed signed-replay freshness/checkpoint races from missing witness/pin, malformed or unauthenticated data. Only the ordinary snapshot-availability cases route to the existing independent protected reduce-only mechanism; no new order authorization or stale accounting authority is created. Existing entry lease/permit, snapshot freshness and watchdog settings are unchanged. Invalid or missing trust material remains fail-closed. The existing signed terminal settlement path remains authoritative.
++
++## Local exact-source qualification
++
++Pinned Python 3.12.16 and Freqtrade 2026.10 were restored from the shared offline packages; dependency check passed. Full suite: 500 discovered, 498 passed, 2 optional skipped, zero failures. Twelve new focused checks are included in that count. Actual separate-UID controlled-book PAPER native tests (8 checkpoints each): logical-clock signed snapshot expiry and real independent authority checkpoint advancement. Both retain the same native driver; existing exposure is reduced using its accepted grant, new entry/replay denied, accounting stays reserved until fresh authenticated evidence, and exactly one terminal settlement and acknowledgement complete. No public market, real credentials or real funds. The tests use disposable isolated ledgers and simulated time for expiry, not installed service wall-clock expiry.
++
++Initial host runs refused an unprotected source ancestry and encountered a Tk teardown issue in the unpinned environment. Corrected qualification placement and isolated the GUI test in a subprocess; no production trust check was relaxed. Final pinned rerun passed.
++
++## Offline Debian guest attempt
++
++Real systemd PID 1, loopback-only network, pinned runtime, 209/209 code and deployment file hashes. Installed the new review service definition in this disposable guest; `systemd-analyze verify` exit 0 and missing opt-in conditions correctly left it inactive with no PID. No genuine local X11 approval seat was provisioned; no positive production GUI or polkit activation acceptance claimed. The expiry cross-UID harness run under a transient systemd unit verified the signed wallet and then failed its existing 20-second warm-runtime readiness test deadline (unit exit 1); the checkpoint harness verified the signed wallet and was deliberately stopped before completion. These are not the installed named production-service lifecycle tests. No production deadlines were widened. Guest stopped cleanly, child image checks passed and original base SHA-256 remained unchanged. Complete actual named-service in-flight expiry/checkpoint change and real approval-seat interaction on a suitable native/KVM host before accepting R5-R5.
+diff --git a/reserve_native_handoff.py b/reserve_native_handoff.py
+index 56f4025..d90fe16 100644
+--- a/reserve_native_handoff.py
++++ b/reserve_native_handoff.py
+@@ -24,6 +24,18 @@ TTL=30
+ MAX_PACKET=MAX_DB+8192
+ 
+ 
++def snapshot_unavailable(exc):
++    """Only ordinary relay absence/freshness races allow reduce-only fallback.
++
++    Missing checkpoint, pin or custody data and invalid signatures are not
++    snapshot availability errors. Never convert them to entry/accounting trust.
++    """
++    from reserve_checkpoint import CheckpointError
++    return ((isinstance(exc, FileNotFoundError) and exc.filename == 'snapshot.bin') or
++            (isinstance(exc, CheckpointError) and str(exc) in
++             ('snapshot_stale', 'snapshot_checkpoint_changed', 'snapshot_changed_during_review')))
++
++
+ def state_identity(db):
+     from financial_ledger import replay, execution_anchor
+     _,_,count,head=replay(db)
+diff --git a/reserve_no_effect_worker.py b/reserve_no_effect_worker.py
+index f8e8987..7a7789e 100644
+--- a/reserve_no_effect_worker.py
++++ b/reserve_no_effect_worker.py
+@@ -12,7 +12,7 @@ from reserve_native_wallet import rebound_bindings
+ from reserve_no_effect import Review, consume, produce
+ 
+ 
+-def review_window(root,review,proof,publish):
++def review_window(root,review,proof,publish,*,guard=lambda:None):
+     from tkinter import ttk, StringVar, Text
+     v=review.begin(proof);root.title('Maj Vaj — Review interrupted PAPER order')
+     text=Text(root,height=12,width=76,wrap='word');text.pack(fill='both',expand=True,padx=12,pady=8)
+@@ -26,7 +26,8 @@ def review_window(root,review,proof,publish):
+     def cancel():review.cancel();password.set('');challenge.set('');root.destroy()
+     def confirm():
+         pw,answer=password.get(),challenge.get();password.set('');challenge.set('');button.configure(state='disabled')
+-        try:approved=review.confirm(answer,pw)
++        try:
++            guard();approved=review.confirm(answer,pw)
+         except (ValueError,OSError,KeyError,TypeError):status.set('Approval refused. No reservation released.');return
+         try:publish(approved)
+         except (ValueError,OSError,KeyError,TypeError):status.set('Delivery not confirmed. No retry until reviewed.');return
+@@ -44,13 +45,13 @@ def desk_once(transaction,proofbox,approvalbox,bindings,native,human,workspace,s
+     return consume(transaction,review,bindings,native,human,workspace,store=store,**({} if clock is None else {'clock':clock}))
+ 
+ 
+-def main(*,factory=None,window=review_window):
++def main(*,factory=None,window=review_window,role=None):
+     from reserve_runtime import desk_transaction
+     from reserve_entry_fence import open_fence,LOCK
+     from reserve_terminal_worker import native_driver_context
+     factory=factory or native_driver_context
+     from reserve_recovery_archive import native_step as archive_native, authority_step, publish_review
+-    p=argparse.ArgumentParser();p.add_argument('role',choices=('native','review','desk'));a=p.parse_args()
++    p=argparse.ArgumentParser();p.add_argument('role',choices=('native','review','desk'));a=p.parse_args(None if role is None else [role])
+     marker=Path('/etc/maj-vaj/reviewed-recovery-enabled')
+     require(marker.is_file() and not marker.is_symlink() and marker.stat().st_uid==0 and not marker.stat().st_mode&0o022,'recovery_disabled')
+     desk,native,auth=(pwd.getpwnam(x) for x in ('maj-vaj','maj-vaj-native','maj-vaj-approval'))
+diff --git a/reserve_persistent_worker.py b/reserve_persistent_worker.py
+index 44c859c..a178fad 100644
+--- a/reserve_persistent_worker.py
++++ b/reserve_persistent_worker.py
+@@ -112,8 +112,8 @@ class WarmRuntime:
+         except (FileNotFoundError, ValueError) as exc:
+             # A refresh race is not a reason to restart and lose the simulator's
+             # pending-order cache. No stale accounting or entry authorization.
+-            unavailable=(isinstance(exc,FileNotFoundError) and exc.filename=='snapshot.bin') or str(exc) in ('snapshot_stale','snapshot_checkpoint_changed','snapshot_changed_during_review')
+-            if not unavailable:raise
++            from reserve_native_handoff import snapshot_unavailable
++            if not snapshot_unavailable(exc):raise
+             if mailbox.read() is not None:return 'snapshot_held'
+             from reserve_outage_protection import step as outage_step
+             return outage_step(self.producer,self.relay_pin,factory=self.borrow,lease=self.lease)
+diff --git a/reserve_review_launcher.py b/reserve_review_launcher.py
+new file mode 100644
+index 0000000..9b93c0c
+--- /dev/null
++++ b/reserve_review_launcher.py
+@@ -0,0 +1,108 @@
++"""Local dedicated approval-session launcher. No desk RPC or approval credentials.
++
++The administrator owns the display/session provisioning; no caller supplied
++DISPLAY, XAUTHORITY, command, service name or recovery action is accepted.
++"""
++import os
++import pwd
++import re
++import stat
++import subprocess
++import sys
++from pathlib import Path
++from reserve_checkpoint import require
++from reserve_ipc import protected_dir
++
++UNIT = 'maj-vaj-reviewed-recovery-review.service'
++DISPLAY_DIR = Path('/run/maj-vaj-review-display')
++COOKIE = DISPLAY_DIR / 'Xauthority'
++MARKER = Path('/etc/maj-vaj/review-desktop-enabled')
++PROPERTIES = ('User', 'Active', 'Remote', 'Type', 'Class', 'State', 'Display', 'Seat', 'LockedHint')
++
++
++def _login(*args):
++    return subprocess.run(['/usr/bin/loginctl', '--no-pager', *args], check=True,
++                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
++                          text=True, timeout=3, env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'}).stdout
++
++
++def _sessions(uid):
++    """Use logind's trusted session metadata, never caller environment."""
++    matches = []
++    for line in _login('list-sessions', '--no-legend').splitlines():
++        fields = line.split()
++        if len(fields) < 2 or fields[1] != str(uid):
++            continue
++        session = fields[0]
++        require(re.fullmatch(r'[A-Za-z0-9_-]{1,64}', session) is not None, 'review_session_id')
++        output = _login('show-session', session, *[f'--property={p}' for p in PROPERTIES])
++        props = dict(line.split('=', 1) for line in output.splitlines() if '=' in line)
++        if (props.get('User'), props.get('Active'), props.get('Remote'), props.get('Type'), props.get('Class'), props.get('State'), props.get('LockedHint')) != (str(uid), 'yes', 'no', 'x11', 'user', 'active', 'no'):
++            continue
++        display = props.get('Display', '')
++        if re.fullmatch(r':[0-9]{1,4}(?:\.0)?', display) and re.fullmatch(r'seat[A-Za-z0-9_-]{1,60}', props.get('Seat', '')):
++            matches.append((session, display))
++    require(len(matches) == 1, 'review_local_session_required')
++    return matches[0]
++
++
++def _cookie(uid):
++    with protected_dir(DISPLAY_DIR, uid, 0o700) as fd:
++        f = os.open(COOKIE.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=fd)
++        try:
++            st = os.fstat(f)
++            require(stat.S_ISREG(st.st_mode) and st.st_uid == uid and st.st_nlink == 1 and
++                    stat.S_IMODE(st.st_mode) == 0o600 and 0 < st.st_size <= 65536, 'review_display_cookie')
++            return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
++        finally:
++            os.close(f)
++
++
++def session_identity():
++    uid = pwd.getpwnam('maj-vaj-approval').pw_uid
++    require(uid > 0 and os.geteuid() == uid, 'review_authority_session_only')
++    with protected_dir(MARKER.parent, 0, 0o755) as fd:
++        f = os.open(MARKER.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=fd)
++        try:
++            s = os.fstat(f)
++            require(stat.S_ISREG(s.st_mode) and s.st_uid == 0 and s.st_nlink == 1 and not s.st_mode & 0o022, 'review_desktop_disabled')
++        finally:
++            os.close(f)
++    try:
++        return (*_sessions(uid), _cookie(uid))
++    except (OSError, subprocess.SubprocessError) as exc:
++        raise ValueError('review_session_unavailable') from exc
++
++
++def launch():
++    session_identity()
++    subprocess.run(['/usr/bin/systemctl', '--no-ask-password', '--no-block', 'start', UNIT],
++                   check=True, timeout=5, env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'})
++
++
++def serve():
++    identity = session_identity()
++    os.environ['DISPLAY'] = identity[1]
++    os.environ['XAUTHORITY'] = str(COOKIE)
++    from reserve_no_effect_worker import main, review_window
++    def guard():
++        require(session_identity() == identity, 'review_session_changed')
++    def window(root, review, proof, publish):
++        guard()
++        def checked_publish(approved):
++            guard()
++            publish(approved)
++        return review_window(root, review, proof, checked_publish, guard=guard)
++    main(role='review', window=window)
++
++
++def main():
++    require(len(sys.argv) == 2 and sys.argv[1] in ('launch', 'serve'), 'review_launcher_usage')
++    (launch if sys.argv[1] == 'launch' else serve)()
++
++
++if __name__ == '__main__':
++    try:
++        main()
++    except Exception:
++        raise SystemExit('PAPER approval unavailable. Use the dedicated local approval session.') from None
+diff --git a/reserve_terminal_worker.py b/reserve_terminal_worker.py
+index 1ff1fc0..9923e84 100644
+--- a/reserve_terminal_worker.py
++++ b/reserve_terminal_worker.py
+@@ -16,7 +16,7 @@ from pathlib import Path
+ from reserve_checkpoint import AuthorityStore, require
+ from reserve_ipc import pinned_key
+ from reserve_native_evidence import NativeProducer
+-from reserve_native_handoff import open_reviewed
++from reserve_native_handoff import open_reviewed, snapshot_unavailable
+ from reserve_native_wallet import rebound_bindings
+ from reserve_terminal_transport import TerminalMailbox, consume, produce
+ from financial_ledger import UNRELEASED
+@@ -68,7 +68,7 @@ def native_step(producer,inbox,store,relay_pin,native_gid,mailbox,*,factory=nati
+             require(len(pending)==1 and pending[0][1]==instance,'terminal_unresolved_scope')
+             intent=pending[0][0]
+     except (FileNotFoundError, ValueError) as exc:
+-        if not protected or not (isinstance(exc,FileNotFoundError) or str(exc) in ('snapshot_stale','snapshot_checkpoint_changed','snapshot_changed_during_review')):raise
++        if not protected or not snapshot_unavailable(exc):raise
+         from reserve_outage_protection import step as outage_step
+         return outage_step(producer,relay_pin,factory=factory,lease=lease)
+     create=partial(factory,instance,pair,cents)
+diff --git a/scripts/qualify_independent_entry.py b/scripts/qualify_independent_entry.py
+index 79f925b..390d64d 100644
+--- a/scripts/qualify_independent_entry.py
++++ b/scripts/qualify_independent_entry.py
+@@ -1,6 +1,6 @@
+ """Disposable cross-UID PAPER test; real ledger/ORM, automated relay, synthetic book."""
+ import json, os, shutil, sqlite3, subprocess, sys, tempfile, time
+-from contextlib import closing, contextmanager
++from contextlib import closing, contextmanager, ExitStack
+ from pathlib import Path
+ from unittest.mock import patch
+ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+@@ -81,7 +81,7 @@ def driver_context(work):
+ 
+ def run(mode):
+     assert os.geteuid()==0 and shutil.which('setpriv');os.umask(0o077)
+-    with tempfile.TemporaryDirectory(prefix='maj-native-reserve-',dir='/run') as tmp:
++    with tempfile.TemporaryDirectory(prefix='maj-native-reserve-',dir='/run') as tmp, ExitStack() as cleanup:
+         r=Path(tmp);r.chmod(0o755)
+         def directory(name,uid=0,mode=0o700,gid=None):
+             p=r/name;p.mkdir();os.chown(p,uid,uid if gid is None else gid);p.chmod(mode);return p
+@@ -130,7 +130,35 @@ def run(mode):
+             sub(DESK,common+f'publish(tx,{{I:{packet!r}}},bindings,public,W,clock=clock);exec({code!r})')
+         observe();print('PASS real independently signed wallet',flush=True)
+         setup="from risk_gate import MarketEvidence,Proposal\nwith tx() as db:db.execute('UPDATE desk SET paused=0,human_pause=0')\nfrom goal_control import entry_guard\ng=Gate(tx,clock=clock,account_projection=verify,entry_guard=entry_guard(None,verify))\ng.trusted_policy(Policy(version='policy-1',owner='paper-worker',epoch=1,expires=clock()+300,strategy_revision='revision-1',max_order_cents=6000,max_total_exposure_cents=10000,max_pair_exposure_cents=6000,max_positions=1,max_loss_per_trade_cents=300,daily_loss_limit_cents=1000,weekly_loss_limit_cents=1500,drawdown_limit_cents=2000,market_max_age_sec=60,account_max_age_sec=60,max_spread_bps=25,max_volatility_bps=500,min_depth_cents=5000,cost_bps=100,min_edge_bps=10))\ng.trusted_market(MarketEvidence(receipt='native-market',pair='BTC/USD',observed=clock(),available=clock(),source_digest='a'*64,strategy_revision='revision-1',entry=100*SCALE,stop=90*SCALE,target=120*SCALE,spread_bps=10,volatility_bps=100,depth_cents=10000,min_notional_cents=100,estimated_cost_bps=80,gross_edge_bps=130,continuous=True,operational=True,trigger=True,blackout=False))\nresult=g.admit(Proposal('entry-proposal',I,'BTC/USD','native-market',5000,clock()+60));assert result['state']=='AUTHORIZED',result\nprint(result['intent_id'])\n"
+-        intent=sub(DESK,common+"exec("+repr(setup)+")");snapshot()
++        if mode == 'warm-checkpoint':
++            # Execute a real adopted reserve policy before entry, then revoke it
++            # while exposure is held. No fabricated checkpoint or rollback.
++            before, admission = setup.split('result=g.admit', 1)
++            sub(DESK,common+'exec('+repr(before)+')')
++            policy=dict(rate_bps=5000,floor_mode='fixed',floor_fixed=0,floor_bps=0,ceiling=125*SCALE,cycle_cap=5*SCALE,lifetime_cap=25*SCALE,anchor=clock()%DAY,start=clock(),end=clock()+3*DAY,expiry=clock()+3*DAY)
++            sub(DESK,common+f'save(tx,I,{policy!r},0,clock=clock)');observe();snapshot()
++            authority=subprocess.Popen(cmd(AUTH,common+'import reserve_recovery;reserve_recovery.time.time=clock;RecoverableAuthorityService(store,r/"socket",authority_uid=AUTH,desk_uid=DESK,workspace=W,pin=r/"human.pub",native_pin=r/"native.pub").serve()'),env=env,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
++            def stop_authority():
++                if authority.poll() is None:authority.terminate();authority.wait(timeout=5)
++            cleanup.callback(stop_authority)
++            for _ in range(100):
++                if (r/'socket'/'authority.sock').exists():break
++                assert authority.poll() is None;time.sleep(.05)
++            else:raise AssertionError('authority not ready')
++            def approve(event,evidence):
++                code='@contextmanager\ndef view():\n with closing(open_projected((r/"authority-view").read_bytes())) as db:\n  db.execute("BEGIN");yield db\n'
++                return json.loads(sub(AUTH,common+'exec('+repr(code)+');'+f'review=ExactReview(W,r/"credentials",authority_uid=AUTH,desk_uid=DESK,permit_pin=r/"human.pub",native_pin=r/"native.pub",revalidate=human_revalidator(view,store,clock=clock,verify_projection=verify),clock=clock);v=review.begin(store.read(),{event!r},{evidence!r});print(json.dumps(review.confirm(v["challenge"],PASSWORD)))'))
++            def commit(packet):
++                return json.loads(sub(DESK,common+f'client=RecoveryClient(r/"socket",authority_uid=AUTH,desk_uid=DESK,workspace=W);print(json.dumps(commit_packet(tx,client,{packet!r},human,public,clock=clock,verify_projection=verify)))'))
++            adopt=json.loads(sub(NATIVE,common+producer+'print(json.dumps(p.propose_from_handoff(r/"inbox",store,r/"relay.pub",NATIVE,I,"adopt","adopt-1")))'))
++            assert commit(approve(adopt['event'],adopt['evidence']))['kind']=='reserve_adopt'
++            observe();snapshot()
++            # Rebuild the same Gate projection without replaying collected inputs.
++            adm='from risk_gate import Proposal;from goal_control import entry_guard;g=Gate(tx,clock=clock,account_projection=verify,entry_guard=entry_guard(None,verify));'+ 'result=g.admit'+admission
++            intent=sub(DESK,common+'exec('+repr(adm)+')')
++        else:
++            intent=sub(DESK,common+"exec("+repr(setup)+")")
++        snapshot()
+         servercode=common+"from reserve_entry_broker import listener,serve_request;from goal_control import entry_guard;g=Gate(tx,clock=clock,account_projection=verify,entry_guard=entry_guard(None,verify));exec("+repr('with listener(r/"entry",DESK) as server:\n conn,_=server.accept()\n with conn: print(serve_request(conn,tx,g,bindings,store,r/"fence"/"entry.lock",native_uid=NATIVE,desk_uid=DESK,clock=clock),flush=True)')+")"
+         server=subprocess.Popen(cmd(DESK,servercode),env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+         try:
+@@ -140,7 +168,7 @@ def run(mode):
+             else:raise AssertionError('server unavailable')
+             native_prefix=common+producer+'from reserve_entry_worker import native_once;'
+             native_call='native_once(p,r/"inbox",store,r/"relay.pub",NATIVE,r/"entry",r/"fence"/"entry.lock",factory=lambda i,p,c,w:driver_context(w))'
+-            if mode=='warm':
++            if mode in ('warm','warm-expiry','warm-checkpoint'):
+                 # Qualification-only test orchestration over stdin. Production
+                 # warm service has no command endpoint.
+                 (r/'inbox'/'snapshot.bin').unlink()
+@@ -178,8 +206,31 @@ with WarmRuntime(p,r/'relay.pub',lambda i,p,c,w:driver_context(w)).start() as wa
+                     print('PASS warm actual synchronous native entry',flush=True)
+                     response('outage_monitoring','tick')
+                     print('PASS stale AUTHORIZED snapshot cannot cause a second entry or restart',flush=True)
+-                    response('outage_exit_requested','exit');response('entry_already_attempted','tick')
+-                    print('PASS stale AUTHORIZED after closed position is denied by durable local attempt',flush=True)
++                    if mode=='warm':
++                        response('outage_exit_requested','exit');response('entry_already_attempted','tick')
++                        print('PASS stale AUTHORIZED after closed position is denied by durable local attempt',flush=True)
++                    else:
++                        snapshot()  # fresh projection of the actual open claim
++                        if mode=='warm-expiry':
++                            (r/'clock').write_text(str(clock()+31))
++                            why='snapshot_stale'
++                        else:
++                            old=store.read()
++                            with tx() as db:event=derive_event(db,old,I,'revoke','revoke-outage',clock(),clock(),None)
++                            assert commit(approve(event,None))['kind']=='reserve_revoke' and store.read()!=old
++                            why='snapshot_checkpoint_changed'
++                        # Verify the actual signed reader refuses this very disk
++                        # snapshot before asking the retained native worker to act.
++                        check='from reserve_native_handoff import open_reviewed,snapshot_unavailable\nfrom reserve_checkpoint import CheckpointError\ntry:\n with open_reviewed(r/"inbox",W,store,r/"relay.pub",native_uid=NATIVE,native_gid=NATIVE,desk_uid=DESK,authority_uid=AUTH,clock=clock):pass\nexcept CheckpointError as e: assert str(e)=='+repr(why)+' and snapshot_unavailable(e)\nelse: raise AssertionError("invalid snapshot accepted")'
++                        sub(NATIVE,common+'exec('+repr(check)+')')
++                        response('outage_monitoring','tick');response('outage_exit_requested','exit');response('outage_no_open_exposure','tick')
++                        with tx() as db:
++                            from financial_ledger import gate_reserve
++                            assert gate_reserve(db,I)>0 and db.execute("SELECT count(*) FROM gate_events WHERE action='native_return'").fetchone()[0]==1
++                        assert not (r/'terminal'/'pending.json').exists()
++                        with closing(sqlite3.connect(r/'native-data'/'paper'/I/'paper.sqlite')) as db:
++                            assert db.execute('SELECT count(*) FROM orders').fetchone()[0]==2 and db.execute('SELECT count(*) FROM trades WHERE is_open=1').fetchone()[0]==0
++                        print('PASS '+why+': actual signed refusal, native reduction, no early ledger settlement or duplicate entry',flush=True)
+                     snapshot();response('published','tick')
+                     make='m=TerminalMailbox(r/"terminal",NATIVE,TRANSFER);'
+                     sub(DESK,common+make+'assert desk_step(tx,m,bindings,public,W,store,desk_uid=DESK,clock=clock)=="accounted";assert desk_step(tx,m,bindings,public,W,store,desk_uid=DESK,clock=clock)=="already_accounted"')
+@@ -349,4 +400,4 @@ with WarmRuntime(p,r/'relay.pub',lambda i,p,c,w:driver_context(w)).start() as wa
+         finally:
+             if server.poll() is None:server.kill();server.wait()
+ 
+-if __name__=='__main__':run('warm' if '--warm' in sys.argv else 'review' if '--review' in sys.argv else 'outage' if '--outage' in sys.argv else 'partial' if '--partial' in sys.argv else 'after' if '--after' in sys.argv else 'kill' if '--kill' in sys.argv else 'normal')
++if __name__=='__main__':run('warm-expiry' if '--warm-expiry' in sys.argv else 'warm-checkpoint' if '--warm-checkpoint' in sys.argv else 'warm' if '--warm' in sys.argv else 'review' if '--review' in sys.argv else 'outage' if '--outage' in sys.argv else 'partial' if '--partial' in sys.argv else 'after' if '--after' in sys.argv else 'kill' if '--kill' in sys.argv else 'normal')
+diff --git a/tests/test_review_launcher.py b/tests/test_review_launcher.py
+new file mode 100644
+index 0000000..6c5e23b
+--- /dev/null
++++ b/tests/test_review_launcher.py
+@@ -0,0 +1,89 @@
++import os
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import Mock, patch
++import reserve_review_launcher as r
++from reserve_checkpoint import CheckpointError
++
++GOOD = dict(User='65533', Active='yes', Remote='no', Type='x11', Class='user',
++            State='active', Display=':12', Seat='seat0', LockedHint='no')
++
++
++class SessionTests(unittest.TestCase):
++    def sessions(self, props=GOOD, listing='3 65533 maj-vaj-approval seat0 tty2'):
++        def call(*args):
++            if args[0] == 'list-sessions':return listing
++            return '\n'.join(f'{k}={v}' for k,v in props.items())
++        return patch.object(r, '_login', side_effect=call)
++    def test_only_local_active_unlocked_dedicated_x11(self):
++        with self.sessions():self.assertEqual(r._sessions(65533), ('3', ':12'))
++        for name, value in [('User','65534'), ('Remote','yes'), ('Active','no'),
++                            ('LockedHint','yes'), ('Type','wayland'), ('Class','greeter'),
++                            ('State','closing'), ('Display','host:12'), ('Seat','')]:
++            with self.subTest(name=name), self.sessions(GOOD | {name:value}):
++                with self.assertRaises(CheckpointError):r._sessions(65533)
++    def test_ambiguous_or_other_user_session_denied(self):
++        for listing in ['3 65534 desk seat0 tty2', '3 65533 approval\n4 65533 approval']:
++            with self.sessions(listing=listing):
++                with self.assertRaises(CheckpointError):r._sessions(65533)
++    def test_fixed_start_no_caller_data(self):
++        with patch.object(r,'session_identity',return_value=('3',':12',(1,2,3,4))), patch.object(r.subprocess,'run') as run, patch.dict(os.environ,{'DISPLAY':'bad:1','XAUTHORITY':'/tmp/untrusted','SYSTEMD_BUS_ADDRESS':'bad'}):
++            r.launch()
++            args,kw=run.call_args
++            self.assertEqual(args[0],['/usr/bin/systemctl','--no-ask-password','--no-block','start',r.UNIT])
++            self.assertEqual(kw['env'],{'PATH':'/usr/bin:/bin','LC_ALL':'C'})
++        with patch.object(r,'session_identity',side_effect=CheckpointError('denied')), patch.object(r.subprocess,'run') as run:
++            with self.assertRaises(CheckpointError):r.launch()
++            run.assert_not_called()
++    def test_wrong_uid_before_any_display_access(self):
++        with patch.object(r.pwd,'getpwnam',return_value=type('User',(),{'pw_uid':65533})()), patch.object(r.os,'geteuid',return_value=65534), patch.object(r,'_sessions') as query:
++            with self.assertRaises(CheckpointError):r.session_identity()
++            query.assert_not_called()
++    def test_serve_pins_display_and_rechecks_before_signing_and_publish(self):
++        first=('3',':12',(1,2,3,4)); changed=('4',':13',(1,2,3,4))
++        def worker(*,role,window):
++            self.assertEqual(role,'review');self.assertEqual(os.environ['DISPLAY'],':12');self.assertEqual(os.environ['XAUTHORITY'],str(r.COOKIE))
++            review=Mock();publish=Mock()
++            window(None,review,{},publish)
++            return publish
++        def widget(root,review,proof,publish,*,guard):
++            guard();publish({'approved':True})
++        with patch.dict(os.environ,{},clear=False), patch.object(r,'session_identity',side_effect=[first,first,first,changed]), patch('reserve_no_effect_worker.main',side_effect=worker), patch('reserve_no_effect_worker.review_window',side_effect=widget):
++            with self.assertRaisesRegex(CheckpointError,'review_session_changed'):r.serve()
++    @unittest.skipUnless(os.geteuid()==0,'actual root-owned parent needed')
++    def test_cookie_custody(self):
++        with tempfile.TemporaryDirectory(dir='/run') as temp:
++            d=Path(temp)/'display';d.mkdir(mode=0o700);os.chown(d,65533,65533)
++            p=d/'Xauthority';p.write_bytes(b'synthetic-test-cookie');os.chown(p,65533,65533);p.chmod(0o600)
++            with patch.object(r,'DISPLAY_DIR',d), patch.object(r,'COOKIE',p):
++                self.assertEqual(r._cookie(65533)[2],p.stat().st_size)
++                p.chmod(0o644)
++                with self.assertRaises(CheckpointError):r._cookie(65533)
++                p.chmod(0o600);os.link(p,d/'extra')
++                with self.assertRaises(CheckpointError):r._cookie(65533)
++                p.unlink();p.symlink_to(d/'extra')
++                with self.assertRaises(OSError):r._cookie(65533)
++
++
++@unittest.skipUnless(os.environ.get('DISPLAY'),'Tk display required')
++class WidgetSessionTests(unittest.TestCase):
++    def test_session_lost_prevents_signing_and_clears_widget(self):
++        # Keep Tk objects off the rest of the suite's worker threads.
++        import subprocess, sys
++        code = """import tkinter as tk
++from unittest.mock import Mock
++from reserve_checkpoint import CheckpointError
++from reserve_no_effect_worker import review_window
++root=tk.Tk()
++try:
++ review=Mock();review.begin.return_value={'display':'Synthetic review','challenge':'TEST'}
++ publish=Mock();guard=Mock(side_effect=CheckpointError('review_session_changed'))
++ ui=review_window(root,review,{},publish,guard=guard);root.update()
++ ui['challenge'].set('TEST');ui['password'].set('synthetic-passphrase');ui['confirm'].invoke();root.update()
++ assert 'Approval refused' in ui['status'].get() and ui['password'].get()==''
++ review.confirm.assert_not_called();publish.assert_not_called()
++finally:root.destroy()
++"""
++        p=subprocess.run([sys.executable,'-B','-c',code],capture_output=True,text=True,timeout=10)
++        self.assertEqual(p.returncode,0,p.stderr)
+diff --git a/tests/test_snapshot_protection_routing.py b/tests/test_snapshot_protection_routing.py
+new file mode 100644
+index 0000000..079c897
+--- /dev/null
++++ b/tests/test_snapshot_protection_routing.py
+@@ -0,0 +1,49 @@
++"""Routing tests, not installed venue or Freqtrade acceptance."""
++import errno
++import unittest
++from unittest.mock import Mock, patch
++from reserve_checkpoint import CheckpointError
++from reserve_native_handoff import snapshot_unavailable
++from reserve_persistent_worker import WarmRuntime
++from reserve_terminal_worker import native_step
++
++ERRORS = [CheckpointError(s) for s in ('snapshot_stale','snapshot_checkpoint_changed','snapshot_changed_during_review')]
++ERRORS.append(FileNotFoundError(errno.ENOENT,'missing','snapshot.bin'))
++BAD = [CheckpointError('snapshot_signature'), CheckpointError('snapshot_scope_or_content_changed'),
++       FileNotFoundError(errno.ENOENT,'missing','checkpoint.json'), FileNotFoundError(errno.ENOENT,'missing','reserve-native.pub'), ValueError('snapshot_stale')]
++
++class SnapshotProtectionTests(unittest.TestCase):
++    def test_classification(self):
++        for exc in ERRORS:self.assertTrue(snapshot_unavailable(exc))
++        for exc in BAD:self.assertFalse(snapshot_unavailable(exc))
++    def test_terminal_only_protected_known_outage_reduces(self):
++        producer=Mock(uid=1000);mail=Mock(owner=1000);mail.read.return_value=None
++        for exc in ERRORS+BAD:
++            with self.subTest(exc=exc), patch('reserve_terminal_worker.os.geteuid',return_value=1000), patch('reserve_terminal_worker.open_reviewed',side_effect=exc), patch('reserve_outage_protection.step',return_value='outage_exit_requested') as reduce:
++                if exc in ERRORS:
++                    self.assertEqual(native_step(producer,None,None,None,1000,mail,protected=True),'outage_exit_requested');reduce.assert_called_once()
++                else:
++                    with self.assertRaises(type(exc)):native_step(producer,None,None,None,1000,mail,protected=True)
++                    reduce.assert_not_called()
++    def test_cold_unprotected_worker_never_falls_back(self):
++        producer=Mock(uid=1000);mail=Mock(owner=1000);mail.read.return_value=None
++        with patch('reserve_terminal_worker.os.geteuid',return_value=1000), patch('reserve_terminal_worker.open_reviewed',side_effect=ERRORS[0]), patch('reserve_outage_protection.step') as reduce:
++            with self.assertRaises(CheckpointError):native_step(producer,None,None,None,1000,mail)
++            reduce.assert_not_called()
++    def test_warm_outage_keeps_driver_and_never_enters_or_retires_pending(self):
++        warm=WarmRuntime(Mock(),None,None);warm._assert_current=Mock();warm.driver=object();driver=warm.driver
++        mail=Mock()
++        for exc in ERRORS:
++            for pending in (None,{'receipt':'pending'}):
++                mail.read.return_value=pending
++                with patch('reserve_persistent_worker.native_step',side_effect=exc), patch('reserve_persistent_worker.native_once') as enter, patch('reserve_outage_protection.step',return_value='outage_exit_requested') as reduce, patch.object(warm,'refresh_wallet') as wallet:
++                    self.assertEqual(warm.cycle(None,None,1000,mail,None,None),'snapshot_held' if pending else 'outage_exit_requested')
++                    self.assertIs(warm.driver,driver);enter.assert_not_called();wallet.assert_not_called()
++                    if pending:reduce.assert_not_called()
++                    else:reduce.assert_called_once()
++    def test_unclassified_error_not_swallowed_by_warm_loop(self):
++        warm=WarmRuntime(Mock(),None,None);warm._assert_current=Mock()
++        for exc in BAD:
++            with patch('reserve_persistent_worker.native_step',side_effect=exc), patch('reserve_outage_protection.step') as reduce, patch('reserve_persistent_worker.native_once') as enter:
++                with self.assertRaises(type(exc)):warm.cycle(None,None,1000,Mock(),None,None)
++                reduce.assert_not_called();enter.assert_not_called()

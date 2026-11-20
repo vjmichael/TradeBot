@@ -1,0 +1,810 @@
+diff --git a/dashboard_auth_gateway.py b/dashboard_auth_gateway.py
+new file mode 100644
+index 0000000..37339f0
+--- /dev/null
++++ b/dashboard_auth_gateway.py
+@@ -0,0 +1,160 @@
++"""Loopback-only PAPER gateway. No desk data access or bearer forwarding.
++
++The backend socket is created by systemd, root-owned and connectable only by
++this dedicated principal. Never expose the backend on TCP. This is not TLS
++or remote deployment authorization.
++"""
++import hmac
++import os
++import pwd
++import socket
++import stat
++from pathlib import Path
++
++import httpx
++from fastapi import FastAPI, Request
++from fastapi.responses import JSONResponse, Response
++
++from paper_credential_vault import harden_process, load_service_credential
++
++AUTH_USER = 'maj-vaj-dashboard-auth'
++BACKEND_SOCKET = '/run/maj-vaj-dashboard-private/backend.sock'
++PUBLIC = frozenset(('/', '/health', '/assets/app.js', '/assets/style.css',
++                    '/assets/react.js', '/assets/react-dom.js'))
++MAX_REQUEST = 65536
++MAX_RESPONSE = 32 * 1024 * 1024
++SECURITY_HEADERS = {
++    'Cache-Control': 'no-store',
++    'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
++    'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
++    'X-Frame-Options': 'DENY',
++}
++
++
++def _require_private_socket(path=BACKEND_SOCKET):
++    import grp
++    group = grp.getgrnam(AUTH_USER)
++    auth = pwd.getpwnam(AUTH_USER)
++    if (auth.pw_gid != group.gr_gid or any(name != AUTH_USER for name in group.gr_mem)
++            or any(p.pw_gid == group.gr_gid and p.pw_name != AUTH_USER for p in pwd.getpwall())):
++        raise PermissionError('dashboard group separation refused')
++    path = Path(path)
++    parent = path.parent.lstat()
++    entry = path.lstat()
++    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022
++            or not stat.S_ISSOCK(entry.st_mode) or entry.st_uid != 0
++            or entry.st_gid != group.gr_gid
++            or stat.S_IMODE(entry.st_mode) != 0o660):
++        raise PermissionError('dashboard transport refused')
++
++
++def installed_backend_fd():
++    """Only accept the manager's fixed listening socket; no TCP fallback."""
++    if (os.getuid() != pwd.getpwnam('maj-vaj').pw_uid
++            or os.environ.get('LISTEN_PID') != str(os.getpid())
++            or os.environ.get('LISTEN_FDS') != '1'
++            or os.environ.get('LISTEN_FDNAMES') != 'maj-vaj-dashboard-backend'):
++        raise PermissionError('dashboard transport refused')
++    _require_private_socket()
++    with socket.fromfd(3, socket.AF_UNIX, socket.SOCK_STREAM) as listener:
++        if (listener.getsockname() != BACKEND_SOCKET
++                or listener.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE) != socket.SOCK_STREAM
++                or not listener.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN)):
++            raise PermissionError('dashboard transport refused')
++    os.set_inheritable(3, False)
++    for name in ('LISTEN_PID', 'LISTEN_FDS', 'LISTEN_FDNAMES'):
++        os.environ.pop(name, None)
++    return 3
++
++
++def create_gateway(token, transport):
++    if (not isinstance(token, str) or len(token) < 32 or len(token) > 512
++            or not token.isascii() or any(not 33 <= ord(c) <= 126 for c in token)):
++        raise ValueError('dashboard authentication unavailable')
++    expected = ('Bearer ' + token).encode('ascii')
++    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
++
++    def error(status, detail):
++        return JSONResponse({'detail': detail}, status_code=status, headers=SECURITY_HEADERS)
++
++    @app.middleware('http')
++    async def forward(request: Request, _call_next):
++        hosts = request.headers.getlist('host')
++        if len(hosts) != 1 or hosts[0] not in ('127.0.0.1:8765', 'localhost:8765', '127.0.0.1', 'localhost'):
++            return error(400, 'Host not allowed')
++        method = request.method
++        path = request.scope.get('raw_path', b'')
++        if (method not in ('GET', 'HEAD', 'POST') or not path.startswith(b'/')
++                or len(path) > 1024 or any(c < 33 or c > 126 for c in path)
++                or any(x in path for x in (b'%', b'\\', b'?', b'#', b'//'))
++                or any(part in (b'.', b'..') for part in path.split(b'/'))):
++            return error(400, 'Request refused')
++        origins = request.headers.getlist('origin')
++        if origins and origins != [str(request.base_url).rstrip('/')]:
++            return error(403, 'Origin not allowed')
++        auth = [v for k, v in request.scope['headers'] if k == b'authorization']
++        public = method in ('GET', 'HEAD') and path.decode('ascii') in PUBLIC
++        if not public and (len(auth) != 1 or not hmac.compare_digest(auth[0], expected)):
++            return error(401, 'Unauthorized')
++        # Installed enrollment is exclusively local to the independent vault.
++        if path.rstrip(b'/') == b'/api/setup/credentials':
++            return error(503, 'Credential enrollment unavailable')
++        if request.headers.get('content-encoding') not in (None, 'identity'):
++            return error(400, 'Request refused')
++        query = request.scope.get('query_string', b'')
++        if len(query) > 8192:
++            return error(400, 'Request refused')
++        body = bytearray()
++        async for chunk in request.stream():
++            if len(body) + len(chunk) > MAX_REQUEST:
++                return error(413, 'Request too large')
++            body.extend(chunk)
++        if (method != 'POST' and body) or (body and request.headers.get('content-type', '').split(';')[0] != 'application/json'):
++            return error(400, 'Request refused')
++        # Defense in depth: reject accidental placement of the bearer in a URL
++        # or payload (the header itself is never forwarded).
++        from urllib.parse import unquote_to_bytes
++        from base64 import b64encode
++        secret = expected[7:]
++        variants = (secret, secret.hex().encode(), b64encode(secret))
++        if any(v in unquote_to_bytes(query) or v in body or v in path for v in variants):
++            return error(400, 'Request refused')
++        headers = {'content-type': 'application/json'} if method == 'POST' else {}
++        url = httpx.URL('http://localhost', raw_path=path + (b'?' + query if query else b''))
++        try:
++            # No proxy environment, redirect, external destination or cookie jar
++            # shared between calls. A single UDS transport is fixed by startup.
++            async with httpx.AsyncClient(transport=transport(), trust_env=False,
++                                         follow_redirects=False, timeout=60) as client:
++                async with client.stream(method, url, headers=headers, content=bytes(body)) as upstream:
++                    if 300 <= upstream.status_code < 400:
++                        return error(502, 'Dashboard unavailable')
++                    response = bytearray()
++                    async for chunk in upstream.aiter_bytes():
++                        if len(response) + len(chunk) > MAX_RESPONSE:
++                            return error(502, 'Dashboard unavailable')
++                        response.extend(chunk)
++                    if any(v in response for v in variants):
++                        return error(502, 'Dashboard unavailable')
++                    out = dict(SECURITY_HEADERS)
++                    out['Content-Type'] = upstream.headers.get('content-type', 'application/octet-stream')
++                    return Response(bytes(response), status_code=upstream.status_code, headers=out)
++        except (httpx.HTTPError, OSError, ValueError):
++            return error(503, 'Dashboard unavailable')
++
++    return app
++
++
++def run():
++    import uvicorn
++    if os.getuid() != pwd.getpwnam(AUTH_USER).pw_uid:
++        raise PermissionError('dashboard identity refused')
++    harden_process()
++    os.umask(0o077)
++    # The root-managed socket group must not grant the desk role membership.
++    _require_private_socket()
++    token = load_service_credential('dashboard-token').decode('ascii')
++    app = create_gateway(token, lambda: httpx.AsyncHTTPTransport(uds=BACKEND_SOCKET))
++    uvicorn.run(app, host='127.0.0.1', port=8765, access_log=False,
++                log_level='warning', proxy_headers=False, server_header=False,
++                limit_concurrency=64, timeout_keep_alive=5)
+diff --git a/deploy/maj-vaj-dashboard-backend.socket b/deploy/maj-vaj-dashboard-backend.socket
+new file mode 100644
+index 0000000..0baab4f
+--- /dev/null
++++ b/deploy/maj-vaj-dashboard-backend.socket
+@@ -0,0 +1,13 @@
++[Unit]
++Description=Maj Vaj private PAPER dashboard transport
++ConditionPathExists=/etc/maj-vaj/paper-dashboard-qualification-enabled
++
++[Socket]
++ListenStream=/run/maj-vaj-dashboard-private/backend.sock
++SocketUser=root
++SocketGroup=maj-vaj-dashboard-auth
++SocketMode=0660
++DirectoryMode=0755
++FileDescriptorName=maj-vaj-dashboard-backend
++Service=maj-vaj-paper-dashboard-backend.service
++RemoveOnStop=yes
+diff --git a/deploy/maj-vaj-paper-dashboard-backend.service b/deploy/maj-vaj-paper-dashboard-backend.service
+new file mode 100644
+index 0000000..e241040
+--- /dev/null
++++ b/deploy/maj-vaj-paper-dashboard-backend.service
+@@ -0,0 +1,34 @@
++[Unit]
++Description=Maj Vaj local PAPER dashboard private backend (qualification only)
++ConditionPathExists=/etc/maj-vaj/paper-dashboard-qualification-enabled
++
++Requires=maj-vaj-dashboard-backend.socket
++After=maj-vaj-dashboard-backend.socket
++
++[Service]
++Type=simple
++User=maj-vaj
++Group=maj-vaj
++SupplementaryGroups=maj-vaj-transfer
++WorkingDirectory=/opt/maj-vaj
++ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from tradebot import run_installed_dashboard_backend;run_installed_dashboard_backend()'
++Sockets=maj-vaj-dashboard-backend.socket
++UMask=0077
++UnsetEnvironment=TRADEBOT_VAULT_KEY TRADEBOT_ADMIN_TOKEN CREDENTIALS_DIRECTORY
++NoNewPrivileges=yes
++PrivateTmp=yes
++ProtectSystem=strict
++ProtectHome=yes
++ProtectProc=invisible
++ProtectKernelTunables=yes
++ProtectKernelModules=yes
++ProtectControlGroups=yes
++ReadWritePaths=/var/lib/maj-vaj/data -/var/lib/maj-vaj/data-recovery-copies
++InaccessiblePaths=-/run/credentials/maj-vaj-paper-dashboard.service -/var/lib/maj-vaj-paper-vault -/run/maj-vaj-paper-vault -/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-recovery-human -/var/lib/maj-vaj-reserve-approval
++CapabilityBoundingSet=
++RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
++LimitCORE=0
++StandardOutput=null
++StandardError=null
++Restart=no
++TimeoutStopSec=10s
+diff --git a/deploy/maj-vaj-paper-dashboard.service b/deploy/maj-vaj-paper-dashboard.service
+index 3460724..d1e8e03 100644
+--- a/deploy/maj-vaj-paper-dashboard.service
++++ b/deploy/maj-vaj-paper-dashboard.service
+@@ -1,29 +1,33 @@
+ [Unit]
+-Description=Maj Vaj local PAPER dashboard (qualification only; do not deploy with real credentials)
++Description=Maj Vaj isolated local PAPER authentication gateway (qualification only)
+ ConditionPathExists=/etc/maj-vaj/paper-dashboard-qualification-enabled
++Requires=maj-vaj-dashboard-backend.socket
++After=maj-vaj-dashboard-backend.socket
++BindsTo=maj-vaj-dashboard-backend.socket
+ 
+ [Service]
+ Type=simple
+-User=maj-vaj
+-Group=maj-vaj
+-SupplementaryGroups=maj-vaj-transfer
++User=maj-vaj-dashboard-auth
++Group=maj-vaj-dashboard-auth
+ WorkingDirectory=/opt/maj-vaj
+-ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from tradebot import run_installed_dashboard;run_installed_dashboard()'
++ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from dashboard_auth_gateway import run;run()'
+ LoadCredential=dashboard-token:/etc/maj-vaj/credential-keys/dashboard-token
+ UMask=0077
+ UnsetEnvironment=TRADEBOT_VAULT_KEY TRADEBOT_ADMIN_TOKEN
+ NoNewPrivileges=yes
+ PrivateTmp=yes
++PrivateDevices=yes
+ ProtectSystem=strict
+ ProtectHome=yes
+ ProtectProc=invisible
+ ProtectKernelTunables=yes
+ ProtectKernelModules=yes
+ ProtectControlGroups=yes
+-ReadWritePaths=/var/lib/maj-vaj/data -/var/lib/maj-vaj/data-recovery-copies
+-InaccessiblePaths=-/var/lib/maj-vaj-paper-vault -/run/maj-vaj-paper-vault -/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-recovery-human -/var/lib/maj-vaj-reserve-approval
++InaccessiblePaths=-/var/lib/maj-vaj -/var/lib/maj-vaj-paper-vault -/run/maj-vaj-paper-vault -/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-recovery-human -/var/lib/maj-vaj-reserve-approval -/etc/maj-vaj/credential-keys
+ CapabilityBoundingSet=
+-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
++RestrictAddressFamilies=AF_UNIX AF_INET
++IPAddressDeny=any
++IPAddressAllow=localhost
+ LimitCORE=0
+ StandardOutput=null
+ StandardError=null
+diff --git a/docs/tasks.md b/docs/tasks.md
+index bffe6be..df022e0 100644
+--- a/docs/tasks.md
++++ b/docs/tasks.md
+@@ -441,3 +441,7 @@ Dedicated logind event latch closes and invalidates review on lock, seat/session
+ ## TB-SEC-KEY-01 — separate installed PAPER credential vault (partial)
+ 
+ Staged separate local vault/credential operator, systemd-protected KEK, status-only write/removal protocol, paired atomic replacement and tamper refusal. Final pinned suite 519 PASS / 2 optional skips / 0 failed (521 discovered), focused 15/15. Installed synthetic enrollment, peer/identity and file refusals, restart, concurrent updates, database/process/HTTP/journal scan, actual market-only backup, local removal and wrong-key/tamper controlled restore PASS. **Shared desk UID can still read the qualification dashboard bearer credential file** despite private memory protection; dashboard is explicitly qualification-only. Full production custody, worker/research/notification/browser/egress and credential lifecycle gates open. [Qualification](tb-sec-key-01-vault-qualification.md). Next TB-SEC-KEY-01-R1: separate dashboard authentication principal and complete installed worker/backup/handoff and credential lifecycle audit. No actual desk mutation, live credentials, new CI or main update.
++
++## TB-SEC-KEY-01-R1 — independent dashboard authentication custody (scoped installed PASS)
++
++Distinct loopback authentication gateway and private UDS backend; root-owned manager socket, exclusive group, no bearer or vault key in desk backend or public-data workers. Pinned full suite 525 passed / 2 optional skips / 0 failures (527 discovered, before final narrow group verification; focused 6/6). Genuine systemd offline Debian: final installed audit 15/15 PASS, separate UID credential/socket refusal, gateway desk/vault denial, paired synthetic credential replacement and local removal, restart persistence, dashboard token rotation (prior token denied), actual dashboard market backup and observed worker environment, actual market-only frozen research handoff and scoped canary scan. Final 109 runtime/deploy hashes PASS, credential/socket teardown, guest clean shutdown/base integrity PASS. [Qualification and remaining scope](tb-sec-key-01-r1-auth-custody.md). R1 scoped boundary accepted; parent release gate OPEN. Next TB-SEC-KEY-01-R2: qualify browser persistence, notification/support and constrained outbound surfaces, authenticated KEK rotation and operator-reviewed encrypted recovery; then independent venue adapter/scope/revocation readiness without LIVE activation. No actual desk, real secrets, new CI, main merge or LIVE authorization.
+diff --git a/docs/tb-sec-key-01-r1-auth-custody.md b/docs/tb-sec-key-01-r1-auth-custody.md
+new file mode 100644
+index 0000000..e97ed08
+--- /dev/null
++++ b/docs/tb-sec-key-01-r1-auth-custody.md
+@@ -0,0 +1,23 @@
++# TB-SEC-KEY-01-R1 — isolated local PAPER dashboard authentication
++
++Scope: repair the shared-UID credential-file exposure reported in TB-SEC-KEY-01. Qualification deployment only; no live trading, real exchange credentials, wallet secrets, remote TLS or exchange authorization. Preserve the financial, independent recovery and native execution authority boundaries. The dashboard is not a venue adapter.
++
++## Architecture and reviewed migration
++
++- The original `maj-vaj-paper-dashboard.service` is now the **authentication gateway**, a loopback-only HTTP listener on 8765 under a dedicated non-login `maj-vaj-dashboard-auth` identity and its exclusive group. Its only systemd-loaded credential is the dashboard bearer. It has no access to the desk DB, vault, key source directory, signing or approval stores. Process memory protection and core limits remain. It has no arbitrary outbound destination or proxy environment; only a fixed Unix transport. No token, cookies, forwarded identity, origin or request trace reaches the backend. Exact public asset paths are the only unauthenticated forwarding exception. Canonical paths, host/origin, bounded requests/responses, fixed errors, no redirects, no-store and existing browser security headers are enforced.
++- `maj-vaj-dashboard-backend.socket` is root-created and root-owned, mode 0660, group `maj-vaj-dashboard-auth`, in a root-owned non-writable directory. `maj-vaj-paper-dashboard-backend.service` receives only that named systemd listening FD; no public or loopback TCP fallback, no bearer/key mounts, source-level refusal of credential environment variables. The private backend refuses forwarded Authorization headers. Ordinary desk/public-data UIDs cannot connect to the socket. The dedicated gateway UID is the trusted caller by design; root and that trusted service identity are not protected from themselves. The shared desk UID still trusts its own DB and backend operations; this change does not assert isolation from a compromised desk or privileged host. No remote network authentication is provided.
++- Reviewed cold migration only: stop old qualification dashboard and backend, remove obsolete standalone TCP processes, create a unique system user and group for the auth role (no other primary or supplemental members), deploy root-owned source and all three unit files plus existing vault, verify credentials are root-owned in `/etc/maj-vaj/credential-keys`, and verify unit dependencies. The opt-in markers remain required. Do not place actual secrets in the qualification dashboard. `scripts/qualify_dashboard_auth_guest_setup.sh` is a disposable OFFLINE guest-only bootstrap, not a production installer. `scripts/qualify_dashboard_auth_custody.py` is its synthetic installed acceptance harness. The old credential qualification setup and matrix are adapted to the separate service layout.
++- Public-data workers retain the desk UID and allowlisted subprocess environment. The gateway runs no workers. Existing research export is a verified, frozen market-only handoff, without features/labels/training or trading permission. It is not a live Cognitum connection.
++
++## Evidence and qualification boundaries
++
++Attach final evidence and distinguish any unexecuted installed test. No credentials or test secret values in reports. The actual browser persistence, notification/support/debug surfaces, network egress matrix, provider scope verification/revocation and key-encryption-key rotation/operator-approved encrypted restore remain separate production release gates. Local credential removal is not remote provider revocation. Loopback HTTP qualification is not production TLS readiness.
++
++### Executed qualification, 2026-11-20
++
++- Verified the previous candidate ZIP, patch and evidence SHA256 manifest. Imported the recovered source snapshot locally; the resulting local Git ancestry is not represented as the original upstream history. Verified the pinned offline Python 3.12.16/Freqtrade 2026.10 wheelhouse, `pip check` clean. Six new gateway regressions PASS. Headless full suite initially failed two pre-existing graphical tests for an unavailable display; repeat under Xvfb: 527 discovered, 525 passed, two optional skips, zero failures, 53.994s. This full run preceded the final exclusive-group preflight refinement; focused tests and the installed runtime matrix cover the final change.
++- Actual Debian 13 systemd guest (QEMU software emulation, no NIC; loopback only): eight original VM inputs and all 15 QEMU dependency-manifest entries matched. Fresh child disk. Offline dependency install PASS, opt-in marker refusals and named service startup PASS. The first final-source readiness attempt used a fixed 5s delay and failed before the auth listener became ready; the backend was inactive until socket activation. A bounded HTTP readiness retry then passed without changing production settings. No secret-bearing diagnostics included.
++- Final installed audit exit 0, all 15 checkpoints PASS. Distinct named gateway/backend/vault identities; desk and four other untrusted service identities denied bearer file, auth memory and direct private socket; gateway denied desk and vault files; valid HTTP authorization and forbidden web enrollment; synthetic local enrollment, paired replacement, partial removal refusal, restart persistence; actual root-controlled replacement of synthetic dashboard token with gateway restart (previous token refused, replacement accepted). Actual dashboard-initiated market-only backup completed while the synthetic credentials were stored. Observed the real public-data child process and verified its environment and argv were free of synthetic marker forms and credential variables. Exported and verified the actual frozen market-only research handoff under the desk role from two controlled synthetic hourly data observations; no training or execution authority. Scanned stored desk/vault/backup/handoff files, observed worker, process args/environment and journals for raw/hex/base64 enrolled marker forms and both old/new synthetic bearer markers and KEK. No canaries observed in these checked surfaces; local credential removal passed. No live venue access or real funds, no Cognitum data transmission. This is not exhaustive non-disclosure or remote key revocation.
++- All 109 final top-level runtime Python files and deployment definitions matched the installed source manifest; stopped all four named service/socket units, verified private sockets and credential mounts retired. Graceful poweroff, child `qemu-img check` no errors; base SHA256 unchanged `2eba10bdfc7f368dde145205e0f3211f5f3a0ce29a5ab60b5ea7b728fd9a1776`. No CI or GitHub mainline changes.
++
++**Disposition:** R1 isolated dashboard custody, scoped installed worker/market-only handoff and synthetic local credential replacement/removal and bearer restart rotation PASS. Parent TB-SEC-KEY-01 remains OPEN for actual browser persistence and outbound/notification/support surfaces, independent venue adapter and positive key scope verification, provider-side revocation, KEK rotation and operator-approved encrypted recovery, remote TLS, and consolidated installed acceptance. No production or live authorization.
+diff --git a/docs/tb-sec-key-01.md b/docs/tb-sec-key-01.md
+index 5fd442e..4ce1bc8 100644
+--- a/docs/tb-sec-key-01.md
++++ b/docs/tb-sec-key-01.md
+@@ -23,3 +23,7 @@ Existing development credential endpoint uses encrypted SQLite ciphertext and st
+ ## 2026-11-20 installed custody progress
+ 
+ See [isolated PAPER vault qualification](tb-sec-key-01-vault-qualification.md). The staged isolated vault and selected synthetic installed tests passed. Dashboard shared-UID bearer-file access independently reproduced; entire gate remains open. Qualification-only dashboard must not be deployed with real secrets. No venue access or live permission.
++
++## R1 independent dashboard authentication
++
++See [R1 qualification](tb-sec-key-01-r1-auth-custody.md). Prior shared-UID dashboard bearer-file exposure corrected in the staged local PAPER gateway/backend. Scoped installed worker, frozen research export, local credential pair lifecycle and synthetic bearer rotation verified. The full production security gate remains open; do not deploy real credentials or enable LIVE.
+diff --git a/scripts/qualify_dashboard_auth_custody.py b/scripts/qualify_dashboard_auth_custody.py
+new file mode 100644
+index 0000000..4ab0f38
+--- /dev/null
++++ b/scripts/qualify_dashboard_auth_custody.py
+@@ -0,0 +1,179 @@
++"""Disposable offline QEMU acceptance. Synthetic keys, no network or trading.
++Requires root-reviewed deployment of the staged gateway, socket, backend and vault.
++Never print marker values, systemd logs, crash output, or exception messages.
++"""
++import base64
++import json
++import os
++from pathlib import Path
++import pwd
++import secrets
++import socket
++import subprocess
++import sys
++import tempfile
++import time
++import urllib.error
++import urllib.request
++
++DASH='maj-vaj-paper-dashboard.service'
++BACK='maj-vaj-paper-dashboard-backend.service'
++VAULT='maj-vaj-paper-vault.service'
++SOCK='maj-vaj-dashboard-backend.socket'
++AUTH='maj-vaj-dashboard-auth'
++OP='maj-vaj-credential-operator'
++PY='/opt/maj-vaj/venv/bin/python'
++DATA=Path('/var/lib/maj-vaj/data')
++KEYS=Path('/etc/maj-vaj/credential-keys')
++TOKEN=KEYS/'dashboard-token'
++PRIVATE=Path('/run/maj-vaj-dashboard-private/backend.sock')
++STORE=Path('/var/lib/maj-vaj-paper-vault')
++COPIES=DATA.parent/'data-recovery-copies'
++
++
++def cmd(*args):
++    return subprocess.check_output(args,stderr=subprocess.DEVNULL)
++
++
++def proc(unit):
++    return int(cmd('systemctl','show','-p','MainPID','--value',unit))
++
++
++def check(name, condition):
++    if not condition: raise RuntimeError(name)
++    print('PASS_'+name,flush=True)
++
++
++def as_user(user, source, body=None):
++    return subprocess.run(['runuser','-u',user,'--',PY,'-I','-B','-c',source],
++                          input=body,capture_output=True)
++
++
++def vault(request):
++    source='import sys,json;sys.path.insert(0,"/opt/maj-vaj");from paper_credential_vault import send;print(json.dumps(send(json.load(sys.stdin))))'
++    r=as_user(OP,source,json.dumps(request).encode())
++    return json.loads(r.stdout) if r.returncode==0 else {'ok':False}
++
++
++def api(path,token=None,body=None):
++    headers={'Authorization':'Bearer '+token} if token else {}
++    if body is not None: headers['Content-Type']='application/json'
++    req=urllib.request.Request('http://127.0.0.1:8765'+path,headers=headers,
++                               data=json.dumps(body).encode() if body is not None else None)
++    try:
++        with urllib.request.urlopen(req,timeout=30) as r:return r.status,r.read()
++    except urllib.error.HTTPError as e:return e.code,e.read()
++
++
++def ready(token):
++    for _ in range(30):
++        try:
++            if api('/api/status',token)[0]==200:return True
++        except (OSError,urllib.error.URLError):pass
++        time.sleep(.5)
++    return False
++
++
++def replace_token(value):
++    fd,tmp=tempfile.mkstemp(dir=KEYS)
++    try:
++        with os.fdopen(fd,'wb') as f:f.write(value.encode());f.flush();os.fsync(f.fileno())
++        os.replace(tmp,TOKEN)
++        fd=os.open(KEYS,os.O_DIRECTORY)
++        try:os.fsync(fd)
++        finally:os.close(fd)
++    finally:
++        if os.path.exists(tmp):os.unlink(tmp)
++
++
++def run():
++    assert sys.argv[1:]==['--disposable-offline-guest'] and os.getuid()==0
++    assert set(os.listdir('/sys/class/net'))=={'lo'} and cmd('systemd-detect-virt').strip()==b'qemu'
++    assert Path('/etc/maj-vaj/paper-dashboard-qualification-enabled').is_file()
++    assert all(v=='not_configured' for v in vault({'op':'status'})['credentials'].values())
++    assert not list(COPIES.glob('*/manifest.json'))
++    token=TOKEN.read_text(); key=(KEYS/'venue-vault-key').read_bytes()
++    vals={s:'synthetic-'+secrets.token_hex(24) for s in ('grok','kraken_read_key','kraken_read_secret')}
++    rotated={s:'synthetic-'+secrets.token_hex(24) for s in vals}
++    second=secrets.token_urlsafe(48)
++    markers=[token.encode(),second.encode(),key]+[v.encode() for v in (*vals.values(),*rotated.values())]
++    def clean(blob):
++        return not any(form in blob for value in markers for form in (value,value.hex().encode(),base64.b64encode(value)))
++    def uid(pid):
++        return int(next(l for l in Path(f'/proc/{pid}/status').read_text().splitlines() if l.startswith('Uid:')).split()[1])
++    def allowed(user,path):
++        return subprocess.run(['runuser','-u',user,'--','test','-r',str(path)]).returncode==0
++    check('NAMED_INDEPENDENT_IDENTITIES', all(uid(proc(n))==pwd.getpwnam(u).pw_uid for n,u in ((DASH,AUTH),(BACK,'maj-vaj'),(VAULT,'maj-vaj-vault'))))
++    for user in ('maj-vaj',OP,'maj-vaj-native','maj-vaj-approval','maj-vaj-vault'):
++        for path in (TOKEN,Path('/run/credentials')/DASH/'dashboard-token',Path(f'/proc/{proc(DASH)}/mem')):
++            assert not allowed(user,path),'dashboard credential denial'
++        assert as_user(user,'import socket; s=socket.socket(socket.AF_UNIX);s.connect("/run/maj-vaj-dashboard-private/backend.sock")').returncode!=0,'backend socket denial'
++    check('DESK_AND_PEERS_TOKEN_AND_SOCKET_DENIED',True)
++    check('AUTH_PRINCIPAL_VAULT_AND_DESK_DENIED',all(not allowed(AUTH,p) for p in (DATA/'desk.sqlite3',KEYS/'venue-vault-key',STORE/'vault.sqlite3',Path('/run/credentials')/VAULT/'venue-vault-key')))
++    check('HTTP_BOUNDARY',api('/health')[0]==200 and api('/api/status')[0]==401 and api('/api/status',token)[0]==200 and api('/api/setup/credentials',token,{'grok':vals['grok']})[0]==503)
++    check('LOCAL_ENROLLMENT',vault({'op':'enroll','values':vals}).get('ok'))
++    check('PAIRED_ROTATION',vault({'op':'enroll','values':rotated}).get('ok') and not vault({'op':'remove','slots':['kraken_read_key']}).get('ok'))
++    subprocess.check_call(['systemctl','restart',VAULT],stdout=subprocess.DEVNULL)
++    for _ in range(25):
++        if vault({'op':'status'}).get('ok'):break
++        time.sleep(.5)
++    check('VAULT_RESTART_PERSISTENCE',all(vault({'op':'status'})['credentials'][s]=='stored_unverified' for s in vals))
++    replace_token(second)
++    subprocess.check_call(['systemctl','restart',DASH],stdout=subprocess.DEVNULL)
++    check('INSTALLED_BEARER_ROTATION',ready(second) and api('/api/status',token)[0]==401)
++    # Actual public-data input: small synthetic provider-history fixture with exact hourly coverage.
++    source='''import sys;sys.path.insert(0,"/opt/maj-vaj")
++from market_memory import MarketMemory
++from pathlib import Path
++m=MarketMemory(Path("/var/lib/maj-vaj/data")); t=1704067200
++m.record_recent("BTC/USD",60, {"exchange":"kraken","product":"spot","pair":"BTC/USD","interval_minutes":60,"observed_at":t+7200,"candles":[[t*1000,"100.125","101","99","100.125","2.0",4],[(t+3600)*1000,"100.125","101","99","100.125","2.0",4]]},now=t+7200)
++'''
++    check('PUBLIC_FIXTURE_SEED',as_user('maj-vaj',source).returncode==0)
++    status,_=api('/api/data-maintenance/backup',second,{})
++    check('INSTALLED_BACKUP_ADMISSION',status==200)
++    deadline=time.monotonic()+90;seen=False;state=None
++    while time.monotonic()<deadline:
++        # Worker may be spawned by any backend thread. Check each task's child list.
++        for task in Path(f'/proc/{proc(BACK)}/task').glob('*'):
++            try:children=(task/'children').read_text().split()
++            except OSError:continue
++            for pid in children:
++                try:
++                    env=Path(f'/proc/{pid}/environ').read_bytes();argv=Path(f'/proc/{pid}/cmdline').read_bytes()
++                except OSError:continue
++                if b'prepare_data.py' not in argv:continue
++                assert clean(env) and clean(argv) and b'CREDENTIALS_DIRECTORY=' not in env and b'TRADEBOT_ADMIN_TOKEN=' not in env
++                seen=True
++        status,body=api('/api/data-preparation',second)
++        assert status==200 and clean(body)
++        job=json.loads(body)['job'];state=job['state']
++        if state in ('complete','failed','cancelled','interrupted'):break
++        time.sleep(.05)
++    check('ACTUAL_BACKUP',state=='complete')
++    check('ACTUAL_WORKER_ENVIRONMENT',seen)
++    manifest=COPIES/job['id']/'manifest.json'
++    assert manifest.is_file()
++    # Actual paired frozen input export and verification under unprivileged desk UID.
++    handoff=DATA.parent/'qualification-handoff'
++    handoff.mkdir(mode=0o700);p=pwd.getpwnam('maj-vaj');os.chown(handoff,p.pw_uid,p.pw_gid)
++    source='''import sys,pathlib,hashlib,json;sys.path.insert(0,"/opt/maj-vaj")
++from training_handoff import export,verify
++request=json.load(sys.stdin);p=pathlib.Path(request["snapshot"]);d=pathlib.Path(request["destination"]);h=hashlib.sha256((p/"manifest.json").read_bytes()).hexdigest(); t=1704067200
++r=export(p,d,h,["BTC/USD"],t,t+7200); assert verify(d,r["manifest_sha256"])==r;assert not r["training_ready"] and not r["paper_ready"]
++'''
++    check('ACTUAL_RESEARCH_HANDOFF',as_user('maj-vaj',source,json.dumps({'snapshot':str(manifest.parent),'destination':str(handoff/'frozen')}).encode()).returncode==0)
++    for directory in (STORE,DATA,COPIES,handoff):
++        for p in directory.rglob('*'):
++            if p.is_file() and not p.is_symlink():
++                assert clean(p.read_bytes()),'stored data scan'
++    for unit in (DASH,BACK,VAULT):
++        for name in ('cmdline','environ'):
++            assert clean(Path(f'/proc/{proc(unit)}/{name}').read_bytes()),'process scan'
++        assert clean(cmd('journalctl','-b','-u',unit,'--no-pager','-o','cat')),'journal scan'
++    check('PERSISTENCE_AND_RESEARCH_NONDISCLOSURE',True)
++    check('LOCAL_REMOVAL',vault({'op':'remove','slots':list(vals)}).get('ok') and all(v=='not_configured' for v in vault({'op':'status'})['credentials'].values()))
++
++if __name__=='__main__':
++    try:run()
++    except Exception as error:
++        print('FAIL_'+(str(error) if isinstance(error,RuntimeError) and str(error).isupper() else type(error).__name__),flush=True);sys.exit(1)
+diff --git a/scripts/qualify_dashboard_auth_guest_setup.sh b/scripts/qualify_dashboard_auth_guest_setup.sh
+new file mode 100644
+index 0000000..33af5dd
+--- /dev/null
++++ b/scripts/qualify_dashboard_auth_guest_setup.sh
+@@ -0,0 +1,53 @@
++#!/bin/bash
++set -euo pipefail
++umask 077
++test "$(id -u)" = 0
++test "$(systemd-detect-virt)" = qemu
++test "$(ls /sys/class/net)" = lo
++test "$(ps -p 1 -o comm=)" = systemd
++test ! -e /opt/maj-vaj
++test ! -e /etc/maj-vaj/credential-keys
++mkdir -p /opt/maj-vaj /opt/maj-vaj-runtime /opt/wheels
++chmod 755 /opt/maj-vaj /opt/maj-vaj-runtime
++# Source is root-owned and read-only for service principals.
++tar xzf /mnt/inputs/source-current.tar.gz -C /opt/maj-vaj
++chmod -R a+rX /opt/maj-vaj
++chmod -R go-w /opt/maj-vaj
++tar xzf /mnt/inputs/cpython-3.12*.tar.gz -C /opt/maj-vaj-runtime
++/opt/maj-vaj-runtime/python/bin/python3.12 -m zipfile -e /mnt/inputs/MajVaj-Freqtrade*.zip /opt/wheels
++(cd /opt/wheels && sha256sum -c SHA256SUMS > /root/wheel-check.log)
++/opt/maj-vaj-runtime/python/bin/python3.12 -m venv /opt/maj-vaj/venv
++/opt/maj-vaj/venv/bin/python -m pip install --no-index --find-links /opt/wheels/wheels -r /opt/wheels/installed-freeze.txt >/root/pip-install.log 2>&1
++/opt/maj-vaj/venv/bin/python -m pip check
++chmod -R a+rX /opt/maj-vaj/venv /opt/maj-vaj-runtime
++for u in maj-vaj maj-vaj-vault maj-vaj-dashboard-auth maj-vaj-credential-operator maj-vaj-native maj-vaj-approval; do useradd --system --user-group --no-create-home --shell /usr/sbin/nologin "$u"; done
++groupadd --system maj-vaj-transfer
++install -d -m755 /etc/maj-vaj
++install -d -m700 /etc/maj-vaj/credential-keys
++install -d -o maj-vaj -g maj-vaj -m700 /var/lib/maj-vaj/data /var/lib/maj-vaj/data-recovery-copies
++/opt/maj-vaj/venv/bin/python - <<'PY'
++import os,secrets
++from cryptography.fernet import Fernet
++for name,value in [('venue-vault-key',Fernet.generate_key()),('dashboard-token',secrets.token_urlsafe(48).encode())]:
++    fd=os.open('/etc/maj-vaj/credential-keys/'+name,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
++    with os.fdopen(fd,'wb') as f:f.write(value)
++PY
++for f in maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service maj-vaj-paper-dashboard-backend.service maj-vaj-dashboard-backend.socket; do
++ install -m644 /opt/maj-vaj/deploy/$f /etc/systemd/system/$f
++ cmp /opt/maj-vaj/deploy/$f /etc/systemd/system/$f
++done
++systemctl daemon-reload
++systemd-analyze verify /etc/systemd/system/{maj-vaj-paper-vault.service,maj-vaj-paper-dashboard.service,maj-vaj-paper-dashboard-backend.service,maj-vaj-dashboard-backend.socket}
++systemctl start maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service || true
++! systemctl is-active --quiet maj-vaj-paper-vault.service
++! systemctl is-active --quiet maj-vaj-paper-dashboard.service
++! systemctl is-active --quiet maj-vaj-dashboard-backend.socket
++echo PASS_MARKER_REFUSAL
++install -m644 /dev/null /etc/maj-vaj/paper-vault-enabled
++install -m644 /dev/null /etc/maj-vaj/paper-dashboard-qualification-enabled
++systemctl start maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service
++# Application starts on socket activation, wait for readiness via public health endpoint.
++for i in $(seq 1 100); do if /opt/maj-vaj/venv/bin/python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8765/health",timeout=2)' 2>/dev/null; then break; fi; sleep 1; done
++systemctl is-active maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service maj-vaj-paper-dashboard-backend.service maj-vaj-dashboard-backend.socket
++/opt/maj-vaj/venv/bin/python -c 'import urllib.request; assert urllib.request.urlopen("http://127.0.0.1:8765/health",timeout=2).status==200'
++echo PASS_NAMED_SERVICE_START
+diff --git a/scripts/qualify_paper_credential_custody.py b/scripts/qualify_paper_credential_custody.py
+index 3ccb24d..7a04463 100644
+--- a/scripts/qualify_paper_credential_custody.py
++++ b/scripts/qualify_paper_credential_custody.py
+@@ -3,7 +3,7 @@ import base64, json, os, pathlib, pwd, secrets, sqlite3, subprocess, sys, urllib
+ from concurrent.futures import ThreadPoolExecutor
+ from cryptography.fernet import Fernet
+ ROOT=pathlib.Path('/var/lib/maj-vaj-paper-vault'); CREDS=pathlib.Path('/etc/maj-vaj/credential-keys')
+-PY='/opt/maj-vaj/venv/bin/python'; UNIT='maj-vaj-paper-vault.service'; DASH='maj-vaj-paper-dashboard.service'; OP='maj-vaj-credential-operator'
++PY='/opt/maj-vaj/venv/bin/python'; UNIT='maj-vaj-paper-vault.service'; DASH='maj-vaj-paper-dashboard.service'; BACK='maj-vaj-paper-dashboard-backend.service'; OP='maj-vaj-credential-operator'
+ 
+ def command(*args):return subprocess.check_output(args,stderr=subprocess.DEVNULL)
+ def pid(unit):return int(command('systemctl','show','-p','MainPID','--value',unit))
+@@ -36,7 +36,7 @@ def audit_blobs():
+     desk=pathlib.Path('/var/lib/maj-vaj/data')
+     for p in desk.glob('desk.sqlite3*'):
+         assert clean(p.read_bytes()), 'desk_blob'
+-    for unit in (UNIT,DASH):
++    for unit in (UNIT,DASH,BACK):
+         n=pid(unit); assert n>0
+         for name in ('cmdline','environ'):
+             assert clean(pathlib.Path(f'/proc/{n}/{name}').read_bytes()), 'process_leak'
+@@ -46,7 +46,7 @@ def audit_blobs():
+ try:
+     assert sys.argv[1:]==['--disposable-offline-guest'] and os.getuid()==0 and set(os.listdir('/sys/class/net'))=={'lo'} and command('systemd-detect-virt').strip()==b'qemu'
+     assert all(v=='not_configured' for v in request({'op':'status'})['credentials'].values())
+-    check('IDENTITIES',pid(UNIT)>0 and pid(DASH)>0 and real_uid(pid(UNIT))==pwd.getpwnam('maj-vaj-vault').pw_uid and real_uid(pid(DASH))==pwd.getpwnam('maj-vaj').pw_uid)
++    check('IDENTITIES',pid(UNIT)>0 and pid(DASH)>0 and real_uid(pid(UNIT))==pwd.getpwnam('maj-vaj-vault').pw_uid and real_uid(pid(DASH))==pwd.getpwnam('maj-vaj-dashboard-auth').pw_uid and real_uid(pid(BACK))==pwd.getpwnam('maj-vaj').pw_uid)
+     vals={'kraken_read_key':markers[0].decode(),'kraken_read_secret':markers[1].decode(),'grok':markers[2].decode()}
+     check('ENROLL',request({'op':'enroll','values':vals}).get('ok'))
+     check('NO_PLAINTEXT_READ',not request({'op':'read','slot':'grok'}).get('ok') and not request({'op':'export'}).get('ok'))
+@@ -61,10 +61,10 @@ try:
+             assert subprocess.run(['runuser','-u',u,'--','test','-r',str(p)]).returncode!=0
+     check('VAULT_RUNTIME_CUSTODY',True)
+     check('DASHBOARD_MEMORY_REFUSAL',subprocess.run(['runuser','-u','maj-vaj','--','test','-r',f'/proc/{pid(DASH)}/mem']).returncode!=0)
+-    check('DASHBOARD_SHARED_UID_FILE_GAP_CONFIRMED',subprocess.run(['runuser','-u','maj-vaj','--','test','-r','/run/credentials/maj-vaj-paper-dashboard.service/dashboard-token']).returncode==0)
++    check('DASHBOARD_BEARER_FILE_DENIED',subprocess.run(['runuser','-u','maj-vaj','--','test','-r','/run/credentials/maj-vaj-paper-dashboard.service/dashboard-token']).returncode!=0)
+     for r in [api('/api/setup'),api('/api/setup',markers[4].decode()),api('/api/setup',token),api('/api/setup/credentials',token,{'grok':markers[5].decode()}),api('/api/setup/credentials',token,{'seed_phrase':markers[6].decode()})]:
+         assert clean(r[1]), 'http_leak'
+-    check('HTTP_AUTH_AND_ENROLLMENT_FENCE',api('/api/setup')[0]==401 and api('/api/setup',token)[0]==200 and api('/api/setup/credentials',token,{'grok':markers[5].decode()})[0]==503 and api('/api/setup/credentials',token,{'seed_phrase':markers[6].decode()})[0]==422)
++    check('HTTP_AUTH_AND_ENROLLMENT_FENCE',api('/api/setup')[0]==401 and api('/api/setup',token)[0]==200 and api('/api/setup/credentials',token,{'grok':markers[5].decode()})[0]==503 and api('/api/setup/credentials',token,{'seed_phrase':markers[6].decode()})[0]==503)
+     def replace(i):return request({'op':'enroll','values':{'kraken_read_key':markers[0].decode()+str(i),'kraken_read_secret':markers[1].decode()+str(i)}})
+     with ThreadPoolExecutor(max_workers=3) as pool:assert all(r.get('ok') for r in pool.map(replace,range(6)))
+     with sqlite3.connect(ROOT/'vault.sqlite3') as db:
+@@ -83,7 +83,7 @@ try:
+     deadline=time.monotonic()+50
+     child_seen=False
+     while time.monotonic()<deadline:
+-        dashboard_pid=pid(DASH)
++        dashboard_pid=pid(BACK)
+         children=pathlib.Path(f'/proc/{dashboard_pid}/task/{dashboard_pid}/children').read_text().split()
+         for child in children:
+             try:
+diff --git a/scripts/qualify_paper_credential_setup.sh b/scripts/qualify_paper_credential_setup.sh
+index 964c612..9fce009 100644
+--- a/scripts/qualify_paper_credential_setup.sh
++++ b/scripts/qualify_paper_credential_setup.sh
+@@ -9,7 +9,7 @@ test ! -e /etc/maj-vaj/credential-keys
+ test ! -e /var/lib/maj-vaj-paper-vault
+ test "$(ps -p 1 -o comm=)" = systemd
+ test "$(ls /sys/class/net)" = lo
+-for u in maj-vaj-vault maj-vaj-credential-operator; do if ! getent passwd "$u" >/dev/null; then useradd --system --user-group --no-create-home --shell /usr/sbin/nologin "$u"; fi; done
++for u in maj-vaj-vault maj-vaj-credential-operator maj-vaj-dashboard-auth; do if ! getent passwd "$u" >/dev/null; then useradd --system --user-group --no-create-home --shell /usr/sbin/nologin "$u"; fi; done
+ install -d -o root -g root -m0700 /etc/maj-vaj/credential-keys
+ /opt/maj-vaj/venv/bin/python - <<'PY'
+ import os,secrets
+@@ -18,20 +18,21 @@ for name,value in [('venue-vault-key',Fernet.generate_key()),('dashboard-token',
+     fd=os.open('/etc/maj-vaj/credential-keys/'+name,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+     with os.fdopen(fd,'wb') as f:f.write(value)
+ PY
+-for f in paper_credential_vault.py tradebot.py; do install -o root -g root -m644 /mnt/deps/"$f" /opt/maj-vaj/"$f"; cmp /mnt/deps/"$f" /opt/maj-vaj/"$f"; done
+-for f in /mnt/deps/*.service; do install -o root -g root -m644 "$f" /etc/systemd/system/; cmp "$f" /etc/systemd/system/"${f##*/}"; done
++for f in paper_credential_vault.py tradebot.py dashboard_auth_gateway.py; do install -o root -g root -m644 /mnt/deps/"$f" /opt/maj-vaj/"$f"; cmp /mnt/deps/"$f" /opt/maj-vaj/"$f"; done
++for f in /mnt/deps/*.service /mnt/deps/maj-vaj-dashboard-backend.socket; do install -o root -g root -m644 "$f" /etc/systemd/system/; cmp "$f" /etc/systemd/system/"${f##*/}"; done
+ install -d -o maj-vaj -g maj-vaj -m700 /var/lib/maj-vaj/data-recovery-copies
+ systemctl daemon-reload
+-systemd-analyze verify /etc/systemd/system/maj-vaj-paper-vault.service /etc/systemd/system/maj-vaj-paper-dashboard.service
++systemd-analyze verify /etc/systemd/system/maj-vaj-paper-vault.service /etc/systemd/system/maj-vaj-paper-dashboard.service /etc/systemd/system/maj-vaj-paper-dashboard-backend.service /etc/systemd/system/maj-vaj-dashboard-backend.socket
+ # No opt-in markers: services must remain inactive.
+ systemctl start maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service
+ ! systemctl is-active --quiet maj-vaj-paper-vault.service
+ ! systemctl is-active --quiet maj-vaj-paper-dashboard.service
++! systemctl is-active --quiet maj-vaj-dashboard-backend.socket
+ echo PASS_MARKER_REFUSAL
+ install -m644 /dev/null /etc/maj-vaj/paper-vault-enabled
+ install -m644 /dev/null /etc/maj-vaj/paper-dashboard-qualification-enabled
+ systemctl start maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service
+ for i in $(seq 1 60); do if test -S /run/maj-vaj-paper-vault/enroll.sock && /opt/maj-vaj/venv/bin/python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8765/",timeout=1)' 2>/dev/null; then break; fi; sleep 1; done
+ test -S /run/maj-vaj-paper-vault/enroll.sock
+-systemctl is-active maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service
++systemctl is-active maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service maj-vaj-paper-dashboard-backend.service maj-vaj-dashboard-backend.socket
+ echo PASS_NAMED_SERVICE_START
+diff --git a/tests/test_dashboard_auth_gateway.py b/tests/test_dashboard_auth_gateway.py
+new file mode 100644
+index 0000000..f14eb63
+--- /dev/null
++++ b/tests/test_dashboard_auth_gateway.py
+@@ -0,0 +1,80 @@
++import asyncio
++import os
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++import tempfile
++
++import httpx
++from fastapi.testclient import TestClient
++from dashboard_auth_gateway import create_gateway, installed_backend_fd, MAX_REQUEST
++from tradebot import create_app
++
++TOKEN = 'synthetic-' + 'q' * 48
++AUTH = {'Authorization': 'Bearer ' + TOKEN}
++
++
++class DashboardGatewayTests(unittest.TestCase):
++    def setUp(self):
++        self.forwarded = []
++        async def receive(request):
++            self.forwarded.append(request)
++            return httpx.Response(200, json={'ready': True}, headers={'Set-Cookie': 'unexpected=1'})
++        self.client = TestClient(create_gateway(TOKEN, lambda: httpx.MockTransport(receive)), base_url='http://127.0.0.1:8765')
++        self.addCleanup(self.client.close)
++
++    def test_authentication_and_transport_stripping(self):
++        self.assertEqual(self.client.get('/api/status').status_code, 401)
++        self.assertEqual(self.client.get('/api/status', headers={'Authorization':'Bearer wrong'}).status_code,401)
++        self.assertEqual(self.client.get('/api/status', headers=[('Authorization','Bearer '+TOKEN),('Authorization','Bearer wrong')]).status_code,401)
++        self.assertEqual(self.forwarded, [])
++        r = self.client.get('/api/status', headers=AUTH | {'Cookie':'private=1','X-Forwarded-User':'root'})
++        self.assertEqual(r.status_code, 200)
++        self.assertEqual(len(self.forwarded), 1)
++        req = self.forwarded[0]
++        self.assertNotIn('authorization', req.headers)
++        self.assertNotIn('cookie', req.headers)
++        self.assertNotIn('x-forwarded-user', req.headers)
++        self.assertNotIn(TOKEN, str(req.headers))
++        self.assertNotIn('set-cookie', r.headers)
++        self.assertEqual(r.headers['Cache-Control'], 'no-store')
++
++    def test_only_fixed_public_assets(self):
++        self.assertEqual(self.client.get('/').status_code, 200)
++        for p in ('/api/status','/assets/other.js','/health/','/assets/app.js/anything'):
++            self.assertEqual(self.client.get(p).status_code, 401)
++        self.assertEqual(self.client.post('/',json={}).status_code,401)
++        self.assertEqual(len(self.forwarded),1)
++
++    def test_origin_path_and_credential_write_refused(self):
++        self.assertEqual(self.client.get('/api/status',headers=AUTH|{'Origin':'https://external.invalid'}).status_code,403)
++        self.assertEqual(self.client.get('/api/status',headers=AUTH|{'Host':'external.invalid'}).status_code,400)
++        self.assertEqual(self.client.get('/api/%73tatus',headers=AUTH).status_code,400)
++        self.assertEqual(self.client.post('/api/setup/credentials',headers=AUTH,json={'grok':'synthetic'}).status_code,503)
++        self.assertEqual(self.client.get('/api/status?query='+TOKEN,headers=AUTH).status_code,400)
++        self.assertEqual(self.client.post('/api/pause',headers=AUTH,json={'value':TOKEN}).status_code,400)
++        self.assertEqual(self.client.post('/api/pause',headers=AUTH|{'Content-Type':'application/json'},content=b'x'*(MAX_REQUEST+1)).status_code,413)
++        self.assertEqual(self.forwarded,[])
++
++    def test_body_and_query_forwarding(self):
++        r=self.client.post('/api/pause',headers=AUTH,json={'paused':True})
++        self.assertEqual(r.status_code,200)
++        self.assertEqual(self.forwarded[-1].content,b'{"paused":true}')
++        r=self.client.get('/api/market-directory?query=BTC%2FUSD&offset=0',headers=AUTH)
++        self.assertEqual(r.status_code,200)
++        self.assertEqual(self.forwarded[-1].url.query,b'query=BTC%2FUSD&offset=0')
++
++    def test_failure_and_no_redirect_or_cookie(self):
++        async def broken(request): raise httpx.ConnectError('internal error',request=request)
++        async def redirected(request): return httpx.Response(302,headers={'Location':'https://external.invalid/'})
++        async def echo(request): return httpx.Response(200,content=TOKEN)
++        for fn,status in ((broken,503),(redirected,502),(echo,502)):
++            with TestClient(create_gateway(TOKEN,lambda: httpx.MockTransport(fn)),base_url='http://127.0.0.1:8765') as client:
++                r=client.get('/api/status',headers=AUTH);self.assertEqual(r.status_code,status);self.assertNotIn(TOKEN,r.text)
++
++    def test_backend_refuses_public_uncredentialed_configuration(self):
++        with tempfile.TemporaryDirectory() as td:
++            with self.assertRaises(ValueError):create_app(Path(td),None)
++            with self.assertRaises(ValueError):create_app(Path(td),TOKEN,_private_backend=True)
++        with patch.dict(os.environ,{},clear=True):
++            with self.assertRaises((KeyError,PermissionError)):installed_backend_fd()
+diff --git a/tradebot.py b/tradebot.py
+index 0564ece..d5e2c65 100644
+--- a/tradebot.py
++++ b/tradebot.py
+@@ -317,8 +317,10 @@ def dry_run_contract(spec: InstanceSpec):
+     return {"dry_run": True, "trading_mode": "spot", "exchange": {"name": "kraken", "key": "", "secret": "", "pair_whitelist": [spec.pair]}, "dry_run_wallet": spec.virtual_cents / 100, "initial_state": "stopped", "force_entry_enable": False, "telegram": {"enabled": False}, "api_server": {"enabled": False}}
+ 
+ 
+-def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | None = None, dashboard_dir: Path = DASHBOARD):
+-    if not token or len(token) < 32 or not token.isascii():
++def create_app(directory: Path, token: str | None, cap: int = 0, *, vault_key: bytes | None = None, dashboard_dir: Path = DASHBOARD, _private_backend=False):
++    if _private_backend and (token is not None or vault_key is not None):
++        raise ValueError("private backend must not receive credentials")
++    if not _private_backend and (not token or len(token) < 32 or not token.isascii()):
+         raise ValueError("admin token must be at least 32 ASCII characters")
+     store = Store(directory, cap)
+     vault = Vault(store, vault_key) if vault_key is not None else None
+@@ -367,6 +369,12 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes |
+         return JSONResponse(status_code=422, content={"detail": "Invalid request"})
+ 
+     def authorize(authorization: str = Header(default="")):
++        # Installed backend is reachable only through the root-owned, auth-role
++        # Unix listening socket. Never accept forwarded credentials.
++        if _private_backend:
++            if authorization:
++                raise HTTPException(401, "Unauthorized")
++            return
+         if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
+             raise HTTPException(401, "Unauthorized")
+ 
+@@ -721,18 +729,24 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes |
+     return app
+ 
+ 
+-def run_installed_dashboard():
+-    """Qualification-only local PAPER dashboard; shared desk UID is not a release boundary."""
+-    import pwd
++def run_installed_dashboard_backend():
++    """No bearer or vault material; sole listener is the manager-owned UDS."""
+     import uvicorn
+-    from paper_credential_vault import load_service_credential, harden_process
+-    if os.getuid() != pwd.getpwnam('maj-vaj').pw_uid:
+-        raise PermissionError('dashboard identity refused')
++    from paper_credential_vault import harden_process
++    from dashboard_auth_gateway import installed_backend_fd
++    if any(name in os.environ for name in ('CREDENTIALS_DIRECTORY', 'TRADEBOT_ADMIN_TOKEN', 'TRADEBOT_VAULT_KEY')):
++        raise PermissionError('dashboard backend credential environment refused')
++    fd = installed_backend_fd()
+     harden_process()
+     os.umask(0o077)
+-    token = load_service_credential('dashboard-token').decode('ascii')
+-    app = create_app(Path('/var/lib/maj-vaj/data'), token, vault_key=None)
+-    uvicorn.run(app, host='127.0.0.1', port=8765, access_log=False, log_level='warning')
++    app = create_app(Path('/var/lib/maj-vaj/data'), None, _private_backend=True)
++    uvicorn.run(app, fd=fd, access_log=False, log_level='warning', proxy_headers=False)
++
++
++def run_installed_dashboard():
++    # Existing unit name now launches only the distinct auth principal.
++    from dashboard_auth_gateway import run
++    run()
+ 
+ 
+ if __name__ == "__main__":

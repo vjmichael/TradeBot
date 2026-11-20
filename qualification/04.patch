@@ -1,0 +1,136 @@
+diff --git a/deploy/90-maj-vaj-approval-lightdm.conf.example b/deploy/90-maj-vaj-approval-lightdm.conf.example
+new file mode 100644
+index 0000000..101ad6b
+--- /dev/null
++++ b/deploy/90-maj-vaj-approval-lightdm.conf.example
+@@ -0,0 +1,12 @@
++# Administrator-reviewed dedicated local approval seat ONLY.
++# Do not apply to a shared display manager. Do not enable autologin.
++[Seat:*]
++greeter-session=lightdm-gtk-greeter
++user-session=maj-vaj-approval
++greeter-hide-users=true
++greeter-show-manual-login=true
++allow-guest=false
++autologin-user=
++xserver-allow-tcp=false
++user-authority-in-system-dir=false
++session-wrapper=/opt/maj-vaj/scripts/review_session_wrapper.sh
+diff --git a/deploy/maj-vaj-approval-session.desktop b/deploy/maj-vaj-approval-session.desktop
+index 0ade433..08238a5 100644
+--- a/deploy/maj-vaj-approval-session.desktop
++++ b/deploy/maj-vaj-approval-session.desktop
+@@ -2,6 +2,6 @@
+ Type=Application
+ Name=Maj Vaj PAPER approval
+ Comment=Dedicated independent local PAPER recovery session
+-Exec=/opt/maj-vaj/venv/bin/python -I -B -c "import sys;sys.path.insert(0,'/opt/maj-vaj');from reserve_review_session import run;run()"
+-TryExec=/opt/maj-vaj/venv/bin/python
++Exec=/opt/maj-vaj/scripts/review_session_wrapper.sh
++TryExec=/opt/maj-vaj/scripts/review_session_wrapper.sh
+ DesktopNames=MajVajApproval
+diff --git a/docs/tasks.md b/docs/tasks.md
+index 2dd742f..fb68e67 100644
+--- a/docs/tasks.md
++++ b/docs/tasks.md
+@@ -428,3 +428,7 @@ Named checkpoint correction and fresh retry PASS: actual independently adopted/r
+ ## TB-FIN-01C / TB-08-R2-R5-R5-R2 — dedicated desktop provisioning (partial acceptance)
+ 
+ Local X11 display-manager session entry, explicit administrator installation/preflight, private tmpfiles directory, strict unique local Xauthority record extraction and serialized fsynced cookie replacement/retirement, actual logind caller membership and repeated access-control/session/cookie verification. Final pinned 508 discovered / 506 passed / 2 optional skips / zero failures; 15/15 focused, actual independent-UID Xvfb cookie interoperability and unauthorized UID refusal PASS. Real offline Debian systemd/logind/polkit named-unit negative preflight with exact rule and private runtime directory PASS, desk paused, child integrity/base unchanged. Seven missing desktop packages cause installer to refuse rather than weaken session checks. No real local X11 login or positive production graphical approval/lifecycle test yet; no new CI, main merge or LIVE authorization. See [provisioning, acceptance and limits](tb-fin-01c-r2-r5-r5-r2-review-desktop.md). Continue R5-R5-R2 closeout after verified offline desktop dependency restoration and actual local greeter/session qualification; retain prior named expiry/checkpoint and R5-R4 scoped recovery results. Remaining public PAPER/credential/forward validation gates unchanged.
++
++## TB-FIN-01C / TB-08-R2-R5-R5-R2-R1 — actual dedicated installed desktop (scoped positive PASS)
++
++Offline APT simulation and install exit 0; 470 packages in combined local pool, 26 new manifest hashes matched; seven required packages installed; 293 parent tracked hashes matched. Fixed actual LightDM quoted Exec/Xsession ACL incompatibility with root-reviewed dedicated fixed wrapper (no arbitrary command, no general hooks or grants). Real LightDM/PAM active local X11 seat, strict cookie/ACL, desk attach and unit start denied, production named graphical review launched through polkit; invalid submission denied, two exact independent authenticated graphical approvals and consecutive recovery/archival cycles on same PAPER portfolio, no native orders/reservations/P&L, two reviewed resolutions, $100 principal unchanged, paused; actual logout retired cookie and post-logout start denied. Focused 17/17 passed; full suite not rerun. Guest clean poweroff/disk check/base unchanged. Actual in-window cancel-before-submission and lock/switch/logoff-before-confirmation still open; prior unit/transient results retained. [Qualification and managed seat config](tb-fin-01c-r2-r5-r5-r2-r1-installed-desktop.md). No real funds/desk changes, new CI, main merge or LIVE authorization. Remaining credential/public PAPER/financial-goal/forward-validation/consolidation gates unchanged.
+diff --git a/docs/tb-fin-01c-r2-r5-r5-r2-r1-installed-desktop.md b/docs/tb-fin-01c-r2-r5-r5-r2-r1-installed-desktop.md
+new file mode 100644
+index 0000000..7c83d08
+--- /dev/null
++++ b/docs/tb-fin-01c-r2-r5-r5-r2-r1-installed-desktop.md
+@@ -0,0 +1,19 @@
++# TB-FIN-01C / TB-08-R2-R5-R5-R2-R1 — offline installed approval desktop
++
++Status: scoped positive installed graphical approval and two consecutive authenticated PAPER recovery cycles PASS. The real in-window lock/seat-switch/logoff-before-confirmation negative matrix, and standalone cancellation before submission, remain open at the installed production-launcher level. Prior local session-loss checks and R5-R4 transient cancellation results do not substitute. No real trading, credentials, desk change, main merge, or CI dispatch.
++
++## Dependency and installation
++
++The prior candidate (local `f293afbc45de24d15614e8c804844de0d6e01d12`, tree `c2f7c88ac2d02ce631b77bc7b53eee1f9901eff8`) and its archive/patch/evidence hashes matched. All 26 newly supplied package hashes matched the supplied checksum manifest. The restored existing offline GUI pool combined with the individual package inputs contains 470 packages after duplicate elimination. APT simulation and actual offline install on Debian 13 systemd/cgroup-v2 guest exit 0; all seven required desktop packages installed, no dpkg audit output. APT used a local repository constructed from the retained checksum-checked package archives; no new signed Debian index verification was performed in this run. No NIC, only loopback. Exact 293 parent tracked file hashes matched after unpacking the archive. Parent had no installed portfolio; independently provisioned controlled synthetic PAPER fixture only.
++
++## Repairs and deployment
++
++The initial installed provisioning correctly refused group-writable archive modes; installed directory and code permissions tightened without changing bytes. Real LightDM authenticated the test approval identity but the default Debian Xsession wrapper misparsed the quoted Python `-c` desktop command and automatically added an X11 local-user access grant, incompatible with the strict no-extra-grants contract. Replace that entry with a fixed root-owned executable wrapper; on a reviewed dedicated LightDM seat use the same executable as `session-wrapper`. It only accepts the exact single fixed session executable argument, executes the isolated Python session, and does not invoke general Xsession hooks, permit arbitrary commands, grant X11 access, change authorization deadlines or enable auto-login. `deploy/90-maj-vaj-approval-lightdm.conf.example` records the dedicated-seat settings actually used; do not apply to a shared workstation. The provisioning script checks the wrapper's ownership/mode/executability, refuses differing configuration; administrator explicitly reconciles old desktop entry and reviews seat configuration. The production unit, cookie/session guards, independent signing, and financial gates remain unchanged. New wrapper tests 2/2; full focused review suite 17/17 under Xvfb. An initial focused run without a display failed the GUI test; repeated in a real host test display and passed. Full repository suite not rerun; prior 506/508 (two skips) is retained for the parent only.
++
++## Installed acceptance
++
++Actual offline QEMU standard VGA virtual console, genuine LightDM/PAM login via console keyboard using separate disposable test login credential. Initial invalid login correctly refused; next correct login authenticated but old launch entry failed as described. Corrected fixed wrapper deployed byte-for-byte, genuine login again, actual logind active local unlocked X11 seat0 user session and strict X11 ACL; private copied approval cookie mode 0600. Ordinary desk UID cannot attach and cannot start named review unit via polkit. Real production launcher visibly starts the actual named protected graphical review service (no review ExecStart override); actual UI inputs via virtual console, synthetic passphrase only. Native and proof services use the already established root-owned controlled-book/pre-effect interruption fixture overrides; actual Gate and ledger, signatures, proof producer, desk importer and archival roles remain independent. First invalid UI submission refused, no pending approval/financial release; close and reopen; valid input produces independently signed approval. Two consecutive cycles on same portfolio, keys and mailboxes, each held $27.55 reservation until verified recovery. Exact independent archive copies authenticated, duplicates imported without new ledger effects, two reviewed NO_FILL events, zero native orders, zero reservations/P&L, $100 principal unchanged and both pause flags set. Each audit exit 0. Both native and authority pending records retired. Production display session exit via launcher retired cookie; post-logout polkit start denied and service MainPID zero. Test services/timers stopped, fixture overrides removed, opt-in removed and synthetic login locked. Actual disk shutdown clean; qemu-img check zero errors; original Debian base SHA256 `2eba10bdfc7f368dde145205e0f3211f5f3a0ce29a5ab60b5ea7b728fd9a1776` unchanged. No physical workstation tested, no real market, no profitability claim.
++
++## Remaining gates
++
++Independently qualify actual in-window cancel (before submission) and lock/seat-switch/logoff-before-confirm refusal under real installed approval seat; post-logout refusal and previous focused guards pass. Proceed to TB-SEC-KEY-01, sustained public PAPER with genuine networked constructor, migrated financial-goal acceptance, TB-12 forward validation and final consolidated acceptance. No LIVE authority.
+diff --git a/docs/tb-fin-01c-r2-r5-r5-r2-review-desktop.md b/docs/tb-fin-01c-r2-r5-r5-r2-review-desktop.md
+index 2036235..8a79496 100644
+--- a/docs/tb-fin-01c-r2-r5-r5-r2-review-desktop.md
++++ b/docs/tb-fin-01c-r2-r5-r5-r2-review-desktop.md
+@@ -22,3 +22,5 @@ The host must perform a real greeter login on a local seat, check exact logind X
+ - Final exact code regression suite: 508 discovered, 506 passed, 2 optional skips, 0 failures, exit 0 (55.190 seconds). Focused launcher/session suite: 15/15 PASS. Earlier first implementation suite: 507 discovered, 505 passed, 2 optional skips. Focused tests cover caller mismatch, ambiguous/locked/remote/wrong sessions, strict binary Xauthority parsing, mode/link checks, serialized cookie replacement, stale retirement, access-control failure and revalidation before signing/publication.
+ - Actual separate-UID Xvfb interoperability: real xauth-generated local record copied through production parser/custody functions, independent UID opens Tk and X display, another UID without cookie denied. PASS. This is not a genuine installed desktop or a polkit positive test. Host lacks xhost; ACL behavior is covered by focused tests, not a real Xorg ACL query.
+ - Offline Debian systemd guest based on prior accepted controlled PAPER child: exact seven updated source/test/deployment files copied and byte-compared; actual logind resolves serial caller `self`, actual systemd-tmpfiles creates private 0700 approval directory, exact polkit rule installed and daemon active. Actual package check refused seven missing packages (lightdm, lightdm-gtk-greeter, xserver-xorg-core, xserver-xorg-input-libinput, xauth, x11-xserver-utils, dbus-user-session). Actual wrong UID and no-session launcher refusals and polkit/systemd start refusals under both independent identities; named review MainPID zero, existing service syntax accepted, disposable PAPER desk paused. Exit 0 for negative/preflight harness, clean shutdown; child qcow2 integrity no errors; original Debian base hash unchanged. No login provisioning, activation marker change, real credential, order, network or main change. No positive local X11 approval session or actual two-cycle production launcher recovery executed. Remaining genuine desktop qualification explicitly open.
++
++R2-R1 follow-up: Debian LightDM's default Xsession hook behavior is not compatible with this strict isolated display. Use the explicitly administrator-reviewed dedicated session wrapper and seat config example documented in [installed follow-up](tb-fin-01c-r2-r5-r5-r2-r1-installed-desktop.md). Do not use the general Xsession wrapper on the dedicated approval seat.
+diff --git a/scripts/provision_review_desktop.sh b/scripts/provision_review_desktop.sh
+index 709fcf0..1f37ba3 100755
+--- a/scripts/provision_review_desktop.sh
++++ b/scripts/provision_review_desktop.sh
+@@ -27,8 +27,9 @@ assert len({pwd.getpwnam(n).pw_uid for n in ('maj-vaj','maj-vaj-native','maj-vaj
+ home=Path(p.pw_dir); st=home.lstat()
+ assert home.is_absolute() and stat.S_ISDIR(st.st_mode) and st.st_uid==p.pw_uid and stat.S_IMODE(st.st_mode)==0o700
+ assert p.pw_shell not in ('/usr/sbin/nologin','/sbin/nologin','/bin/false') and os.access(p.pw_shell,os.X_OK)
+-for name in ('reserve_review_launcher.py','reserve_review_session.py','reserve_no_effect_worker.py','deploy'):
++for name in ('reserve_review_launcher.py','reserve_review_session.py','reserve_no_effect_worker.py','scripts/review_session_wrapper.sh','deploy'):
+     st=Path(name).lstat();assert st.st_uid==0 and not st.st_mode&0o022 and not stat.S_ISLNK(st.st_mode)
++assert os.access('scripts/review_session_wrapper.sh',os.X_OK)
+ print('Approval identity, private home, and code custody preflight passed.')
+ PY
+ [[ $1 == --install ]] || exit 0
+diff --git a/scripts/review_session_wrapper.sh b/scripts/review_session_wrapper.sh
+new file mode 100755
+index 0000000..c934072
+--- /dev/null
++++ b/scripts/review_session_wrapper.sh
+@@ -0,0 +1,7 @@
++#!/bin/sh
++# LightDM dedicated-seat wrapper. Fixed session only; never run general Xsession
++# hooks that grant additional display access or execute arbitrary shell commands.
++set -eu
++expected=/opt/maj-vaj/scripts/review_session_wrapper.sh
++[ "$#" -eq 1 ] && [ "$1" = "$expected" ] || exit 1
++exec /opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from reserve_review_session import run;run()'
+diff --git a/tests/test_review_session_wrapper.py b/tests/test_review_session_wrapper.py
+new file mode 100644
+index 0000000..a41473d
+--- /dev/null
++++ b/tests/test_review_session_wrapper.py
+@@ -0,0 +1,24 @@
++"""The dedicated session must not route arbitrary desktop commands to Xsession."""
++import subprocess
++import unittest
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[1]
++WRAPPER = '/opt/maj-vaj/scripts/review_session_wrapper.sh'
++
++
++class DedicatedSessionWrapperTests(unittest.TestCase):
++    def test_rejects_invalid_commands_and_arguments(self):
++        for args in ([], ['/bin/sh'], [WRAPPER, 'extra'], [WRAPPER + ' extra']):
++            with self.subTest(args=args):
++                result = subprocess.run(['/bin/sh', str(ROOT/'scripts/review_session_wrapper.sh'), *args], capture_output=True, timeout=5)
++                self.assertEqual(result.returncode, 1)
++                self.assertEqual(result.stdout, b'')
++
++    def test_dedicated_seat_and_desktop_use_same_fixed_wrapper(self):
++        desktop = (ROOT/'deploy/maj-vaj-approval-session.desktop').read_text().splitlines()
++        seat = (ROOT/'deploy/90-maj-vaj-approval-lightdm.conf.example').read_text().splitlines()
++        self.assertIn('Exec=' + WRAPPER, desktop)
++        self.assertIn('TryExec=' + WRAPPER, desktop)
++        for setting in ('session-wrapper=' + WRAPPER, 'allow-guest=false', 'autologin-user=', 'xserver-allow-tcp=false', 'user-authority-in-system-dir=false'):
++            self.assertIn(setting, seat)

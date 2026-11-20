@@ -1,0 +1,819 @@
+diff --git a/deploy/maj-vaj-data.service b/deploy/maj-vaj-data.service
+index d281b45..31a5a85 100644
+--- a/deploy/maj-vaj-data.service
++++ b/deploy/maj-vaj-data.service
+@@ -14,6 +14,8 @@ RestartSec=5s
+ TimeoutStopSec=25s
+ KillMode=control-group
+ UMask=0077
++LimitCORE=0
++InaccessiblePaths=-/run/credentials/maj-vaj-paper-dashboard.service -/var/lib/maj-vaj-paper-vault -/run/maj-vaj-paper-vault
+ NoNewPrivileges=yes
+ PrivateTmp=yes
+ ProtectSystem=strict
+diff --git a/deploy/maj-vaj-paper-dashboard.service b/deploy/maj-vaj-paper-dashboard.service
+new file mode 100644
+index 0000000..3460724
+--- /dev/null
++++ b/deploy/maj-vaj-paper-dashboard.service
+@@ -0,0 +1,31 @@
++[Unit]
++Description=Maj Vaj local PAPER dashboard (qualification only; do not deploy with real credentials)
++ConditionPathExists=/etc/maj-vaj/paper-dashboard-qualification-enabled
++
++[Service]
++Type=simple
++User=maj-vaj
++Group=maj-vaj
++SupplementaryGroups=maj-vaj-transfer
++WorkingDirectory=/opt/maj-vaj
++ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from tradebot import run_installed_dashboard;run_installed_dashboard()'
++LoadCredential=dashboard-token:/etc/maj-vaj/credential-keys/dashboard-token
++UMask=0077
++UnsetEnvironment=TRADEBOT_VAULT_KEY TRADEBOT_ADMIN_TOKEN
++NoNewPrivileges=yes
++PrivateTmp=yes
++ProtectSystem=strict
++ProtectHome=yes
++ProtectProc=invisible
++ProtectKernelTunables=yes
++ProtectKernelModules=yes
++ProtectControlGroups=yes
++ReadWritePaths=/var/lib/maj-vaj/data -/var/lib/maj-vaj/data-recovery-copies
++InaccessiblePaths=-/var/lib/maj-vaj-paper-vault -/run/maj-vaj-paper-vault -/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-recovery-human -/var/lib/maj-vaj-reserve-approval
++CapabilityBoundingSet=
++RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
++LimitCORE=0
++StandardOutput=null
++StandardError=null
++Restart=no
++TimeoutStopSec=10s
+diff --git a/deploy/maj-vaj-paper-protection@.service b/deploy/maj-vaj-paper-protection@.service
+index 5b765e1..14ae2df 100644
+--- a/deploy/maj-vaj-paper-protection@.service
++++ b/deploy/maj-vaj-paper-protection@.service
+@@ -19,6 +19,7 @@ TimeoutStopSec=15s
+ WatchdogSec=60s
+ KillMode=control-group
+ UMask=0077
++LimitCORE=0
+ NoNewPrivileges=yes
+ PrivateTmp=yes
+ ProtectSystem=strict
+diff --git a/deploy/maj-vaj-paper-vault.service b/deploy/maj-vaj-paper-vault.service
+new file mode 100644
+index 0000000..9cb323d
+--- /dev/null
++++ b/deploy/maj-vaj-paper-vault.service
+@@ -0,0 +1,36 @@
++[Unit]
++Description=Maj Vaj isolated local PAPER test-credential vault (staged)
++ConditionPathExists=/etc/maj-vaj/paper-vault-enabled
++
++[Service]
++Type=simple
++User=maj-vaj-vault
++Group=maj-vaj-vault
++SupplementaryGroups=maj-vaj-credential-operator
++WorkingDirectory=/opt/maj-vaj
++ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from paper_credential_vault import main;sys.exit(main())' serve
++LoadCredential=venue-vault-key:/etc/maj-vaj/credential-keys/venue-vault-key
++StateDirectory=maj-vaj-paper-vault
++StateDirectoryMode=0700
++RuntimeDirectory=maj-vaj-paper-vault
++RuntimeDirectoryMode=0711
++UMask=0077
++UnsetEnvironment=TRADEBOT_VAULT_KEY TRADEBOT_ADMIN_TOKEN
++NoNewPrivileges=yes
++PrivateTmp=yes
++PrivateNetwork=yes
++PrivateDevices=yes
++ProtectSystem=strict
++ProtectHome=yes
++ProtectProc=invisible
++ProtectKernelTunables=yes
++ProtectKernelModules=yes
++ProtectControlGroups=yes
++InaccessiblePaths=-/var/lib/maj-vaj -/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-reserve-approval -/var/lib/maj-vaj-recovery-human
++CapabilityBoundingSet=
++RestrictAddressFamilies=AF_UNIX
++LimitCORE=0
++StandardOutput=null
++StandardError=null
++TimeoutStopSec=5s
++Restart=no
+diff --git a/deploy/maj-vaj-reserve-authority.service b/deploy/maj-vaj-reserve-authority.service
+index 6129d5f..75e6d56 100644
+--- a/deploy/maj-vaj-reserve-authority.service
++++ b/deploy/maj-vaj-reserve-authority.service
+@@ -10,6 +10,7 @@ ExecStart=/opt/maj-vaj/venv/bin/python -m reserve_recovery --authority-user maj-
+ RuntimeDirectory=maj-vaj-reserve-authority
+ RuntimeDirectoryMode=0755
+ UMask=0077
++LimitCORE=0
+ NoNewPrivileges=yes
+ PrivateTmp=yes
+ PrivateNetwork=yes
+diff --git a/deploy/maj-vaj-reserve.service b/deploy/maj-vaj-reserve.service
+index dbe2549..6294405 100644
+--- a/deploy/maj-vaj-reserve.service
++++ b/deploy/maj-vaj-reserve.service
+@@ -14,6 +14,7 @@ TimeoutStartSec=25s
+ TimeoutStopSec=10s
+ KillMode=control-group
+ UMask=0077
++LimitCORE=0
+ NoNewPrivileges=yes
+ PrivateTmp=yes
+ PrivateNetwork=yes
+diff --git a/docs/tasks.md b/docs/tasks.md
+index 7407199..bffe6be 100644
+--- a/docs/tasks.md
++++ b/docs/tasks.md
+@@ -16,7 +16,7 @@ No automatic progression to real money. Design v0.7 plus the binding [v0.8 adden
+ | TB-08 | Multi-instance shared data and research budget, isolated rules/numerical/fundamental paper portfolios, allocation/reservations, preparation lifecycle, paper switch with separate live confirmation and protected exits; TB-FIN-01A/C/D/E financial goals, human-controlled reserve release and paper verification | Pending |
+ | TB-09 | Central Telegram Desk, external Recovery bot, allowlisted chats, test messages, durable controls and secondary email | Pending |
+ | TB-10 | Signed one-click DigitalOcean Linux VPS deployment and prepopulated historical seed installation, measured storage sizing, disk monitoring and consistent SQLite/Parquet/model restore, private APIs, HTTPS, external heartbeat/recovery, backups, upgrade/rollback; graphical fresh-host acceptance | Pending; see TB-10-SEED below |
+-| TB-SEC-KEY-01 | Mandatory secret custody and non-disclosure across API, wallet, native signer, UI, logs, process/IPC, backups, notifications, research and deployment; separate vault keys, withdrawal-disabled exchange keys, revocation/rotation and synthetic-canary installed matrix | In progress — masked input and fixed errors candidate; 5/5 model tests; endpoint and installed matrix pending; blocks TB-10/11/12 production and live release |
++| TB-SEC-KEY-01 | Mandatory secret custody and non-disclosure across API, wallet, native signer, UI, logs, process/IPC, backups, notifications, research and deployment; separate vault keys, withdrawal-disabled exchange keys, revocation/rotation and synthetic-canary installed matrix | In progress — isolated installed PAPER vault accepted within synthetic custody scope; dashboard shared-UID bearer exposure and full installed non-disclosure matrix remain open; blocks TB-10/11/12 production and live release |
+ | TB-11 | Consolidated functional/security and failure drills per design section 9 and v0.8; AI-absence, session/timezone and budget cap tests; real venue eligibility and stop/ownership qualification; 24h laptop-off check | Pending |
+ | TB-12 | At least seven consecutive days real-time simulated trading after historical readiness; freeze evaluation and extend as needed, no automatic live promotion | Pending |
+ 
+@@ -436,3 +436,8 @@ Offline APT simulation and install exit 0; 470 packages in combined local pool,
+ ## TB-FIN-01C / TB-08-R2-R5-R5-R2-R2 — installed graphical interruption (scoped PASS)
+ 
+ Dedicated logind event latch closes and invalidates review on lock, seat/session change or bus loss; dedicated administrative LightDM cleanup retires orphaned copied X11 cookie without deleting replacement login custody. Final pinned local full suite 512 PASS / 2 optional skips / 0 failed (514 discovered), focused 21/21. Actual installed final-source refusal matrix 4/4: Close before submission, logind lock, real console seat switch and forced logout; proof and $27.55 reservation retained, no approval, no native orders, two earlier resolution events unchanged, $100 synthetic principal preserved and desk paused. Cookie retired after forced logout and post-loss start denied. Corrected initial cleanup defect. Graceful offline guest shutdown and disk integrity PASS. [Qualification](tb-fin-01c-r2-r5-r5-r2-r2-interruption.md). Positive installed approval and two recovery cycles remain accepted on R2-R1; final exact-source positive confirmation to be repeated in consolidated acceptance. Next TB-SEC-KEY-01 installed credential-security review. No CI, main change or LIVE authority.
++
++
++## TB-SEC-KEY-01 — separate installed PAPER credential vault (partial)
++
++Staged separate local vault/credential operator, systemd-protected KEK, status-only write/removal protocol, paired atomic replacement and tamper refusal. Final pinned suite 519 PASS / 2 optional skips / 0 failed (521 discovered), focused 15/15. Installed synthetic enrollment, peer/identity and file refusals, restart, concurrent updates, database/process/HTTP/journal scan, actual market-only backup, local removal and wrong-key/tamper controlled restore PASS. **Shared desk UID can still read the qualification dashboard bearer credential file** despite private memory protection; dashboard is explicitly qualification-only. Full production custody, worker/research/notification/browser/egress and credential lifecycle gates open. [Qualification](tb-sec-key-01-vault-qualification.md). Next TB-SEC-KEY-01-R1: separate dashboard authentication principal and complete installed worker/backup/handoff and credential lifecycle audit. No actual desk mutation, live credentials, new CI or main update.
+diff --git a/docs/tb-sec-key-01-vault-qualification.md b/docs/tb-sec-key-01-vault-qualification.md
+new file mode 100644
+index 0000000..30c6267
+--- /dev/null
++++ b/docs/tb-sec-key-01-vault-qualification.md
+@@ -0,0 +1,23 @@
++# TB-SEC-KEY-01 — isolated PAPER vault and installed credential custody (partial)
++
++Parent: recovered R5-R5-R2-R2 archive, reported prior local commit d95bb572d3abe0ddc7610e59db2ca5f3f66f48ae. Parent archive checksum verified; restored archive imported into a local git worktree, not represented as the original Git ancestry. No actual desk, credentials, network, trading or live funds used. No GitHub changes or CI dispatch.
++
++## Candidate
++
++- Staged independent local vault (`maj-vaj-vault`) and enrollment operator (`maj-vaj-credential-operator`); a root-owned systemd-provided Fernet KEK, private separate SQLite database, authenticated local peer, bounded no-export protocol, exact paired replacement/removal and verification before mutations. Only status, enrollment and local removal. No access to actual exchange credentials or venue adapter, no real connection verification, no trading-enabled or wallet slots. Local removal does not revoke a key at the provider. No automated KEK rotation or production encrypted backup/recovery. Legacy dev dashboard compatibility retained; installed qualification dashboard disables its vault.
++- Both opt-in services use fixed unit-specific credentials directory, locked mode/owner requirements, no secret environment bootstrap, core dumps disabled and Linux non-dumpable protection. Public data unit has explicit vault/qualification token mount restrictions; shared UID still not a substantive identity boundary. Local dashboard bearer remains accessible to unrelated processes with the desk UID; qualification-only marker renamed `paper-dashboard-qualification-enabled`. Do not use actual credentials or production tokens with it. No remote TLS/production authentication offered. New deployment units staged, not enabled automatically.
++- Offline synthetic test harnesses require explicit disposable-guest opt-in, QEMU/loopback, and pristine vault credentials for new runs. Setup assumes root-mounted read-only `/mnt/deps` with source/unit files; not production provisioning. These extra test-harness invocation safeguards were added after the executed runtime acceptance; no runtime source or service change afterward. Enrollment CLI prompts using non-echoing interactive terminal, separate operator principal; installed programmatic synthetic enrollment qualified, interactive human CLI not independently exercised.
++
++## Recorded tests
++
++- Final pinned Python 3.12/Freqtrade environment: 521 tests discovered, 519 passed, 2 optional skips, 0 failures (56.360 s); final focused credentials/dashboard 15/15. Full suite executed before the final harness-only invocation safeguards and documentation.
++- Genuine offline Debian systemd QEMU child of prior qualified guest: changed runtime files and units compared byte-for-byte on deployment, explicit-marker refusal, dedicated identities, independent credential file and DB denial, no plaintext read/export, reject secret phrase and partial pair, authenticated HTTP status and disabled credential write, concurrent pair rotation, persistent restart, local removal. Final matrix verified runtime vault file denial, same-UID dashboard memory denial, **confirmed same-UID dashboard bearer-file exposure**, and scanned DB/WAL, process args/environment, HTTP responses and installed journals for raw/hex/base64 synthetic markers. No marker observed in scanned surfaces; the bearer-file exposure is a distinct intentional adversarial access test and an open failure, not an overall pass.
++- Actual dashboard-initiated public market-only backup completed, no synthetic marker or desk/vault DB or credential key file in scanned backup. Worker process exited before environment observation; live child inspection remains open. Existing local worker and data handoff regressions passed; installed research handoff, browser persistence, notification channels and all egress paths not exhaustively scanned.
++- Actual installed fault matrix: wrong KEK refused without replacing DB; correct original KEK restores; corrupted ciphertext refused unchanged; controlled encrypted fixture restore succeeds; synthetic slot removed. All five checkpoints passed; this is not production/operator-approved encrypted backup restoration. Core limits verified. Named services stopped and runtime socket and private credential mount retired. Guest base SHA256 unchanged and qemu-img check no errors.
++- Initial installed startup rejected legitimate systemd 257 root:root ACL-protected 0440 credentials. Corrected exact unit-path/owner/mode compatibility. Fresh dashboard fixture needed an existing transfer-group membership for the entry fence, then a full-schema fresh disposable database rather than the prior minimal financial recovery fixture; the earlier fixture retained in the child overlay. Initial backup harness inspected wrong response field and timed out although backup completed; corrected rerun passed. Initial debug output enabled only temporarily for synthetic startup error and then removed. Final runtime source tested after corrections.
++
++## Remaining release gates
++
++1. Separate dashboard authentication custody from all desk/public-data principals. Current qualification service cannot be promoted. Establish dedicated auth principal with narrow authenticated local channel; no external bearer material in desk process or same-UID readable credential mounts. Repeat adversarial access tests.
++2. Actual installed public data worker child environment and secret-free research, browser persistence, notifications, support/debug/export and outbound traffic matrix; authenticate local operator enrollment and production approval lifecycle; TLS and positive venue API scope verification; independent vault-to-adapter custody and opt-in, provider-side revocation, KEK rotation and separately approved encrypted recovery. Do not enable live venue operations.
++3. Consolidated installed same-source matrix, positive recovery replay, sustained PAPER and existing financial/forward-validation gates. Full TB-SEC-KEY-01 remains OPEN; no production or live readiness claim.
+diff --git a/docs/tb-sec-key-01.md b/docs/tb-sec-key-01.md
+index 9a8e012..5fd442e 100644
+--- a/docs/tb-sec-key-01.md
++++ b/docs/tb-sec-key-01.md
+@@ -19,3 +19,7 @@ Inspect installed process boundaries and outgoing network traffic using syntheti
+ ## Current candidate evidence
+ 
+ Existing development credential endpoint uses encrypted SQLite ciphertext and status-only responses; paper engine configurations contain empty exchange credentials; browser form fields are password inputs, cleared on submission; public data worker has explicit environment construction. Existing independent native public-signature path avoids delivering native secrets to desk. New credential input model uses SecretStr, masks representation and JSON serialization, hides invalid inputs in error strings, rejects unsupported wallet/live fields and unwraps only for vault write. Credential backend failure uses fixed HTTP errors. Five focused model tests passed locally with Pydantic 2.13.5. Added endpoint regression is unexecuted (complete project runtime not restored). SecretStr is defense in depth, not memory erasure or prevention of explicit access. Full production matrix, remote TLS, separate venue vault and credential lifecycle remain pending. No main merge, CI dispatch or actual desk changes.
++
++## 2026-11-20 installed custody progress
++
++See [isolated PAPER vault qualification](tb-sec-key-01-vault-qualification.md). The staged isolated vault and selected synthetic installed tests passed. Dashboard shared-UID bearer-file access independently reproduced; entire gate remains open. Qualification-only dashboard must not be deployed with real secrets. No venue access or live permission.
+diff --git a/paper_credential_vault.py b/paper_credential_vault.py
+new file mode 100644
+index 0000000..301c6fd
+--- /dev/null
++++ b/paper_credential_vault.py
+@@ -0,0 +1,289 @@
++"""Staged local PAPER credential custody. No venue or plaintext-read interface."""
++import argparse
++from contextlib import contextmanager
++import getpass
++import json
++import os
++from pathlib import Path
++import pwd
++import grp
++import resource
++import socket
++import socketserver
++import sqlite3
++import stat
++import struct
++import sys
++import warnings
++import ctypes
++
++from cryptography.fernet import Fernet
++from credential_input import CredentialSetup
++
++SLOTS = frozenset(CredentialSetup.model_fields)
++PAIR = frozenset(('kraken_read_key', 'kraken_read_secret'))
++STATE = Path('/var/lib/maj-vaj-paper-vault')
++SOCKET = Path('/run/maj-vaj-paper-vault/enroll.sock')
++MAX_MESSAGE = 65536
++DOMAIN = b'maj-vaj:PAPER:credential-vault:v1\0'
++UNAVAILABLE = {'ok': False, 'reason': 'credential_storage_unavailable'}
++REFUSED = {'ok': False, 'reason': 'credential_request_refused'}
++
++
++def _private_dir(path):
++    s = path.lstat()
++    if not stat.S_ISDIR(s.st_mode) or s.st_uid != os.getuid() or s.st_mode & 0o077:
++        raise PermissionError('private vault directory required')
++
++
++def _private_file(path):
++    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
++    try:
++        s = os.fstat(fd)
++        if not stat.S_ISREG(s.st_mode) or s.st_uid != os.getuid() or s.st_mode & 0o077 or s.st_nlink != 1:
++            raise PermissionError('private vault file required')
++    finally:
++        os.close(fd)
++
++
++def load_service_credential(name):
++    """Read only from systemd's private credential mount, never secret environment values."""
++    units = {'venue-vault-key': 'maj-vaj-paper-vault.service', 'dashboard-token': 'maj-vaj-paper-dashboard.service'}
++    if name not in units:
++        raise PermissionError('systemd credential required')
++    base = Path('/run/credentials') / units[name]
++    if os.environ.get('CREDENTIALS_DIRECTORY') != str(base):
++        raise PermissionError('systemd credential required')
++    directory = base.lstat()
++    # systemd 257 uses root:root 0550/0440 with a per-UID ACL; older
++    # installations may use owner-only modes. Never accept writable or public files.
++    if (not stat.S_ISDIR(directory.st_mode) or directory.st_uid not in (0, os.getuid())
++            or stat.S_IMODE(directory.st_mode) not in (0o500, 0o550)
++            or (directory.st_mode & 0o050 and (directory.st_uid, directory.st_gid) != (0, 0))):
++        raise PermissionError('systemd credential directory refused')
++    fd = os.open(base / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
++    with os.fdopen(fd, 'rb') as f:
++        s = os.fstat(f.fileno())
++        if (not stat.S_ISREG(s.st_mode) or s.st_uid not in (0, os.getuid())
++                or stat.S_IMODE(s.st_mode) not in (0o400, 0o440)
++                or (s.st_mode & 0o040 and (s.st_uid, s.st_gid) != (0, 0))
++                or not 1 <= s.st_size <= 4096):
++            raise PermissionError('systemd credential refused')
++        return f.read(4097).rstrip(b'\n')
++
++
++
++def _validate_slots(slots):
++    if not slots or not slots <= SLOTS or (slots & PAIR and not PAIR <= slots):
++        raise ValueError('credential selection refused')
++
++
++class PaperVault:
++    def __init__(self, directory, key):
++        self.directory = Path(directory)
++        _private_dir(self.directory)
++        self.path = self.directory / 'vault.sqlite3'
++        self.cipher = Fernet(key)
++        # Dedicated service umask is 0077. Exclusive creation avoids following links.
++        try:
++            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
++        except FileExistsError:
++            created = False
++        else:
++            os.close(fd)
++            created = True
++        with self.transaction() as db:
++            if created:
++                db.execute('CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), verifier BLOB NOT NULL)')
++                db.execute('CREATE TABLE secrets (slot TEXT PRIMARY KEY, ciphertext BLOB NOT NULL)')
++                db.execute('INSERT INTO meta VALUES(1,?)', (self.cipher.encrypt(DOMAIN+b'verifier'),))
++            self._verify(db)
++
++    @contextmanager
++    def transaction(self):
++        _private_dir(self.directory)
++        _private_file(self.path)
++        # No workspace DB, no plaintext credential row, no general backup route.
++        db = sqlite3.connect(self.path, timeout=5, isolation_level=None)
++        try:
++            db.execute('PRAGMA trusted_schema=OFF')
++            db.execute('PRAGMA secure_delete=ON')
++            db.execute('BEGIN IMMEDIATE')
++            yield db
++            db.commit()
++        except BaseException:
++            db.rollback()
++            raise
++        finally:
++            db.close()
++
++    def _verify(self, db):
++        row = db.execute('SELECT verifier FROM meta WHERE id=1').fetchone()
++        if row is None or self.cipher.decrypt(row[0]) != DOMAIN+b'verifier':
++            raise ValueError('vault verification refused')
++        slots = set()
++        for slot, blob in db.execute('SELECT slot,ciphertext FROM secrets'):
++            if slot not in SLOTS or not self.cipher.decrypt(blob).startswith(DOMAIN+slot.encode()+b'\0'):
++                raise ValueError('vault verification refused')
++            slots.add(slot)
++        if slots & PAIR and not PAIR <= slots:
++            raise ValueError('incomplete credential pair')
++        return slots
++
++    def _status(self, db):
++        slots = self._verify(db)
++        return {'ok': True, 'credentials': {slot: 'stored_unverified' if slot in slots else 'not_configured' for slot in sorted(SLOTS)}, 'connections_verified': False, 'deployment_ready': False}
++
++    def status(self):
++        with self.transaction() as db:
++            return self._status(db)
++
++    def enroll(self, values):
++        _validate_slots(set(values))
++        if any(type(v) is not str or not 0 < len(v) <= 8192 or any(c.isspace() or ord(c)<33 or ord(c)==127 for c in v) for v in values.values()):
++            raise ValueError('credential value refused')
++        sealed = [(slot, self.cipher.encrypt(DOMAIN+slot.encode()+b'\0'+v.encode())) for slot,v in values.items()]
++        with self.transaction() as db:
++            self._verify(db)
++            db.executemany('INSERT INTO secrets VALUES (?,?) ON CONFLICT(slot) DO UPDATE SET ciphertext=excluded.ciphertext', sealed)
++            return self._status(db)
++
++    def remove(self, slots):
++        _validate_slots(slots)
++        with self.transaction() as db:
++            self._verify(db)
++            db.executemany('DELETE FROM secrets WHERE slot=?', [(slot,) for slot in slots])
++            return self._status(db)
++
++
++def dispatch(vault, request):
++    if type(request) is not dict:
++        return REFUSED.copy()
++    op = request.get('op')
++    try:
++        if op == 'status' and set(request) == {'op'}:
++            return vault.status()
++        if op == 'enroll' and set(request) == {'op', 'values'}:
++            model = CredentialSetup.model_validate(request['values'])
++            values = model.vault_values()
++            _validate_slots(set(values))
++            return vault.enroll(values)
++        if op == 'remove' and set(request) == {'op', 'slots'} and type(request['slots']) is list and all(type(s) is str for s in request['slots']):
++            return vault.remove(set(request['slots']))
++        return REFUSED.copy()
++    except (ValueError, TypeError):
++        return REFUSED.copy()
++    except Exception:
++        return UNAVAILABLE.copy()
++
++
++def _peer_uid(sock):
++    return struct.unpack('3i', sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[1]
++
++
++class Handler(socketserver.StreamRequestHandler):
++    def handle(self):
++        self.connection.settimeout(3)
++        try:
++            if _peer_uid(self.connection) != self.server.operator_uid:
++                result = REFUSED
++            else:
++                raw = self.rfile.readline(MAX_MESSAGE+1)
++                if not raw.endswith(b'\n') or len(raw) > MAX_MESSAGE:
++                    result = REFUSED
++                else:
++                    try:
++                        request = json.loads(raw)
++                    except (ValueError, RecursionError):
++                        result = REFUSED
++                    else:
++                        result = dispatch(self.server.vault, request)
++            self.wfile.write(json.dumps(result, separators=(',', ':')).encode()+b'\n')
++        except (OSError, ValueError, RecursionError):
++            pass
++
++
++class Server(socketserver.UnixStreamServer):
++    def __init__(self, path, vault, operator_uid, operator_gid):
++        self.vault, self.operator_uid = vault, operator_uid
++        # Service-owned runtime directory; absent socket required (no unlink of unknown files).
++        super().__init__(str(path), Handler)
++        os.chown(path, -1, operator_gid)
++        os.chmod(path, 0o660)
++
++    def handle_error(self, request, address):
++        # Never print untrusted request contents or exception text.
++        pass
++
++
++def send(request, path=SOCKET, service_uid=None):
++    if service_uid is None:
++        service_uid = pwd.getpwnam('maj-vaj-vault').pw_uid
++    raw = json.dumps(request, separators=(',', ':')).encode()+b'\n'
++    if len(raw) > MAX_MESSAGE:
++        return REFUSED.copy()
++    with socket.socket(socket.AF_UNIX) as s:
++        s.settimeout(5)
++        s.connect(str(path))
++        if _peer_uid(s) != service_uid:
++            raise PermissionError('vault peer refused')
++        s.sendall(raw)
++        with s.makefile('rb') as f:
++            response = f.readline(MAX_MESSAGE+1)
++        if len(response) > MAX_MESSAGE:
++            raise ValueError('vault response refused')
++        return json.loads(response)
++
++
++def harden_process():
++    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
++    # Linux PR_SET_DUMPABLE=0: deny ordinary same-UID process memory access.
++    # This does not isolate systemd credential files from another process with the same UID.
++    if ctypes.CDLL(None, use_errno=True).prctl(4, 0, 0, 0, 0) != 0:
++        raise PermissionError('process dump protection unavailable')
++
++
++def serve():
++    harden_process()
++    os.umask(0o077)
++    if os.getuid() != pwd.getpwnam('maj-vaj-vault').pw_uid:
++        raise PermissionError('vault identity refused')
++    operator = pwd.getpwnam('maj-vaj-credential-operator')
++    vault = PaperVault(STATE, load_service_credential('venue-vault-key'))
++    with Server(SOCKET, vault, operator.pw_uid, grp.getgrnam('maj-vaj-credential-operator').gr_gid) as server:
++        server.serve_forever(poll_interval=.2)
++
++
++def main():
++    p = argparse.ArgumentParser(description='Staged local PAPER test credentials only')
++    p.add_argument('command', choices=['serve','status','enroll','remove'])
++    p.add_argument('slots', nargs='*')
++    args = p.parse_args()
++    try:
++        if args.command == 'serve':
++            serve(); return 0
++        harden_process()
++        if os.getuid() != pwd.getpwnam('maj-vaj-credential-operator').pw_uid:
++            raise PermissionError('operator identity refused')
++        if args.command == 'status':
++            if args.slots: raise ValueError('unexpected slots')
++            request = {'op':'status'}
++        else:
++            if not sys.stdin.isatty() or not sys.stderr.isatty():
++                raise PermissionError('local interactive terminal required')
++            _validate_slots(set(args.slots))
++            if input('Type PAPER to confirm local test-credential change: ') != 'PAPER':
++                return 1
++            with warnings.catch_warnings():
++                warnings.simplefilter('error', getpass.GetPassWarning)
++                request = {'op':'enroll','values':{slot:getpass.getpass(slot+': ') for slot in args.slots}} if args.command == 'enroll' else {'op':'remove','slots':args.slots}
++        result = send(request)
++        print(json.dumps(result, sort_keys=True))
++        return 0 if result.get('ok') else 1
++    except Exception:
++        print('Credential operation unavailable', file=sys.stderr)
++        return 1
++
++
++if __name__ == '__main__':
++    raise SystemExit(main())
+diff --git a/scripts/qualify_paper_credential_custody.py b/scripts/qualify_paper_credential_custody.py
+new file mode 100644
+index 0000000..3ccb24d
+--- /dev/null
++++ b/scripts/qualify_paper_credential_custody.py
+@@ -0,0 +1,110 @@
++# Disposable offline guest only. Never print test marker values or exceptions.
++import base64, json, os, pathlib, pwd, secrets, sqlite3, subprocess, sys, urllib.request, urllib.error, time
++from concurrent.futures import ThreadPoolExecutor
++from cryptography.fernet import Fernet
++ROOT=pathlib.Path('/var/lib/maj-vaj-paper-vault'); CREDS=pathlib.Path('/etc/maj-vaj/credential-keys')
++PY='/opt/maj-vaj/venv/bin/python'; UNIT='maj-vaj-paper-vault.service'; DASH='maj-vaj-paper-dashboard.service'; OP='maj-vaj-credential-operator'
++
++def command(*args):return subprocess.check_output(args,stderr=subprocess.DEVNULL)
++def pid(unit):return int(command('systemctl','show','-p','MainPID','--value',unit))
++def real_uid(n):return int(next(l for l in pathlib.Path(f'/proc/{n}/status').read_text().splitlines() if l.startswith('Uid:')).split()[1])
++def request(op, user=OP):
++    # Synthetic requests via stdin pipe, not argv/env; helper never prints values.
++    code='import sys,json;sys.path.insert(0,"/opt/maj-vaj");from paper_credential_vault import send;print(json.dumps(send(json.load(sys.stdin))))'
++    s=subprocess.run(['runuser','-u',user,'--',PY,'-I','-B','-c',code],input=json.dumps(op).encode(),capture_output=True)
++    return json.loads(s.stdout) if s.returncode==0 else {'ok':False}
++def api(path, token=None, body=None):
++    headers={'Authorization':'Bearer '+token} if token else {}
++    if body is not None:headers['Content-Type']='application/json'
++    r=urllib.request.Request('http://127.0.0.1:8765'+path,headers=headers,data=json.dumps(body).encode() if body is not None else None)
++    try:
++        with urllib.request.urlopen(r,timeout=6) as s:return s.status,s.read()
++    except urllib.error.HTTPError as e:return e.code,e.read()
++def check(name,cond):
++    if not cond:raise RuntimeError(name)
++    print('PASS_'+name,flush=True)
++
++def forms(v):return (v,base64.b64encode(v),v.hex().encode())
++markers=[('synthetic-'+secrets.token_hex(24)).encode() for i in range(7)]
++key=(CREDS/'venue-vault-key').read_bytes(); token=(CREDS/'dashboard-token').read_text(); allmarkers=markers+[key,token.encode()]
++
++def clean(data, values=allmarkers):return not any(form in data for v in values for form in forms(v))
++
++def audit_blobs():
++    for p in ROOT.glob('vault.sqlite3*'):
++        assert clean(p.read_bytes()), 'vault_blob'
++    desk=pathlib.Path('/var/lib/maj-vaj/data')
++    for p in desk.glob('desk.sqlite3*'):
++        assert clean(p.read_bytes()), 'desk_blob'
++    for unit in (UNIT,DASH):
++        n=pid(unit); assert n>0
++        for name in ('cmdline','environ'):
++            assert clean(pathlib.Path(f'/proc/{n}/{name}').read_bytes()), 'process_leak'
++        limit=pathlib.Path(f'/proc/{n}/limits').read_text(); assert any('Max core file size' in l and l.split()[4:6]==['0','0'] for l in limit.splitlines()), 'core_limit'
++        assert clean(command('journalctl','-b','-u',unit,'--no-pager','-o','cat')), 'journal_leak'
++
++try:
++    assert sys.argv[1:]==['--disposable-offline-guest'] and os.getuid()==0 and set(os.listdir('/sys/class/net'))=={'lo'} and command('systemd-detect-virt').strip()==b'qemu'
++    assert all(v=='not_configured' for v in request({'op':'status'})['credentials'].values())
++    check('IDENTITIES',pid(UNIT)>0 and pid(DASH)>0 and real_uid(pid(UNIT))==pwd.getpwnam('maj-vaj-vault').pw_uid and real_uid(pid(DASH))==pwd.getpwnam('maj-vaj').pw_uid)
++    vals={'kraken_read_key':markers[0].decode(),'kraken_read_secret':markers[1].decode(),'grok':markers[2].decode()}
++    check('ENROLL',request({'op':'enroll','values':vals}).get('ok'))
++    check('NO_PLAINTEXT_READ',not request({'op':'read','slot':'grok'}).get('ok') and not request({'op':'export'}).get('ok'))
++    check('INVALID_INPUT',not request({'op':'enroll','values':{'seed_phrase':markers[3].decode()}}).get('ok') and not request({'op':'enroll','values':{'kraken_read_key':markers[3].decode()}}).get('ok'))
++    check('SEPARATE_PRINCIPALS',all(not request({'op':'status'},u).get('ok') for u in ['maj-vaj','maj-vaj-approval','maj-vaj-native']))
++    for u in [OP,'maj-vaj','maj-vaj-approval','maj-vaj-native']:
++        for p in [ROOT/'vault.sqlite3',CREDS/'venue-vault-key',CREDS/'dashboard-token']:
++            assert subprocess.run(['runuser','-u',u,'--','test','-r',str(p)]).returncode!=0
++    check('PRIVATE_FILES',True)
++    for u in [OP,'maj-vaj','maj-vaj-approval','maj-vaj-native']:
++        for p in [pathlib.Path('/run/credentials/maj-vaj-paper-vault.service/venue-vault-key'),pathlib.Path(f'/proc/{pid(UNIT)}/mem')]:
++            assert subprocess.run(['runuser','-u',u,'--','test','-r',str(p)]).returncode!=0
++    check('VAULT_RUNTIME_CUSTODY',True)
++    check('DASHBOARD_MEMORY_REFUSAL',subprocess.run(['runuser','-u','maj-vaj','--','test','-r',f'/proc/{pid(DASH)}/mem']).returncode!=0)
++    check('DASHBOARD_SHARED_UID_FILE_GAP_CONFIRMED',subprocess.run(['runuser','-u','maj-vaj','--','test','-r','/run/credentials/maj-vaj-paper-dashboard.service/dashboard-token']).returncode==0)
++    for r in [api('/api/setup'),api('/api/setup',markers[4].decode()),api('/api/setup',token),api('/api/setup/credentials',token,{'grok':markers[5].decode()}),api('/api/setup/credentials',token,{'seed_phrase':markers[6].decode()})]:
++        assert clean(r[1]), 'http_leak'
++    check('HTTP_AUTH_AND_ENROLLMENT_FENCE',api('/api/setup')[0]==401 and api('/api/setup',token)[0]==200 and api('/api/setup/credentials',token,{'grok':markers[5].decode()})[0]==503 and api('/api/setup/credentials',token,{'seed_phrase':markers[6].decode()})[0]==422)
++    def replace(i):return request({'op':'enroll','values':{'kraken_read_key':markers[0].decode()+str(i),'kraken_read_secret':markers[1].decode()+str(i)}})
++    with ThreadPoolExecutor(max_workers=3) as pool:assert all(r.get('ok') for r in pool.map(replace,range(6)))
++    with sqlite3.connect(ROOT/'vault.sqlite3') as db:
++        pair={s:Fernet(key).decrypt(b)[-1:] for s,b in db.execute("SELECT slot,ciphertext FROM secrets WHERE slot LIKE 'kraken_read_%'")}
++    check('ATOMIC_CONCURRENT_ROTATION',len(pair)==2 and len(set(pair.values()))==1)
++    subprocess.check_call(['systemctl','restart',UNIT],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
++    for _ in range(40):
++        if request({'op':'status'}).get('ok'):break
++        time.sleep(.5)
++    check('RESTART_PERSISTENCE',request({'op':'status'}).get('credentials',{}).get('grok')=='stored_unverified')
++    audit_blobs();check('NONDISCLOSURE_DB_PROCESS_JOURNAL_HTTP',True)
++    # Real allowlisted market backup from installed dashboard, while synthetic credentials are enrolled.
++    backup_root=pathlib.Path('/var/lib/maj-vaj/data-recovery-copies')
++    status,body=api('/api/data-maintenance/backup',token,{})
++    assert status==200 and clean(body),'backup_start'
++    deadline=time.monotonic()+50
++    child_seen=False
++    while time.monotonic()<deadline:
++        dashboard_pid=pid(DASH)
++        children=pathlib.Path(f'/proc/{dashboard_pid}/task/{dashboard_pid}/children').read_text().split()
++        for child in children:
++            try:
++                env=pathlib.Path(f'/proc/{child}/environ').read_bytes()
++                argv=pathlib.Path(f'/proc/{child}/cmdline').read_bytes()
++                assert clean(env) and clean(argv) and b'CREDENTIALS_DIRECTORY=' not in env,'worker_leak'
++                child_seen=True
++            except (FileNotFoundError,ProcessLookupError):pass
++        status,body=api('/api/data-preparation',token)
++        assert status==200 and clean(body),'backup_status'
++        job=json.loads(body)['job']
++        if job.get('state') in ('complete','failed','cancelled','interrupted'):break
++        time.sleep(.1)
++    assert job.get('state')=='complete','backup_incomplete'
++    manifests=list(backup_root.glob('*/manifest.json'));assert manifests,'backup_manifest'
++    for p in backup_root.rglob('*'):
++        if p.is_file():assert clean(p.read_bytes()) and p.name not in ('desk.sqlite3','vault.sqlite3','venue-vault-key','dashboard-token'),'backup_leak'
++    check('ACTUAL_MARKET_BACKUP_NONDISCLOSURE',True)
++    print('WORKER_PROCESS_OBSERVED='+str(child_seen),flush=True)
++    check('LOCAL_REMOVAL',request({'op':'remove','slots':list(vals)}).get('ok') and all(v=='not_configured' for v in request({'op':'status'})['credentials'].values()))
++    # No actual venue key/permission or remote revocation implied.
++    audit_blobs();check('POST_REMOVAL_NONDISCLOSURE',True)
++except Exception as e:
++    print('FAIL_'+(str(e) if isinstance(e,RuntimeError) and str(e).isupper() else type(e).__name__),flush=True);sys.exit(1)
+diff --git a/scripts/qualify_paper_credential_faults.py b/scripts/qualify_paper_credential_faults.py
+new file mode 100644
+index 0000000..cce6794
+--- /dev/null
++++ b/scripts/qualify_paper_credential_faults.py
+@@ -0,0 +1,60 @@
++"""Synthetic vault fault qualification, disposable offline QEMU guest only."""
++import json,os,pathlib,pwd,shutil,sqlite3,subprocess,secrets,sys,time,tempfile,hashlib
++from cryptography.fernet import Fernet
++UNIT='maj-vaj-paper-vault.service'; ROOT=pathlib.Path('/var/lib/maj-vaj-paper-vault'); KEY=pathlib.Path('/etc/maj-vaj/credential-keys/venue-vault-key'); DB=ROOT/'vault.sqlite3'; PY='/opt/maj-vaj/venv/bin/python'
++def cmd(*args):return subprocess.run(args,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode
++
++def request(body):
++    code='import sys,json;sys.path.insert(0,"/opt/maj-vaj");from paper_credential_vault import send;print(json.dumps(send(json.load(sys.stdin))))'
++    r=subprocess.run(['runuser','-u','maj-vaj-credential-operator','--',PY,'-I','-B','-c',code],input=json.dumps(body).encode(),capture_output=True)
++    return json.loads(r.stdout) if r.returncode==0 else {'ok':False}
++
++def start():
++    cmd('systemctl','reset-failed',UNIT);cmd('systemctl','start',UNIT)
++    for _ in range(25):
++        if request({'op':'status'}).get('ok'):return True
++        if cmd('systemctl','is-failed','--quiet',UNIT)==0:return False
++        time.sleep(.4)
++    return False
++
++def check(name,condition):
++    if not condition:raise RuntimeError(name)
++    print('PASS_'+name,flush=True)
++
++def stop():assert cmd('systemctl','stop',UNIT)==0
++
++def replace_file(path,data,uid,gid):
++    fd,tmp=tempfile.mkstemp(dir=path.parent)
++    try:
++        os.fchmod(fd,0o600);os.fchown(fd,uid,gid)
++        with os.fdopen(fd,'wb') as f:f.write(data);f.flush();os.fsync(f.fileno())
++        os.replace(tmp,path)
++    finally:
++        if os.path.exists(tmp):os.unlink(tmp)
++
++def main():
++    assert sys.argv[1:]==['--disposable-offline-guest'] and os.getuid()==0 and set(os.listdir('/sys/class/net'))=={'lo'} and cmd('systemd-detect-virt','--quiet','--vm')==0
++    assert pathlib.Path('/etc/maj-vaj/paper-vault-enabled').exists()
++    assert request({'op':'status'}).get('ok') and all(v=='not_configured' for v in request({'op':'status'})['credentials'].values())
++    synthetic='synthetic-'+secrets.token_hex(32)
++    assert request({'op':'enroll','values':{'grok':synthetic}}).get('ok')
++    stop();key=KEY.read_bytes();db=DB.read_bytes();st=DB.stat()
++    try:
++        replace_file(KEY,Fernet.generate_key(),0,0)
++        check('INSTALLED_WRONG_KEK_REFUSED',not start() and not request({'op':'status'}).get('ok') and DB.read_bytes()==db)
++        stop();replace_file(KEY,key,0,0);check('ORIGINAL_KEK_RESTORES',start() and request({'op':'status'})['credentials']['grok']=='stored_unverified');stop()
++        with sqlite3.connect(DB) as conn:conn.execute("UPDATE secrets SET ciphertext=? WHERE slot='grok'",(b'corrupted-synthetic-ciphertext',))
++        bad=DB.read_bytes();check('INSTALLED_TAMPER_REFUSED',not start() and not request({'op':'status'}).get('ok') and DB.read_bytes()==bad)
++        stop();replace_file(DB,db,st.st_uid,st.st_gid);check('CONTROLLED_ENCRYPTED_FIXTURE_RESTORATION',start() and request({'op':'status'})['credentials']['grok']=='stored_unverified')
++        check('SYNTHETIC_CLEANUP',request({'op':'remove','slots':['grok']}).get('ok') and all(v=='not_configured' for v in request({'op':'status'})['credentials'].values()))
++    finally:
++        # Do not leave the deliberately corrupted fixture in use. Original bytes retained solely in root-only test process.
++        stop();replace_file(KEY,key,0,0)
++        if not start():
++            stop();replace_file(DB,db,st.st_uid,st.st_gid);start()
++        request({'op':'remove','slots':['grok']})
++
++if __name__=='__main__':
++    try:main()
++    except Exception as e:
++        print('FAIL_'+(str(e) if isinstance(e,RuntimeError) and str(e).isupper() else type(e).__name__),flush=True);sys.exit(1)
+diff --git a/scripts/qualify_paper_credential_setup.sh b/scripts/qualify_paper_credential_setup.sh
+new file mode 100644
+index 0000000..964c612
+--- /dev/null
++++ b/scripts/qualify_paper_credential_setup.sh
+@@ -0,0 +1,37 @@
++#!/bin/bash
++set -euo pipefail
++umask 077
++# Test fixture only: refuse any existing credential deployment.
++test "${1:-}" = --disposable-offline-guest
++test "$(id -u)" = 0
++test "$(systemd-detect-virt)" = qemu
++test ! -e /etc/maj-vaj/credential-keys
++test ! -e /var/lib/maj-vaj-paper-vault
++test "$(ps -p 1 -o comm=)" = systemd
++test "$(ls /sys/class/net)" = lo
++for u in maj-vaj-vault maj-vaj-credential-operator; do if ! getent passwd "$u" >/dev/null; then useradd --system --user-group --no-create-home --shell /usr/sbin/nologin "$u"; fi; done
++install -d -o root -g root -m0700 /etc/maj-vaj/credential-keys
++/opt/maj-vaj/venv/bin/python - <<'PY'
++import os,secrets
++from cryptography.fernet import Fernet
++for name,value in [('venue-vault-key',Fernet.generate_key()),('dashboard-token',secrets.token_urlsafe(48).encode())]:
++    fd=os.open('/etc/maj-vaj/credential-keys/'+name,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
++    with os.fdopen(fd,'wb') as f:f.write(value)
++PY
++for f in paper_credential_vault.py tradebot.py; do install -o root -g root -m644 /mnt/deps/"$f" /opt/maj-vaj/"$f"; cmp /mnt/deps/"$f" /opt/maj-vaj/"$f"; done
++for f in /mnt/deps/*.service; do install -o root -g root -m644 "$f" /etc/systemd/system/; cmp "$f" /etc/systemd/system/"${f##*/}"; done
++install -d -o maj-vaj -g maj-vaj -m700 /var/lib/maj-vaj/data-recovery-copies
++systemctl daemon-reload
++systemd-analyze verify /etc/systemd/system/maj-vaj-paper-vault.service /etc/systemd/system/maj-vaj-paper-dashboard.service
++# No opt-in markers: services must remain inactive.
++systemctl start maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service
++! systemctl is-active --quiet maj-vaj-paper-vault.service
++! systemctl is-active --quiet maj-vaj-paper-dashboard.service
++echo PASS_MARKER_REFUSAL
++install -m644 /dev/null /etc/maj-vaj/paper-vault-enabled
++install -m644 /dev/null /etc/maj-vaj/paper-dashboard-qualification-enabled
++systemctl start maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service
++for i in $(seq 1 60); do if test -S /run/maj-vaj-paper-vault/enroll.sock && /opt/maj-vaj/venv/bin/python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8765/",timeout=1)' 2>/dev/null; then break; fi; sleep 1; done
++test -S /run/maj-vaj-paper-vault/enroll.sock
++systemctl is-active maj-vaj-paper-vault.service maj-vaj-paper-dashboard.service
++echo PASS_NAMED_SERVICE_START
+diff --git a/tests/test_paper_credential_vault.py b/tests/test_paper_credential_vault.py
+new file mode 100644
+index 0000000..cf2934f
+--- /dev/null
++++ b/tests/test_paper_credential_vault.py
+@@ -0,0 +1,77 @@
++import base64
++import json
++import os
++from pathlib import Path
++import sqlite3
++import tempfile
++import threading
++import unittest
++from concurrent.futures import ThreadPoolExecutor
++from cryptography.fernet import Fernet
++from paper_credential_vault import PaperVault, dispatch, Server, send
++
++
++class PaperCredentialVaultTests(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
++        self.root = Path(self.tmp.name); self.key = Fernet.generate_key()
++        self.vault = PaperVault(self.root, self.key)
++
++    def assert_private(self, values):
++        for v in values:
++            raw=v.encode()
++            for p in self.root.glob('vault.sqlite3*'):
++                data=p.read_bytes()
++                for form in (raw,base64.b64encode(raw),raw.hex().encode()):
++                    self.assertNotIn(form,data)
++
++    def test_atomic_pair_write_replace_remove_and_restart(self):
++        vals={'kraken_read_key':'synthetic-test-key-121','kraken_read_secret':'synthetic-test-secret-122'}
++        self.assertFalse(dispatch(self.vault,{'op':'enroll','values':{'kraken_read_key':vals['kraken_read_key']}})['ok'])
++        r=dispatch(self.vault,{'op':'enroll','values':vals});self.assertTrue(r['ok']);self.assertFalse(r['connections_verified'])
++        self.assert_private(vals.values());self.assertFalse(any(v in json.dumps(r) for v in vals.values()))
++        self.assertEqual(PaperVault(self.root,self.key).status(),r)
++        self.assertFalse(dispatch(self.vault,{'op':'remove','slots':['kraken_read_key']})['ok'])
++        r=dispatch(self.vault,{'op':'enroll','values':{k:v+'-rotated' for k,v in vals.items()}});self.assertTrue(r['ok'])
++        self.assert_private([*vals.values(),*(v+'-rotated' for v in vals.values())])
++        self.assertTrue(dispatch(self.vault,{'op':'remove','slots':list(vals)})['ok']);self.assertFalse(any(s=='stored_unverified' for s in self.vault.status()['credentials'].values()))
++
++    def test_bad_fields_and_no_plaintext_read(self):
++        marker='synthetic-test-marker-123'
++        for req in [{'op':'read','slot':'grok'},{'op':'export'},{'op':'enroll','values':{'seed_phrase':marker}},{'op':'enroll','values':{'grok':marker+' space'}},{'op':'status','extra':marker},{'op':'enroll','values':{'grok':{'nested':marker}}}]:
++            r=dispatch(self.vault,req);self.assertFalse(r['ok']);self.assertNotIn(marker,json.dumps(r))
++
++    def test_wrong_key_and_tamper_refused_without_replacement(self):
++        self.vault.enroll({'grok':'synthetic-marker-456'})
++        with self.assertRaises(Exception):PaperVault(self.root,Fernet.generate_key())
++        with sqlite3.connect(self.vault.path) as db:db.execute("UPDATE secrets SET ciphertext=? WHERE slot='grok'",(b'broken',))
++        for request in ({'op':'status'},{'op':'enroll','values':{'grok':'new'}},{'op':'remove','slots':['grok']}):
++            self.assertFalse(dispatch(self.vault,request)['ok'])
++        with sqlite3.connect(self.vault.path) as db:self.assertEqual(db.execute('SELECT ciphertext FROM secrets').fetchone()[0],b'broken')
++
++    def test_concurrent_pair_updates(self):
++        def writer(i):return self.vault.enroll({'kraken_read_key':f'synthetic-key-{i}','kraken_read_secret':f'synthetic-secret-{i}'})
++        with ThreadPoolExecutor(max_workers=4) as pool:self.assertTrue(all(r['ok'] for r in pool.map(writer,range(12))))
++        with sqlite3.connect(self.vault.path) as db:
++            pairs={slot:self.vault.cipher.decrypt(blob).rsplit(b'-',1)[1] for slot,blob in db.execute('SELECT * FROM secrets')}
++        self.assertEqual(pairs['kraken_read_key'],pairs['kraken_read_secret'])
++
++    def test_socket_peer_and_no_echo(self):
++        path=self.root/'socket'; server=Server(path,self.vault,os.getuid(),os.getgid());thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
++        try:
++            self.assertTrue(send({'op':'enroll','values':{'grok':'synthetic-socket-canary'}},path,os.getuid())['ok'])
++            server.operator_uid=os.getuid()+1
++            self.assertFalse(send({'op':'status'},path,os.getuid())['ok'])
++            with self.assertRaises(PermissionError):send({'op':'status'},path,os.getuid()+1)
++        finally:server.shutdown();thread.join();server.server_close()
++
++    def test_missing_metadata_never_reprovisioned_even_empty(self):
++        with sqlite3.connect(self.vault.path) as db:db.execute('DELETE FROM meta')
++        with self.assertRaises(Exception):PaperVault(self.root,self.key)
++        with sqlite3.connect(self.vault.path) as db:self.assertEqual(db.execute('SELECT count(*) FROM meta').fetchone()[0],0)
++
++    def test_unsafe_state_permissions(self):
++        self.root.chmod(0o755)
++        with self.assertRaises(PermissionError):self.vault.status()
++        self.root.chmod(0o700);self.vault.path.chmod(0o644)
++        with self.assertRaises(PermissionError):self.vault.status()
+diff --git a/tradebot.py b/tradebot.py
+index bac1b24..0564ece 100644
+--- a/tradebot.py
++++ b/tradebot.py
+@@ -721,6 +721,20 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes |
+     return app
+ 
+ 
++def run_installed_dashboard():
++    """Qualification-only local PAPER dashboard; shared desk UID is not a release boundary."""
++    import pwd
++    import uvicorn
++    from paper_credential_vault import load_service_credential, harden_process
++    if os.getuid() != pwd.getpwnam('maj-vaj').pw_uid:
++        raise PermissionError('dashboard identity refused')
++    harden_process()
++    os.umask(0o077)
++    token = load_service_credential('dashboard-token').decode('ascii')
++    app = create_app(Path('/var/lib/maj-vaj/data'), token, vault_key=None)
++    uvicorn.run(app, host='127.0.0.1', port=8765, access_log=False, log_level='warning')
++
++
+ if __name__ == "__main__":
+     import uvicorn
+     os.umask(0o077)

@@ -1,0 +1,441 @@
+diff --git a/deploy/90-maj-vaj-approval-lightdm.conf.example b/deploy/90-maj-vaj-approval-lightdm.conf.example
+index 101ad6b..e2e9053 100644
+--- a/deploy/90-maj-vaj-approval-lightdm.conf.example
++++ b/deploy/90-maj-vaj-approval-lightdm.conf.example
+@@ -10,3 +10,4 @@ autologin-user=
+ xserver-allow-tcp=false
+ user-authority-in-system-dir=false
+ session-wrapper=/opt/maj-vaj/scripts/review_session_wrapper.sh
++session-cleanup-script=/opt/maj-vaj/scripts/review_session_cleanup.sh
+diff --git a/docs/tasks.md b/docs/tasks.md
+index fb68e67..7407199 100644
+--- a/docs/tasks.md
++++ b/docs/tasks.md
+@@ -432,3 +432,7 @@ Local X11 display-manager session entry, explicit administrator installation/pre
+ ## TB-FIN-01C / TB-08-R2-R5-R5-R2-R1 — actual dedicated installed desktop (scoped positive PASS)
+ 
+ Offline APT simulation and install exit 0; 470 packages in combined local pool, 26 new manifest hashes matched; seven required packages installed; 293 parent tracked hashes matched. Fixed actual LightDM quoted Exec/Xsession ACL incompatibility with root-reviewed dedicated fixed wrapper (no arbitrary command, no general hooks or grants). Real LightDM/PAM active local X11 seat, strict cookie/ACL, desk attach and unit start denied, production named graphical review launched through polkit; invalid submission denied, two exact independent authenticated graphical approvals and consecutive recovery/archival cycles on same PAPER portfolio, no native orders/reservations/P&L, two reviewed resolutions, $100 principal unchanged, paused; actual logout retired cookie and post-logout start denied. Focused 17/17 passed; full suite not rerun. Guest clean poweroff/disk check/base unchanged. Actual in-window cancel-before-submission and lock/switch/logoff-before-confirmation still open; prior unit/transient results retained. [Qualification and managed seat config](tb-fin-01c-r2-r5-r5-r2-r1-installed-desktop.md). No real funds/desk changes, new CI, main merge or LIVE authorization. Remaining credential/public PAPER/financial-goal/forward-validation/consolidation gates unchanged.
++
++## TB-FIN-01C / TB-08-R2-R5-R5-R2-R2 — installed graphical interruption (scoped PASS)
++
++Dedicated logind event latch closes and invalidates review on lock, seat/session change or bus loss; dedicated administrative LightDM cleanup retires orphaned copied X11 cookie without deleting replacement login custody. Final pinned local full suite 512 PASS / 2 optional skips / 0 failed (514 discovered), focused 21/21. Actual installed final-source refusal matrix 4/4: Close before submission, logind lock, real console seat switch and forced logout; proof and $27.55 reservation retained, no approval, no native orders, two earlier resolution events unchanged, $100 synthetic principal preserved and desk paused. Cookie retired after forced logout and post-loss start denied. Corrected initial cleanup defect. Graceful offline guest shutdown and disk integrity PASS. [Qualification](tb-fin-01c-r2-r5-r5-r2-r2-interruption.md). Positive installed approval and two recovery cycles remain accepted on R2-R1; final exact-source positive confirmation to be repeated in consolidated acceptance. Next TB-SEC-KEY-01 installed credential-security review. No CI, main change or LIVE authority.
+diff --git a/docs/tb-fin-01c-r2-r5-r5-r2-r2-interruption.md b/docs/tb-fin-01c-r2-r5-r5-r2-r2-interruption.md
+new file mode 100644
+index 0000000..d21d5ec
+--- /dev/null
++++ b/docs/tb-fin-01c-r2-r5-r5-r2-r2-interruption.md
+@@ -0,0 +1,20 @@
++# TB-FIN-01C / TB-08-R2-R5-R5-R2-R2 — installed graphical interruption
++
++Status: scoped installed controlled-PAPER refusal matrix PASS; full final local regression PASS. Parent 7b1244817bb31e3922405a3b73032894cdd79be2 (archive, patch and evidence checksums matched). No publication, actual desk, CI or LIVE permission changes.
++
++## Implementation
++
++A dedicated session and the independently supervised review service each attach a bounded libsystemd subscription to the actual local system bus and pinned logind session path before presenting review. Lock or any session-property transition and logind ownership changes permanently invalidate that connection. Disconnect, subscription failure and event overflow deny. Polling supplements the existing authenticated session and file custody checks, including before signing and before publication. On this deliberately dedicated seat a lock or session-property change ends the login instead of resuming a prior review; the operator must log in again. This conservative policy includes idle-property changes. An invalidated window cancels the pending review, clears the input fields and closes; no new approval can be derived by returning to the previous session. The ordinary Close button remains nonmutating. No timing, financial risk, signature or mailbox requirements are relaxed. These checks do not assert an atomic transaction spanning the compositor, logind and filesystem.
++
++Forced termination initially correctly refused further signing but left a stale copied X11 cookie. Dedicated LightDM configuration now calls a root-owned fixed cleanup script. Under the existing cookie directory lock it removes the orphan only when logind reports no surviving or replacement approval login. Uncertain metadata leaves the cookie untouched; the signing service still denies an invalid session. Active, online and starting replacement sessions are preserved. Provisioning verifies installed libsystemd and new root-owned artifacts. This is for a reviewed dedicated approval seat only, not a shared workstation configuration.
++
++## Qualification
++
++- Full final pinned Python 3.12.16/Freqtrade 2026.10 local suite under actual Xvfb: 514 discovered, 512 passed, two pre-existing optional skips, zero failures, exit 0; 21/21 focused tests passed. Full suite includes previous graphical, financial and native regression coverage. Actual installed code changes and configuration were compared byte-for-byte against the final source. Tests and ledger are host-side development artifacts, not production runtime inputs.
++- Booted a separate child of the previously accepted offline Debian 13 graphical qualification image, retaining its synthetic $100 PAPER portfolio and two historical reviewed releases. Real systemd, logind, polkit, LightDM/PAM, Xorg and virtual-console input; loopback only. Actual independent native and desk roles produced a fresh held $27.55 controlled-book pre-effect interrupted entry; signed proof regenerated when expired by the existing authenticated archival/renewal lifecycle. No new native order.
++- Actual review opened via the production desktop button and named review unit, no review service override. On final code: Close before submit; logind lock request with review active; real console seat-switch via Ctrl+Alt+F2 (greeter returned to tty7 after logout); forced logind session termination while review active. All four stopped the review. Each independently verified the native proof remains, approval mailbox absent, $27.55 reservation unchanged, two earlier resolution events only, zero native orders and both pause flags retained. Lock, seat switch and forced termination retired the copied cookie; post-loss start under approval UID outside a trusted session denied. No release was submitted. Parent positive two-cycle installed acceptance retained; final revision positive signed confirmation was not rerun in this interruption-only matrix.
++- Corrections/initial trial limitations: an earlier cancellation audit used cents rather than native ledger units, fixed and repeated; chvt/fgconsole unavailable, actual virtual keyboard shortcut used; first abrupt logout left stale cookie, corrected and retested. One early login retry missed the greeter's PAM prompt timing, repeated with the prompt ready. These are not counted as passed initial trials. Final audits passed. Final shutdown removed fixture overrides and desktop opt-in, locked the synthetic account, stopped all test services/timers and LightDM, retained the deliberately held reservation, verified $100 principal and no P&L/exposure, cookie absent. Graceful poweroff, child disk check zero errors, original Debian base SHA256 2eba10bdfc7f368dde145205e0f3211f5f3a0ce29a5ab60b5ea7b728fd9a1776 unchanged.
++
++## Remaining
++
++TB-SEC-KEY-01 installed credential-security qualification, production constructor and sustained public-market PAPER execution, migrated financial goals, TB-12 forward validation, final consolidated exact-source acceptance including positive recovery with final desktop code before main convergence. No physical desktop or live-market authorization.
+diff --git a/reserve_no_effect_worker.py b/reserve_no_effect_worker.py
+index 7a7789e..2acebd9 100644
+--- a/reserve_no_effect_worker.py
++++ b/reserve_no_effect_worker.py
+@@ -12,7 +12,7 @@ from reserve_native_wallet import rebound_bindings
+ from reserve_no_effect import Review, consume, produce
+ 
+ 
+-def review_window(root,review,proof,publish,*,guard=lambda:None):
++def review_window(root,review,proof,publish,*,guard=lambda:None,watch_session=False):
+     from tkinter import ttk, StringVar, Text
+     v=review.begin(proof);root.title('Maj Vaj — Review interrupted PAPER order')
+     text=Text(root,height=12,width=76,wrap='word');text.pack(fill='both',expand=True,padx=12,pady=8)
+@@ -28,13 +28,20 @@ def review_window(root,review,proof,publish,*,guard=lambda:None):
+         pw,answer=password.get(),challenge.get();password.set('');challenge.set('');button.configure(state='disabled')
+         try:
+             guard();approved=review.confirm(answer,pw)
+-        except (ValueError,OSError,KeyError,TypeError):status.set('Approval refused. No reservation released.');return
++        except (ValueError,OSError,KeyError,TypeError):review.cancel();status.set('Approval refused. No reservation released.');return
+         try:publish(approved)
+         except (ValueError,OSError,KeyError,TypeError):status.set('Delivery not confirmed. No retry until reviewed.');return
+         status.set('Approval recorded. Await reconciliation. Trading remains paused.')
+     button=ttk.Button(root,text='Confirm release of unused reservation',command=confirm);button.pack(pady=4)
+     close=ttk.Button(root,text='Close',command=cancel);close.pack(pady=4)
+     root.protocol('WM_DELETE_WINDOW',cancel)
++    if watch_session:
++        def recheck():
++            try:guard()
++            except (ValueError,OSError):
++                cancel();return
++            root.after(500,recheck)
++        root.after(500,recheck)
+     return dict(confirm=button,close=close,challenge=challenge,password=password,status=status,review=v)
+ 
+ 
+diff --git a/reserve_review_events.py b/reserve_review_events.py
+new file mode 100644
+index 0000000..77320d7
+--- /dev/null
++++ b/reserve_review_events.py
+@@ -0,0 +1,102 @@
++"""Fail-closed logind event latch for one dedicated approval session.
++
++Use the installed libsystemd system-bus client, not a privileged monitor,
++caller-controlled bus address, or polling alone. A loss of session authority
++is irreversible for this review, even if the seat returns before confirmation.
++"""
++import ctypes as c
++from reserve_checkpoint import require
++
++BASE = b'/org/freedesktop/login1/session'
++LOGIN = b'org.freedesktop.login1'
++CALLBACK = c.CFUNCTYPE(c.c_int, c.c_void_p, c.c_void_p, c.c_void_p)
++
++
++class SessionEvents:
++    def __init__(self, session):
++        self.bus = c.c_void_p()
++        self.slots = []
++        self.invalid = False
++        self.lib = c.CDLL('libsystemd.so.0')
++        self.lib.sd_bus_new.argtypes = [c.POINTER(c.c_void_p)]
++        self.lib.sd_bus_new.restype = c.c_int
++        self.lib.sd_bus_set_address.argtypes = [c.c_void_p, c.c_char_p]
++        self.lib.sd_bus_set_address.restype = c.c_int
++        self.lib.sd_bus_set_bus_client.argtypes = [c.c_void_p, c.c_int]
++        self.lib.sd_bus_set_bus_client.restype = c.c_int
++        self.lib.sd_bus_start.argtypes = [c.c_void_p]
++        self.lib.sd_bus_start.restype = c.c_int
++        self.lib.sd_bus_is_open.argtypes = [c.c_void_p]
++        self.lib.sd_bus_is_open.restype = c.c_int
++        self.lib.sd_bus_add_match.argtypes = [c.c_void_p, c.POINTER(c.c_void_p), c.c_char_p, CALLBACK, c.c_void_p]
++        self.lib.sd_bus_add_match.restype = c.c_int
++        self.lib.sd_bus_process.argtypes = [c.c_void_p, c.c_void_p]
++        self.lib.sd_bus_process.restype = c.c_int
++        self.lib.sd_bus_slot_unref.argtypes = [c.c_void_p]
++        self.lib.sd_bus_slot_unref.restype = c.c_void_p
++        self.lib.sd_bus_unref.argtypes = [c.c_void_p]
++        self.lib.sd_bus_unref.restype = c.c_void_p
++        self.lib.sd_bus_path_encode.argtypes = [c.c_char_p, c.c_char_p, c.POINTER(c.c_void_p)]
++        self.lib.sd_bus_path_encode.restype = c.c_int
++        libc = c.CDLL('libc.so.6')
++        libc.free.argtypes = [c.c_void_p]
++        libc.free.restype = None
++        path = c.c_void_p()
++        require(self.lib.sd_bus_path_encode(BASE, session.encode('ascii'), c.byref(path)) >= 0, 'review_session_event_path')
++        try:
++            address = c.string_at(path)
++        finally:
++            libc.free(path)
++        # Keep the callback and slots alive for the entire review.
++        self.callback = CALLBACK(self._invalidate)
++        try:
++            require(self.lib.sd_bus_new(c.byref(self.bus)) >= 0, 'review_session_event_bus')
++            require(self.lib.sd_bus_set_address(self.bus, b'unix:path=/run/dbus/system_bus_socket') >= 0, 'review_session_event_address')
++            require(self.lib.sd_bus_set_bus_client(self.bus, 1) >= 0, 'review_session_event_client')
++            require(self.lib.sd_bus_start(self.bus) >= 0, 'review_session_event_connection')
++            for match in (
++                b"type='signal',sender='" + LOGIN + b"',path='" + address + b"',interface='org.freedesktop.login1.Session',member='Lock'",
++                b"type='signal',sender='" + LOGIN + b"',path='" + address + b"',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'",
++                b"type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged',arg0='" + LOGIN + b"'",
++            ):
++                slot = c.c_void_p()
++                require(self.lib.sd_bus_add_match(self.bus, c.byref(slot), match, self.callback, None) >= 0, 'review_session_event_subscription')
++                self.slots.append(slot)
++            self.check()
++        except BaseException:
++            self.close()
++            raise
++
++    def _invalidate(self, *_):
++        # On this dedicated seat, any session property change requires fresh
++        # authentication. This is intentionally conservative, including idle
++        # changes, rather than losing a short Active=false/true transition.
++        self.invalid = True
++        return 0
++
++    def check(self):
++        require(bool(self.bus) and not self.invalid and self.lib.sd_bus_is_open(self.bus) > 0, 'review_session_event_invalidated')
++        for _ in range(128):
++            result = self.lib.sd_bus_process(self.bus, None)
++            if result < 0 or self.lib.sd_bus_is_open(self.bus) <= 0:
++                self.invalid = True
++            require(not self.invalid, 'review_session_event_invalidated')
++            if result == 0:
++                return
++        self.invalid = True
++        require(False, 'review_session_event_backlog')
++
++    def close(self):
++        for slot in self.slots:
++            self.lib.sd_bus_slot_unref(slot)
++        self.slots.clear()
++        if self.bus:
++            self.lib.sd_bus_unref(self.bus)
++            self.bus = c.c_void_p()
++        self.invalid = True
++
++    def __enter__(self):
++        return self
++
++    def __exit__(self, *_):
++        self.close()
+diff --git a/reserve_review_launcher.py b/reserve_review_launcher.py
+index 2872150..0ed44cd 100644
+--- a/reserve_review_launcher.py
++++ b/reserve_review_launcher.py
+@@ -116,15 +116,20 @@ def serve():
+     os.environ['DISPLAY'] = identity[1]
+     os.environ['XAUTHORITY'] = str(COOKIE)
+     from reserve_no_effect_worker import main, review_window
+-    def guard():
+-        require(session_identity() == identity, 'review_session_changed')
+-    def window(root, review, proof, publish):
+-        guard()
+-        def checked_publish(approved):
++    from reserve_review_events import SessionEvents
++    with SessionEvents(identity[0]) as events:
++        def guard():
++            events.check()
++            require(session_identity() == identity, 'review_session_changed')
++            events.check()
++        def window(root, review, proof, publish):
+             guard()
+-            publish(approved)
+-        return review_window(root, review, proof, checked_publish, guard=guard)
+-    main(role='review', window=window)
++            def checked_publish(approved):
++                guard()
++                publish(approved)
++            return review_window(root, review, proof, checked_publish, guard=guard,
++                                 watch_session=True)
++        main(role='review', window=window)
+ 
+ 
+ def main():
+diff --git a/reserve_review_session.py b/reserve_review_session.py
+index c89611b..05532d9 100644
+--- a/reserve_review_session.py
++++ b/reserve_review_session.py
+@@ -98,6 +98,37 @@ def retire_cookie(uid, identity):
+             pass
+ 
+ 
++
++def cleanup_orphaned_cookie():
++    """Root-owned LightDM cleanup hook; never retire a live login's cookie.
++
++    The normal session owner retires its exact inode in finally. Abrupt X11
++    disconnect/termination can skip finally, so a dedicated-seat manager also
++    calls this after its session exits. An uncertain logind query leaves the
++    cookie untouched (the launcher still denies use without a valid session).
++    """
++    require(os.geteuid() == 0, 'review_display_cleanup_root')
++    uid = pwd.getpwnam('maj-vaj-approval').pw_uid
++    require(uid > 0, 'review_display_cleanup_identity')
++    with protected_dir(launcher.DISPLAY_DIR, uid, 0o700) as directory:
++        fcntl.flock(directory, fcntl.LOCK_EX)
++        try:
++            launcher._cookie(uid)
++        except FileNotFoundError:
++            return False
++        for line in launcher._login('list-sessions', '--no-legend').splitlines():
++            fields = line.split()
++            if len(fields) < 2 or fields[1] != str(uid):
++                continue
++            props = dict(p.split('=', 1) for p in launcher._login('show-session', fields[0], '--property=Class', '--property=State', '--property=User').splitlines() if '=' in p)
++            require(props.get('User') == str(uid) and 'Class' in props and 'State' in props, 'review_cleanup_session_uncertain')
++            # Never interfere with a replacement login, even before it is active.
++            if props['Class'] == 'user' and props['State'] != 'closing':
++                return False
++        os.unlink(launcher.COOKIE.name, dir_fd=directory)
++        os.fsync(directory)
++        return True
++
+ def provision():
+     uid = launcher.authority_uid()
+     session, display = launcher._sessions(uid)
+@@ -125,7 +156,10 @@ def provision():
+ 
+ def run():
+     uid, session, display, identity = provision()
++    events = None
+     try:
++        from reserve_review_events import SessionEvents
++        events = SessionEvents(session)
+         os.environ['DISPLAY'] = display
+         os.environ['XAUTHORITY'] = str(launcher.COOKIE)
+         import tkinter as tk
+@@ -138,7 +172,9 @@ def run():
+         status = tk.StringVar(value='No approval requested.')
+         def start():
+             try:
++                events.check()
+                 require(launcher.session_identity() == (session, display, identity), 'review_session_changed')
++                events.check()
+                 launcher.launch()
+                 status.set('Review requested. No reservation released by this launcher.')
+             except (ValueError, OSError, subprocess.SubprocessError):
+@@ -146,8 +182,19 @@ def run():
+         ttk.Button(root, text='Review interrupted PAPER order', command=start).pack(pady=8)
+         ttk.Label(root, textvariable=status, wraplength=500).pack(pady=8)
+         ttk.Button(root, text='End approval session', command=root.destroy).pack(pady=8)
++        def recheck():
++            try:
++                events.check()
++                require(launcher.session_identity() == (session, display, identity), 'review_session_changed')
++                events.check()
++            except (ValueError, OSError, subprocess.SubprocessError):
++                root.destroy();return
++            root.after(500,recheck)
++        root.after(500,recheck)
+         root.mainloop()
+     finally:
++        if events is not None:
++            events.close()
+         retire_cookie(uid, identity)
+ 
+ 
+diff --git a/scripts/provision_review_desktop.sh b/scripts/provision_review_desktop.sh
+index 1f37ba3..4bd103b 100755
+--- a/scripts/provision_review_desktop.sh
++++ b/scripts/provision_review_desktop.sh
+@@ -6,7 +6,7 @@ set -euo pipefail
+ [[ $EUID == 0 && $(cat /proc/1/comm) == systemd ]] || { echo 'A root-reviewed systemd installation is required.' >&2; exit 1; }
+ cd /opt/maj-vaj
+ bad=0
+-for p in polkitd lightdm lightdm-gtk-greeter xserver-xorg-core xserver-xorg-input-libinput xauth x11-xserver-utils libpam-systemd dbus-user-session; do
++for p in polkitd lightdm lightdm-gtk-greeter xserver-xorg-core xserver-xorg-input-libinput xauth x11-xserver-utils libpam-systemd libsystemd0 dbus-user-session; do
+   if [[ $(dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null || :) != 'ii ' ]]; then
+     printf 'Missing installed package: %s\n' "$p" >&2; bad=1
+   fi
+@@ -18,7 +18,8 @@ done
+ venv/bin/python -I -B - <<'PY'
+ import os,pwd,grp,stat
+ from pathlib import Path
+-import tkinter
++import tkinter,ctypes
++ctypes.CDLL("libsystemd.so.0")
+ for name in ('maj-vaj','maj-vaj-native','maj-vaj-approval'):
+     p=pwd.getpwnam(name)
+     assert p.pw_uid>0 and p.pw_gid==grp.getgrnam(name).gr_gid
+@@ -27,9 +28,9 @@ assert len({pwd.getpwnam(n).pw_uid for n in ('maj-vaj','maj-vaj-native','maj-vaj
+ home=Path(p.pw_dir); st=home.lstat()
+ assert home.is_absolute() and stat.S_ISDIR(st.st_mode) and st.st_uid==p.pw_uid and stat.S_IMODE(st.st_mode)==0o700
+ assert p.pw_shell not in ('/usr/sbin/nologin','/sbin/nologin','/bin/false') and os.access(p.pw_shell,os.X_OK)
+-for name in ('reserve_review_launcher.py','reserve_review_session.py','reserve_no_effect_worker.py','scripts/review_session_wrapper.sh','deploy'):
++for name in ('reserve_review_launcher.py','reserve_review_session.py','reserve_review_events.py','reserve_no_effect_worker.py','scripts/review_session_wrapper.sh','scripts/review_session_cleanup.sh','deploy'):
+     st=Path(name).lstat();assert st.st_uid==0 and not st.st_mode&0o022 and not stat.S_ISLNK(st.st_mode)
+-assert os.access('scripts/review_session_wrapper.sh',os.X_OK)
++assert os.access('scripts/review_session_wrapper.sh',os.X_OK) and os.access('scripts/review_session_cleanup.sh',os.X_OK)
+ print('Approval identity, private home, and code custody preflight passed.')
+ PY
+ [[ $1 == --install ]] || exit 0
+diff --git a/scripts/review_session_cleanup.sh b/scripts/review_session_cleanup.sh
+new file mode 100755
+index 0000000..a462c61
+--- /dev/null
++++ b/scripts/review_session_cleanup.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++# Root-only dedicated LightDM seat cleanup; fixed code, no user arguments.
++set -eu
++[ "$(id -u)" = 0 ] && [ "$#" -eq 0 ] || exit 1
++exec /opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from reserve_review_session import cleanup_orphaned_cookie;cleanup_orphaned_cookie()'
+diff --git a/tests/test_review_events.py b/tests/test_review_events.py
+new file mode 100644
+index 0000000..be3ccae
+--- /dev/null
++++ b/tests/test_review_events.py
+@@ -0,0 +1,28 @@
++import ctypes
++import unittest
++from unittest.mock import Mock,patch
++from reserve_checkpoint import CheckpointError
++from reserve_review_events import SessionEvents
++
++
++class EventLatchTests(unittest.TestCase):
++    def make(self,results=(0,),open_state=1):
++        ev=SessionEvents.__new__(SessionEvents)
++        ev.bus=ctypes.c_void_p(1);ev.slots=[];ev.invalid=False;ev.lib=Mock()
++        ev.lib.sd_bus_is_open.return_value=open_state
++        ev.lib.sd_bus_process.side_effect=results
++        return ev
++    def test_signal_is_permanent_even_after_return_to_session(self):
++        ev=self.make();ev.check();ev._invalidate(None,None,None)
++        for _ in range(2):
++            with self.assertRaises(CheckpointError):ev.check()
++    def test_bus_failure_and_backlog_permanently_fail_closed(self):
++        for results,reason in (((-1,),'invalidated'),((1,)*128,'backlog')):
++            with self.subTest(reason=reason):
++                ev=self.make(results)
++                with self.assertRaisesRegex(CheckpointError,reason):ev.check()
++                self.assertTrue(ev.invalid)
++                with self.assertRaises(CheckpointError):ev.check()
++    def test_close_disposes_connection(self):
++        ev=self.make();ev.close();ev.lib.sd_bus_unref.assert_called_once()
++        with self.assertRaises(CheckpointError):ev.check()
+diff --git a/tests/test_review_launcher.py b/tests/test_review_launcher.py
+index 5e8883b..e6b5fdb 100644
+--- a/tests/test_review_launcher.py
++++ b/tests/test_review_launcher.py
+@@ -55,9 +55,10 @@ class SessionTests(unittest.TestCase):
+             review=Mock();publish=Mock()
+             window(None,review,{},publish)
+             return publish
+-        def widget(root,review,proof,publish,*,guard):
++        def widget(root,review,proof,publish,*,guard,watch_session):
++            self.assertTrue(watch_session)
+             guard();publish({'approved':True})
+-        with patch.dict(os.environ,{},clear=False), patch.object(r,'session_identity',side_effect=[first,first,first,changed]), patch('reserve_no_effect_worker.main',side_effect=worker), patch('reserve_no_effect_worker.review_window',side_effect=widget):
++        with patch.dict(os.environ,{},clear=False), patch.object(r,'session_identity',side_effect=[first,first,first,changed]), patch('reserve_review_events.SessionEvents'), patch('reserve_no_effect_worker.main',side_effect=worker), patch('reserve_no_effect_worker.review_window',side_effect=widget):
+             with self.assertRaisesRegex(CheckpointError,'review_session_changed'):r.serve()
+     def test_session_rechecks_acl_and_identity(self):
+         with patch.object(r,'authority_uid',return_value=65533), patch.object(r,'_sessions',return_value=('3',':12')), patch.object(r,'_cookie',side_effect=[(1,2,3,4),(1,7,3,4)]), patch.object(r,'verify_display') as acl:
+diff --git a/tests/test_review_session.py b/tests/test_review_session.py
+index 3d51fef..18dc94f 100644
+--- a/tests/test_review_session.py
++++ b/tests/test_review_session.py
+@@ -72,3 +72,22 @@ class CookieTests(unittest.TestCase):
+         with patch.object(r,'authority_uid',return_value=65533),patch.object(r,'_sessions',return_value=('3',':12')),patch.object(r,'caller_session'),patch.object(s.pwd,'getpwuid',return_value=user),patch.object(s.socket,'gethostname',return_value=HOST.decode()),patch.dict(os.environ,{'DISPLAY':':12','XAUTHORITY':'/home/maj-vaj-approval/.Xauthority'}),patch.object(s,'read_source',return_value=record()),patch.object(s,'install_cookie',side_effect=install),patch.object(r,'verify_display',side_effect=CheckpointError('display_denied')),patch.object(s,'retire_cookie') as retire:
+             with self.assertRaises(CheckpointError):s.provision()
+             retire.assert_called_once_with(65533,ident)
++
++
++    @unittest.skipUnless(os.geteuid()==0, 'root-owned display parent required')
++    def test_orphan_cleanup_preserves_live_login_and_retires_closing_login(self):
++        with tempfile.TemporaryDirectory(dir='/run') as tmp:
++            directory=Path(tmp)/'display';directory.mkdir(mode=0o700);os.chown(directory,65533,65533)
++            cookie=directory/'Xauthority';cookie.write_bytes(record());os.chown(cookie,65533,65533);cookie.chmod(0o600)
++            def query(state):
++                return ['9 65533 maj-vaj-approval seat0', 'User=65533\nClass=user\nState='+state]
++            with patch.object(r,'DISPLAY_DIR',directory),patch.object(r,'COOKIE',cookie),patch.object(s.pwd,'getpwnam',return_value=Mock(pw_uid=65533)):
++                for state in ('active','online','opening'):
++                    with patch.object(r,'_login',side_effect=query(state)):
++                        self.assertFalse(s.cleanup_orphaned_cookie());self.assertTrue(cookie.exists())
++                with patch.object(r,'_login',side_effect=OSError('bus not available')):
++                    with self.assertRaises(OSError):s.cleanup_orphaned_cookie()
++                    self.assertTrue(cookie.exists())
++                with patch.object(r,'_login',side_effect=query('closing')):
++                    self.assertTrue(s.cleanup_orphaned_cookie());self.assertFalse(cookie.exists())
++                self.assertFalse(s.cleanup_orphaned_cookie())
+diff --git a/tests/test_review_session_wrapper.py b/tests/test_review_session_wrapper.py
+index a41473d..a618b67 100644
+--- a/tests/test_review_session_wrapper.py
++++ b/tests/test_review_session_wrapper.py
+@@ -20,5 +20,5 @@ class DedicatedSessionWrapperTests(unittest.TestCase):
+         seat = (ROOT/'deploy/90-maj-vaj-approval-lightdm.conf.example').read_text().splitlines()
+         self.assertIn('Exec=' + WRAPPER, desktop)
+         self.assertIn('TryExec=' + WRAPPER, desktop)
+-        for setting in ('session-wrapper=' + WRAPPER, 'allow-guest=false', 'autologin-user=', 'xserver-allow-tcp=false', 'user-authority-in-system-dir=false'):
++        for setting in ('session-wrapper=' + WRAPPER, 'allow-guest=false', 'autologin-user=', 'xserver-allow-tcp=false', 'user-authority-in-system-dir=false','session-cleanup-script=/opt/maj-vaj/scripts/review_session_cleanup.sh'):
+             self.assertIn(setting, seat)

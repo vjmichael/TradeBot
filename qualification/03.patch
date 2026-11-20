@@ -1,0 +1,586 @@
+diff --git a/deploy/maj-vaj-approval-session.desktop b/deploy/maj-vaj-approval-session.desktop
+new file mode 100644
+index 0000000..0ade433
+--- /dev/null
++++ b/deploy/maj-vaj-approval-session.desktop
+@@ -0,0 +1,7 @@
++[Desktop Entry]
++Type=Application
++Name=Maj Vaj PAPER approval
++Comment=Dedicated independent local PAPER recovery session
++Exec=/opt/maj-vaj/venv/bin/python -I -B -c "import sys;sys.path.insert(0,'/opt/maj-vaj');from reserve_review_session import run;run()"
++TryExec=/opt/maj-vaj/venv/bin/python
++DesktopNames=MajVajApproval
+diff --git a/deploy/maj-vaj-review-display.conf b/deploy/maj-vaj-review-display.conf
+new file mode 100644
+index 0000000..fd861b7
+--- /dev/null
++++ b/deploy/maj-vaj-review-display.conf
+@@ -0,0 +1,2 @@
++# systemd-tmpfiles: private display cookie directory, recreated on boot.
++d /run/maj-vaj-review-display 0700 maj-vaj-approval maj-vaj-approval -
+diff --git a/docs/tasks.md b/docs/tasks.md
+index dd55d55..2dd742f 100644
+--- a/docs/tasks.md
++++ b/docs/tasks.md
+@@ -424,3 +424,7 @@ Offline systemd guest follow-up: 209/209 code/deployment hashes matched, graphic
+ 
+ Restored R5-R5 exact candidate tree. Corrected test-only readiness deadline to existing production allowance; actual time limits unchanged. Offline systemd transient signed snapshot expiry and independent checkpoint-change tests 8/8 each, focused 12/12 PASS. Actual named native service readiness, real wall-clock expiry and same-PID protected settlement PASS; $100 principal / $4.8951 simulated gain / two orders / one authenticated release / zero restarts. Installed wrong-identity and no-session GUI refusal PASS; positive genuine local desktop remains open. See [qualification, failures and remaining gates](tb-fin-01c-r2-r5-r5-r1-installed-acceptance.md). No live credentials or funds, actual desk change, CI or main merge.
+ Named checkpoint correction and fresh retry PASS: actual independently adopted/revoked policy through installed authority, rejection of still-unexpired old snapshot, same-PID reduction, reservation held until fresh signed snapshot, exactly one authenticated settlement, $100 principal / $4.8951 simulated gain / two orders / zero restarts. Both named protection scenarios accepted in controlled-book PAPER scope; clean shutdown and child integrity. Remaining R5-R5-R2: genuine positive local approval desktop/polkit, session/cookie invalidation and recovery lifecycle. Public PAPER/credential gates unchanged.
++
++## TB-FIN-01C / TB-08-R2-R5-R5-R2 — dedicated desktop provisioning (partial acceptance)
++
++Local X11 display-manager session entry, explicit administrator installation/preflight, private tmpfiles directory, strict unique local Xauthority record extraction and serialized fsynced cookie replacement/retirement, actual logind caller membership and repeated access-control/session/cookie verification. Final pinned 508 discovered / 506 passed / 2 optional skips / zero failures; 15/15 focused, actual independent-UID Xvfb cookie interoperability and unauthorized UID refusal PASS. Real offline Debian systemd/logind/polkit named-unit negative preflight with exact rule and private runtime directory PASS, desk paused, child integrity/base unchanged. Seven missing desktop packages cause installer to refuse rather than weaken session checks. No real local X11 login or positive production graphical approval/lifecycle test yet; no new CI, main merge or LIVE authorization. See [provisioning, acceptance and limits](tb-fin-01c-r2-r5-r5-r2-review-desktop.md). Continue R5-R5-R2 closeout after verified offline desktop dependency restoration and actual local greeter/session qualification; retain prior named expiry/checkpoint and R5-R4 scoped recovery results. Remaining public PAPER/credential/forward validation gates unchanged.
+diff --git a/docs/tb-fin-01c-r2-r5-r5-r2-review-desktop.md b/docs/tb-fin-01c-r2-r5-r5-r2-review-desktop.md
+new file mode 100644
+index 0000000..2036235
+--- /dev/null
++++ b/docs/tb-fin-01c-r2-r5-r5-r2-review-desktop.md
+@@ -0,0 +1,24 @@
++# TB-FIN-01C / TB-08-R2-R5-R5-R2 — dedicated X11 approval session provisioning
++
++Status: implemented and locally tested; installed negative/package preflight qualified. Positive real desktop authentication and two-cycle production-launcher recovery remain open. PAPER only. R5-R5-R1 named-service expiry and checkpoint-change acceptance is retained; no trading-policy change.
++
++## Deployment contract
++
++The approval Linux account is a separate security principal. Never expose its desktop, login password, private key, Xauthority or session to ordinary desk users, browser or remote-control tools. The deployment administrator must review seat isolation; no general desktop, auto-login, remote desktop or shared X server is supported. Use an actual local LightDM X11 session on a dedicated seat/approval host, not Xvfb, synthetic logind records, a transient systemd service or a spoofed DISPLAY. The approval account must have a private administrator-provisioned 0700 local home (root-controlled ancestors), an interactive shell and administrator-controlled login credential distinct from the encrypted approval passphrase. Do not change its existing UID, primary group, recovery authority or signing keys. Do not give the normal desk account the login credential or authority groups. The reviewed native recovery marker and explicit desktop opt-in remain separate.
++
++Debian 13 deployment prerequisite: a complete authenticated distribution package closure for `polkitd`, `lightdm`, `lightdm-gtk-greeter`, `xserver-xorg-core`, `xserver-xorg-input-libinput`, `xauth`, `x11-xserver-utils`, `libpam-systemd`, `dbus-user-session`, the correct video/input drivers and existing pinned project runtime/Tk/native libraries. Use the existing approved offline distro acquisition flow; this project installer never downloads packages. Install matching packages as the administrator. On the dedicated reviewed seat, require Xorg TCP listening disabled, no blanket xhost grants, no automatic or guest login, and the display manager creating the approval user's private `~/.Xauthority` (`user-authority-in-system-dir=false` for LightDM). Verify those settings and test the actual specific seat and display; do not apply a blanket change to a shared desktop manager. The installer refuses missing packages, account/home/custody errors and differing existing installed files before their replacement. No keys are inspected or moved by this installer.
++
++From the root-owned installed source `/opt/maj-vaj`, an administrator may first run `bash scripts/provision_review_desktop.sh --check` and then explicitly `--install`. This installs the fixed Xsession entry, root-owned polkit rule (active local approval identity may start only the named review unit), protected review unit and tmpfiles definition. It does not enable the marker, start LightDM, change accounts, select a default session or alter the trading desk. Administrator must first provision and verify the dedicated session, and only then explicitly install the root-owned `/etc/maj-vaj/review-desktop-enabled` opt-in file (not part of the installer). The prior `/etc/maj-vaj/reviewed-recovery-enabled` contract continues to apply. Start a real local graphical login as the approval account and select `Maj Vaj PAPER approval` in the greeter; the session displays a review-launch button and an exit button. The launcher cannot sign or change balances. On invocation it checks actual logind session membership, unique active unlocked X11 session, immutable cookie identity and X server access control, then invokes the unchanged fixed systemd unit through polkit. A separate protected service owns the recovery approval window, challenge and encrypted passphrase operation. Logout retires the private copied cookie, never a newer session's cookie. No cookie values enter logs, process arguments, the project directory, the desk or any model.
++
++The Xsession provisioning helper parses only the fixed home Xauthority file through protected non-symlink directory/file descriptors; only a unique local-host/display MIT-MAGIC-COOKIE-1 record is copied, bounded to 64 KiB input and 16-byte cookie. Home and copy are owner-only, copy publication/retirement are serialized and fsynced, and current X11 access control is checked (no grants). The launcher checks actual caller logind identity, service checks active display and cookie before operations and rechecks access control, session and cookie after the X server probe. Missing/changed session, logout, wrong identity, locked/remote/Wayland display, missing cookie, additional display grants, or ambiguity refuse. Installation does not enable any new authority or automatically approve. The approval account is still a trusted human security principal, not a security sandbox for arbitrary malicious code running under that same UID.
++
++## Remaining genuine installed qualification
++
++The host must perform a real greeter login on a local seat, check exact logind X11 metadata and service activation via the installed polkit rule, test unauthorized desk attachment/refusal, then use the actual named review service with a disposable controlled PAPER fixture. Complete cancel, incorrect challenge/passphrase, exact correct approval, locked/switch/logoff-before-confirmation refusal, idempotent delivery, authenticated archive retirement, and a second review on the same portfolio and mailboxes. Audit zero venue orders for proven non-invocation, exact two NO_FILL releases and unchanged $100 principal, pause flags, independent archive pairs, closed sessions, and no new LIVE authority. The earlier R5-R4 authenticated transient GUI and R5-R5-R1 named expiry/checkpoint results do not substitute for this gate.
++
++## Executed qualification
++
++- Original R5-R5-R1 source archive, patch and evidence SHA256SUMS matched. Candidate is local, not a published GitHub commit. Pinned Python 3.12.16/Freqtrade 2026.10 retained.
++- Final exact code regression suite: 508 discovered, 506 passed, 2 optional skips, 0 failures, exit 0 (55.190 seconds). Focused launcher/session suite: 15/15 PASS. Earlier first implementation suite: 507 discovered, 505 passed, 2 optional skips. Focused tests cover caller mismatch, ambiguous/locked/remote/wrong sessions, strict binary Xauthority parsing, mode/link checks, serialized cookie replacement, stale retirement, access-control failure and revalidation before signing/publication.
++- Actual separate-UID Xvfb interoperability: real xauth-generated local record copied through production parser/custody functions, independent UID opens Tk and X display, another UID without cookie denied. PASS. This is not a genuine installed desktop or a polkit positive test. Host lacks xhost; ACL behavior is covered by focused tests, not a real Xorg ACL query.
++- Offline Debian systemd guest based on prior accepted controlled PAPER child: exact seven updated source/test/deployment files copied and byte-compared; actual logind resolves serial caller `self`, actual systemd-tmpfiles creates private 0700 approval directory, exact polkit rule installed and daemon active. Actual package check refused seven missing packages (lightdm, lightdm-gtk-greeter, xserver-xorg-core, xserver-xorg-input-libinput, xauth, x11-xserver-utils, dbus-user-session). Actual wrong UID and no-session launcher refusals and polkit/systemd start refusals under both independent identities; named review MainPID zero, existing service syntax accepted, disposable PAPER desk paused. Exit 0 for negative/preflight harness, clean shutdown; child qcow2 integrity no errors; original Debian base hash unchanged. No login provisioning, activation marker change, real credential, order, network or main change. No positive local X11 approval session or actual two-cycle production launcher recovery executed. Remaining genuine desktop qualification explicitly open.
+diff --git a/reserve_review_launcher.py b/reserve_review_launcher.py
+index 9b93c0c..2872150 100644
+--- a/reserve_review_launcher.py
++++ b/reserve_review_launcher.py
+@@ -58,7 +58,7 @@ def _cookie(uid):
+             os.close(f)
+ 
+ 
+-def session_identity():
++def authority_uid():
+     uid = pwd.getpwnam('maj-vaj-approval').pw_uid
+     require(uid > 0 and os.geteuid() == uid, 'review_authority_session_only')
+     with protected_dir(MARKER.parent, 0, 0o755) as fd:
+@@ -68,14 +68,45 @@ def session_identity():
+             require(stat.S_ISREG(s.st_mode) and s.st_uid == 0 and s.st_nlink == 1 and not s.st_mode & 0o022, 'review_desktop_disabled')
+         finally:
+             os.close(f)
++    return uid
++
++
++def verify_display(display):
++    # Require X11 access control to be enabled with no additional grants.
++    # This does not replace the administrator's separate desk attachment test.
++    result = subprocess.run(['/usr/bin/xhost'], check=True, stdout=subprocess.PIPE,
++                            stderr=subprocess.DEVNULL, text=True, timeout=5,
++                            env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C', 'DISPLAY': display,
++                                 'XAUTHORITY': str(COOKIE)})
++    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
++    require(lines == ['access control enabled, only authorized clients can connect'], 'review_display_access_control')
++
++
++def session_identity():
++    uid = authority_uid()
+     try:
+-        return (*_sessions(uid), _cookie(uid))
++        session, display = _sessions(uid)
++        cookie = _cookie(uid)
++        verify_display(display)
++        require(_sessions(uid) == (session, display) and _cookie(uid) == cookie, 'review_session_changed')
++        return (session, display, cookie)
+     except (OSError, subprocess.SubprocessError) as exc:
+         raise ValueError('review_session_unavailable') from exc
+ 
+ 
++def caller_session(session):
++    # loginctl resolves the caller's actual session via logind; the supplied
++    # environment is not evidence of session membership.
++    try:
++        current = _login('show-session', 'self', '--property=Id', '--value').strip()
++    except (OSError, subprocess.SubprocessError) as exc:
++        raise ValueError('review_caller_session_unavailable') from exc
++    require(current == session, 'review_caller_session_required')
++
++
+ def launch():
+-    session_identity()
++    identity = session_identity()
++    caller_session(identity[0])
+     subprocess.run(['/usr/bin/systemctl', '--no-ask-password', '--no-block', 'start', UNIT],
+                    check=True, timeout=5, env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'})
+ 
+diff --git a/reserve_review_session.py b/reserve_review_session.py
+new file mode 100644
+index 0000000..c89611b
+--- /dev/null
++++ b/reserve_review_session.py
+@@ -0,0 +1,158 @@
++"""Dedicated local X11 login session; no signing, desk access or auto approval.
++
++The display manager must be administrator configured to create a private
++.Xauthority in the approval account's home, for a real local login. A single
++matching local cookie is exported to the service's existing private runtime
++path, never printed or passed as a command argument.
++"""
++import fcntl
++import os
++import pwd
++import secrets
++import socket
++import stat
++import struct
++import subprocess
++from pathlib import Path
++
++import reserve_review_launcher as launcher
++from reserve_checkpoint import require
++from reserve_ipc import protected_dir
++
++MAX = 65536
++
++
++def select_cookie(data, display, host):
++    """Strict, bounded Xauthority parser; no wildcard/remote records exported."""
++    require(0 < len(data) <= MAX, 'review_xauthority_size')
++    number = display.split('.', 1)[0].removeprefix(':').encode('ascii')
++    pos, found = 0, []
++    while pos < len(data):
++        start = pos
++        require(pos + 2 <= len(data), 'review_xauthority_format')
++        family = struct.unpack_from('!H', data, pos)[0]
++        pos += 2
++        fields = []
++        for _ in range(4):
++            require(pos + 2 <= len(data), 'review_xauthority_format')
++            size = struct.unpack_from('!H', data, pos)[0]
++            pos += 2
++            require(pos + size <= len(data), 'review_xauthority_format')
++            fields.append(data[pos:pos + size])
++            pos += size
++        address, display_number, name, value = fields
++        if (family, address, display_number, name) == (256, host, number, b'MIT-MAGIC-COOKIE-1'):
++            require(len(value) == 16, 'review_xauthority_cookie')
++            found.append(data[start:pos])
++    require(len(found) == 1, 'review_xauthority_unique_local_cookie')
++    return found[0]
++
++
++def read_source(home, uid):
++    with protected_dir(home, uid, 0o700) as directory:
++        fd = os.open('.Xauthority', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=directory)
++        with os.fdopen(fd, 'rb') as source:
++            before = os.fstat(source.fileno())
++            require(stat.S_ISREG(before.st_mode) and before.st_uid == uid and
++                    before.st_nlink == 1 and stat.S_IMODE(before.st_mode) == 0o600 and
++                    0 < before.st_size <= MAX, 'review_xauthority_custody')
++            data = source.read(MAX + 1)
++            after = os.fstat(source.fileno())
++            require((before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
++                    (after.st_size, after.st_mtime_ns, after.st_ctime_ns) and len(data) == before.st_size,
++                    'review_xauthority_changed')
++            return data
++
++
++def install_cookie(uid, data, check):
++    with protected_dir(launcher.DISPLAY_DIR, uid, 0o700) as directory:
++        fcntl.flock(directory, fcntl.LOCK_EX)
++        name = '.cookie-' + secrets.token_hex(16)
++        try:
++            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
++                         0o600, dir_fd=directory)
++            with os.fdopen(fd, 'wb') as out:
++                out.write(data)
++                out.flush()
++                os.fsync(out.fileno())
++            check()
++            os.replace(name, launcher.COOKIE.name, src_dir_fd=directory, dst_dir_fd=directory)
++            os.fsync(directory)
++        finally:
++            try:
++                os.unlink(name, dir_fd=directory)
++            except FileNotFoundError:
++                pass
++        return launcher._cookie(uid)
++
++
++def retire_cookie(uid, identity):
++    # Do not retire a replacement login's cookie.
++    with protected_dir(launcher.DISPLAY_DIR, uid, 0o700) as directory:
++        fcntl.flock(directory, fcntl.LOCK_EX)
++        try:
++            if launcher._cookie(uid) == identity:
++                os.unlink(launcher.COOKIE.name, dir_fd=directory)
++                os.fsync(directory)
++        except FileNotFoundError:
++            pass
++
++
++def provision():
++    uid = launcher.authority_uid()
++    session, display = launcher._sessions(uid)
++    launcher.caller_session(session)
++    home = Path(pwd.getpwuid(uid).pw_dir)
++    require(home.is_absolute() and home != Path('/'), 'review_approval_home')
++    # The environment is only a consistency check, never the source of authority.
++    require(os.environ.get('DISPLAY') == display and
++            os.environ.get('XAUTHORITY', str(home / '.Xauthority')) == str(home / '.Xauthority'),
++            'review_display_manager_contract')
++    data = select_cookie(read_source(home, uid), display, socket.gethostname().encode())
++    def check():
++        require(launcher._sessions(uid) == (session, display), 'review_session_changed')
++        launcher.caller_session(session)
++    identity = install_cookie(uid, data, check)
++    try:
++        check()
++        launcher.verify_display(display)
++        require(launcher.session_identity() == (session, display, identity), 'review_session_changed')
++    except BaseException:
++        retire_cookie(uid, identity)
++        raise
++    return uid, session, display, identity
++
++
++def run():
++    uid, session, display, identity = provision()
++    try:
++        os.environ['DISPLAY'] = display
++        os.environ['XAUTHORITY'] = str(launcher.COOKIE)
++        import tkinter as tk
++        from tkinter import ttk
++        root = tk.Tk()
++        root.title('Maj Vaj — PAPER approval session')
++        root.geometry('560x240+30+30')
++        ttk.Label(root, text='PAPER recovery approval', font=('TkDefaultFont', 16)).pack(pady=16)
++        ttk.Label(root, text='Review interrupted orders only. Trading stays paused.', wraplength=500).pack(pady=8)
++        status = tk.StringVar(value='No approval requested.')
++        def start():
++            try:
++                require(launcher.session_identity() == (session, display, identity), 'review_session_changed')
++                launcher.launch()
++                status.set('Review requested. No reservation released by this launcher.')
++            except (ValueError, OSError, subprocess.SubprocessError):
++                status.set('Review unavailable. No approval recorded.')
++        ttk.Button(root, text='Review interrupted PAPER order', command=start).pack(pady=8)
++        ttk.Label(root, textvariable=status, wraplength=500).pack(pady=8)
++        ttk.Button(root, text='End approval session', command=root.destroy).pack(pady=8)
++        root.mainloop()
++    finally:
++        retire_cookie(uid, identity)
++
++
++if __name__ == '__main__':
++    try:
++        run()
++    except Exception:
++        raise SystemExit('Dedicated PAPER approval session unavailable.') from None
+diff --git a/scripts/provision_review_desktop.sh b/scripts/provision_review_desktop.sh
+new file mode 100755
+index 0000000..709fcf0
+--- /dev/null
++++ b/scripts/provision_review_desktop.sh
+@@ -0,0 +1,51 @@
++#!/bin/bash
++# Explicit administrator operation. No downloads, login changes, autologin,
++# seat switching, key access, activation markers, or service start.
++set -euo pipefail
++[[ $# == 1 && ( $1 == --check || $1 == --install ) ]] || { echo 'Usage: provision_review_desktop.sh --check|--install' >&2; exit 2; }
++[[ $EUID == 0 && $(cat /proc/1/comm) == systemd ]] || { echo 'A root-reviewed systemd installation is required.' >&2; exit 1; }
++cd /opt/maj-vaj
++bad=0
++for p in polkitd lightdm lightdm-gtk-greeter xserver-xorg-core xserver-xorg-input-libinput xauth x11-xserver-utils libpam-systemd dbus-user-session; do
++  if [[ $(dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null || :) != 'ii ' ]]; then
++    printf 'Missing installed package: %s\n' "$p" >&2; bad=1
++  fi
++done
++for f in /usr/bin/loginctl /usr/bin/systemctl /usr/bin/xhost /usr/sbin/lightdm /usr/lib/xorg/Xorg /opt/maj-vaj/venv/bin/python; do
++  if [[ ! -x $f ]]; then printf 'Missing executable: %s\n' "$f" >&2; bad=1; fi
++done
++((bad == 0)) || exit 1
++venv/bin/python -I -B - <<'PY'
++import os,pwd,grp,stat
++from pathlib import Path
++import tkinter
++for name in ('maj-vaj','maj-vaj-native','maj-vaj-approval'):
++    p=pwd.getpwnam(name)
++    assert p.pw_uid>0 and p.pw_gid==grp.getgrnam(name).gr_gid
++p=pwd.getpwnam('maj-vaj-approval')
++assert len({pwd.getpwnam(n).pw_uid for n in ('maj-vaj','maj-vaj-native','maj-vaj-approval')})==3
++home=Path(p.pw_dir); st=home.lstat()
++assert home.is_absolute() and stat.S_ISDIR(st.st_mode) and st.st_uid==p.pw_uid and stat.S_IMODE(st.st_mode)==0o700
++assert p.pw_shell not in ('/usr/sbin/nologin','/sbin/nologin','/bin/false') and os.access(p.pw_shell,os.X_OK)
++for name in ('reserve_review_launcher.py','reserve_review_session.py','reserve_no_effect_worker.py','deploy'):
++    st=Path(name).lstat();assert st.st_uid==0 and not st.st_mode&0o022 and not stat.S_ISLNK(st.st_mode)
++print('Approval identity, private home, and code custody preflight passed.')
++PY
++[[ $1 == --install ]] || exit 0
++# Do not overwrite a differing administrator configuration. Install only fixed artifacts.
++install_fixed(){
++ local source=$1 dest=$2
++ if [[ -e $dest || -L $dest ]]; then
++   [[ ! -L $dest && -f $dest && $(stat -c '%u:%a' "$dest") == 0:644 ]] && cmp -s "$source" "$dest" || { echo "Administrator reconciliation required: $dest" >&2; exit 1; }
++ else
++   install -o root -g root -m 644 "$source" "$dest"
++ fi
++}
++install_fixed deploy/maj-vaj-reviewed-recovery-review.service /etc/systemd/system/maj-vaj-reviewed-recovery-review.service
++install_fixed deploy/49-maj-vaj-paper-review.rules /etc/polkit-1/rules.d/49-maj-vaj-paper-review.rules
++install_fixed deploy/maj-vaj-approval-session.desktop /usr/share/xsessions/maj-vaj-approval.desktop
++install_fixed deploy/maj-vaj-review-display.conf /etc/tmpfiles.d/maj-vaj-review-display.conf
++systemd-tmpfiles --create /etc/tmpfiles.d/maj-vaj-review-display.conf
++systemctl daemon-reload
++# Deliberately do not enable the root marker: seat isolation and actual local login must be reviewed first.
++echo 'Installed session artifacts only. Desktop authorization was not activated.'
+diff --git a/scripts/qualify_review_cookie_display.py b/scripts/qualify_review_cookie_display.py
+new file mode 100644
+index 0000000..ac63a7b
+--- /dev/null
++++ b/scripts/qualify_review_cookie_display.py
+@@ -0,0 +1,54 @@
++#!/usr/bin/env python3
++"""Disposable local Xvfb cookie interoperability only (not installed desktop acceptance)."""
++import os
++import pathlib
++import pwd
++import secrets
++import subprocess
++import sys
++import tempfile
++import time
++
++from reserve_review_session import select_cookie
++
++
++def main():
++    assert os.geteuid() == 0, 'independent UID test requires disposable root test host'
++    approval = pwd.getpwnam('nobody')
++    other = pwd.getpwnam('daemon')
++    assert approval.pw_uid != other.pw_uid != 0
++    with tempfile.TemporaryDirectory(prefix='maj-vaj-test-', dir='/run') as name:
++        base = pathlib.Path(name); base.chmod(0o755)
++        home, runtime = base/'home', base/'display'
++        for p in (home, runtime):
++            p.mkdir(mode=0o700); os.chown(p, approval.pw_uid, approval.pw_gid)
++        source = home/'.Xauthority'; source.touch(mode=0o600)
++        os.chown(source, approval.pw_uid, approval.pw_gid)
++        display = next(':'+str(i) for i in range(105, 150) if not pathlib.Path('/tmp/.X11-unix/X'+str(i)).exists() and not pathlib.Path('/tmp/.X'+str(i)+'-lock').exists())
++        subprocess.run(['/usr/bin/xauth','-f',str(source)], input=f'add {display} . {secrets.token_hex(16)}\n', text=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++        # xauth can atomically replace its input; restore the expected test owner.
++        os.chown(source,approval.pw_uid,approval.pw_gid); source.chmod(0o600)
++        selected=select_cookie(source.read_bytes(),display,os.uname().nodename.encode())
++        assert selected and selected==source.read_bytes()
++        root=str(pathlib.Path(__file__).resolve().parents[1])
++        def run_as(user, command, **kwargs):
++            return subprocess.run(['/usr/bin/setpriv', f'--reuid={user.pw_uid}', f'--regid={user.pw_gid}', '--clear-groups', *command], **kwargs)
++        code='''import sys,os,socket;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import reserve_review_session as s;import reserve_review_launcher as r;r.DISPLAY_DIR=Path(sys.argv[3]);r.COOKIE=r.DISPLAY_DIR/'Xauthority';data=s.select_cookie(s.read_source(Path(sys.argv[2]),os.geteuid()),sys.argv[4],socket.gethostname().encode());s.install_cookie(os.geteuid(),data,lambda:None)'''
++        run_as(approval,[sys.executable,'-I','-B','-c',code,root,str(home),str(runtime),display],check=True)
++        assert (runtime/'Xauthority').stat().st_uid==approval.pw_uid and (runtime/'Xauthority').read_bytes()==selected
++        server=subprocess.Popen(['/usr/bin/Xvfb',display,'-auth',str(source),'-nolisten','tcp','-screen','0','800x600x24'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
++        try:
++            for _ in range(40):
++                if pathlib.Path('/tmp/.X11-unix/X'+display[1:]).exists(): break
++                assert server.poll() is None
++                time.sleep(.1)
++            env={'PATH':'/usr/bin:/bin','DISPLAY':display,'XAUTHORITY':str(runtime/'Xauthority'),'LC_ALL':'C'}
++            run_as(approval,['/usr/bin/xdpyinfo'],env=env,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
++            run_as(approval,[sys.executable,'-I','-B','-c','import tkinter as tk;r=tk.Tk();r.update();r.destroy()'],env=env,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
++            env['XAUTHORITY']='/dev/null'
++            assert run_as(other,['/usr/bin/xdpyinfo'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode != 0
++            print('PASS native Xauthority cookie interoperability, Tk connection under independent UID, other UID denied')
++        finally:
++            server.terminate(); server.wait(timeout=5)
++
++if __name__=='__main__':main()
+diff --git a/scripts/qualify_review_desktop_preflight.sh b/scripts/qualify_review_desktop_preflight.sh
+new file mode 100755
+index 0000000..d506384
+--- /dev/null
++++ b/scripts/qualify_review_desktop_preflight.sh
+@@ -0,0 +1,54 @@
++#!/bin/bash
++# Disposable offline guest: package preflight, real logind caller and polkit negative checks only.
++set -euo pipefail
++[[ $(cat /proc/1/comm) == systemd && $(ls /sys/class/net) == lo ]]
++[[ $(findmnt -n -o FSTYPE /sys/fs/cgroup) == cgroup2 ]]
++Q=/mnt/qualification
++cd /opt/maj-vaj
++for p in reserve_review_launcher.py reserve_review_session.py scripts/provision_review_desktop.sh tests/test_review_launcher.py tests/test_review_session.py deploy/maj-vaj-approval-session.desktop deploy/maj-vaj-review-display.conf; do
++  install -m644 "$Q/$p" "$p"
++  cmp "$Q/$p" "$p"
++done
++chmod 755 scripts/provision_review_desktop.sh
++echo 'PASS exact seven updated provision/launcher/test files installed'
++# Real logind caller identification from the serial login; not represented as X11 approval.
++id=$(loginctl --no-pager show-session self --property=Id --value)
++[[ -n $id && $id == $(loginctl --no-pager show-session "$id" --property=Id --value) ]]
++echo 'PASS real loginctl self resolves actual serial session'
++getent passwd maj-vaj-approval >/dev/null
++# Disposable fixture only: actually load the exact narrow rule and tmpfiles definition.
++install -m644 "$Q/deploy/49-maj-vaj-paper-review.rules" /etc/polkit-1/rules.d/49-maj-vaj-paper-review.rules
++cmp "$Q/deploy/49-maj-vaj-paper-review.rules" /etc/polkit-1/rules.d/49-maj-vaj-paper-review.rules
++install -m644 "$Q/deploy/maj-vaj-review-display.conf" /etc/tmpfiles.d/maj-vaj-review-display.conf
++systemd-tmpfiles --create /etc/tmpfiles.d/maj-vaj-review-display.conf
++[[ $(stat -c '%U:%G:%a' /run/maj-vaj-review-display) == maj-vaj-approval:maj-vaj-approval:700 ]]
++echo 'PASS actual private approval runtime directory provisioned'
++systemctl restart polkit.service
++systemctl is-active --quiet polkit.service
++echo 'PASS exact installed policy rule, polkit service active'
++# No activation, no auto-login and no dependency download. Existing earlier test marker is untouched.
++set +e
++bash scripts/provision_review_desktop.sh --check
++rc=$?
++set -e
++[[ $rc -eq 1 ]]
++echo 'PASS desktop setup refuses missing packages'
++unit=maj-vaj-reviewed-recovery-review.service
++# Run the candidate's actual denial checks from independent identities.
++setpriv --reuid=maj-vaj --regid=maj-vaj --clear-groups venv/bin/python -B -c 'from reserve_review_launcher import session_identity;from reserve_checkpoint import CheckpointError;exec("try:\n session_identity()\nexcept CheckpointError as e:\n assert str(e)==\"review_authority_session_only\",str(e)\nelse: raise AssertionError(\"wrong-identity acceptance\")")'
++setpriv --reuid=maj-vaj-approval --regid=maj-vaj-approval --clear-groups venv/bin/python -B -c 'from reserve_review_launcher import session_identity;from reserve_checkpoint import CheckpointError;exec("try:\n session_identity()\nexcept CheckpointError as e:\n assert str(e)==\"review_local_session_required\",str(e)\nelse: raise AssertionError(\"no-session acceptance\")")'
++for user in maj-vaj maj-vaj-approval; do
++ if setpriv --reuid="$user" --regid="$user" --clear-groups /usr/bin/systemctl --no-ask-password --no-block start "$unit" >/dev/null 2>&1; then
++  echo "FAIL unauthorized systemd start: $user"; exit 2
++ fi
++done
++[[ $(systemctl show -P MainPID "$unit") == 0 ]]
++echo 'PASS real systemd/polkit rejects desk and no-session approval starts'
++systemd-analyze verify /etc/systemd/system/$unit
++venv/bin/python -B - <<'PY'
++import sqlite3
++from pathlib import Path
++with sqlite3.connect('file:/var/lib/maj-vaj/data/desk.sqlite3?mode=ro',uri=True) as db:
++ assert tuple(db.execute('select paused,human_pause from desk').fetchone())==(1,1)
++print('PASS disposable PAPER desk remains paused')
++PY
+diff --git a/tests/test_review_launcher.py b/tests/test_review_launcher.py
+index 6c5e23b..5e8883b 100644
+--- a/tests/test_review_launcher.py
++++ b/tests/test_review_launcher.py
+@@ -28,14 +28,22 @@ class SessionTests(unittest.TestCase):
+             with self.sessions(listing=listing):
+                 with self.assertRaises(CheckpointError):r._sessions(65533)
+     def test_fixed_start_no_caller_data(self):
+-        with patch.object(r,'session_identity',return_value=('3',':12',(1,2,3,4))), patch.object(r.subprocess,'run') as run, patch.dict(os.environ,{'DISPLAY':'bad:1','XAUTHORITY':'/tmp/untrusted','SYSTEMD_BUS_ADDRESS':'bad'}):
++        with patch.object(r,'session_identity',return_value=('3',':12',(1,2,3,4))), patch.object(r,'caller_session') as caller, patch.object(r.subprocess,'run') as run, patch.dict(os.environ,{'DISPLAY':'bad:1','XAUTHORITY':'/tmp/untrusted','SYSTEMD_BUS_ADDRESS':'bad'}):
+             r.launch()
++            caller.assert_called_once_with('3')
+             args,kw=run.call_args
+             self.assertEqual(args[0],['/usr/bin/systemctl','--no-ask-password','--no-block','start',r.UNIT])
+             self.assertEqual(kw['env'],{'PATH':'/usr/bin:/bin','LC_ALL':'C'})
+         with patch.object(r,'session_identity',side_effect=CheckpointError('denied')), patch.object(r.subprocess,'run') as run:
+             with self.assertRaises(CheckpointError):r.launch()
+             run.assert_not_called()
++    def test_launch_must_originate_in_the_actual_session(self):
++        with patch.object(r,'_login',return_value='3\n') as query:
++            r.caller_session('3')
++            query.assert_called_once_with('show-session','self','--property=Id','--value')
++        with patch.object(r,'session_identity',return_value=('3',':12',(1,2,3,4))), patch.object(r,'_login',return_value='9\n'), patch.object(r.subprocess,'run') as run:
++            with self.assertRaisesRegex(CheckpointError,'review_caller_session_required'):r.launch()
++            run.assert_not_called()
+     def test_wrong_uid_before_any_display_access(self):
+         with patch.object(r.pwd,'getpwnam',return_value=type('User',(),{'pw_uid':65533})()), patch.object(r.os,'geteuid',return_value=65534), patch.object(r,'_sessions') as query:
+             with self.assertRaises(CheckpointError):r.session_identity()
+@@ -51,6 +59,12 @@ class SessionTests(unittest.TestCase):
+             guard();publish({'approved':True})
+         with patch.dict(os.environ,{},clear=False), patch.object(r,'session_identity',side_effect=[first,first,first,changed]), patch('reserve_no_effect_worker.main',side_effect=worker), patch('reserve_no_effect_worker.review_window',side_effect=widget):
+             with self.assertRaisesRegex(CheckpointError,'review_session_changed'):r.serve()
++    def test_session_rechecks_acl_and_identity(self):
++        with patch.object(r,'authority_uid',return_value=65533), patch.object(r,'_sessions',return_value=('3',':12')), patch.object(r,'_cookie',side_effect=[(1,2,3,4),(1,7,3,4)]), patch.object(r,'verify_display') as acl:
++            with self.assertRaisesRegex(CheckpointError,'review_session_changed'):r.session_identity()
++            acl.assert_called_once_with(':12')
++        with patch.object(r,'authority_uid',return_value=65533), patch.object(r,'_sessions',return_value=('3',':12')), patch.object(r,'_cookie',return_value=(1,2,3,4)), patch.object(r,'verify_display',side_effect=CheckpointError('review_display_access_control')):
++            with self.assertRaisesRegex(CheckpointError,'review_display_access_control'):r.session_identity()
+     @unittest.skipUnless(os.geteuid()==0,'actual root-owned parent needed')
+     def test_cookie_custody(self):
+         with tempfile.TemporaryDirectory(dir='/run') as temp:
+diff --git a/tests/test_review_session.py b/tests/test_review_session.py
+new file mode 100644
+index 0000000..3d51fef
+--- /dev/null
++++ b/tests/test_review_session.py
+@@ -0,0 +1,74 @@
++import os
++import socket
++import struct
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import Mock, patch
++
++import reserve_review_session as s
++import reserve_review_launcher as r
++from reserve_checkpoint import CheckpointError
++
++HOST = b'test-host'
++
++
++def record(family=256, host=HOST, number=b'12', protocol=b'MIT-MAGIC-COOKIE-1', cookie=b'X'*16):
++    return struct.pack('!H', family) + b''.join(struct.pack('!H', len(v)) + v for v in (host, number, protocol, cookie))
++
++
++class CookieTests(unittest.TestCase):
++    def test_exact_local_record_only(self):
++        local = record()
++        pile = record(family=65535) + record(family=0) + record(host=b'other') + record(number=b'13') + local
++        self.assertEqual(s.select_cookie(pile, ':12.0', HOST), local)
++
++    def test_denies_bad_or_ambiguous_records(self):
++        for bad in (b'', b'x'*65537, record()[:-1], record()+b'x', record()*2, record(family=65535), record(host=b'other'), record(number=b'13'), record(cookie=b'short')):
++            with self.subTest(length=len(bad)), self.assertRaises(CheckpointError):
++                s.select_cookie(bad, ':12', HOST)
++
++    @unittest.skipUnless(os.geteuid()==0, 'root-owned protected parent required')
++    def test_source_custody_and_atomic_retirement(self):
++        with tempfile.TemporaryDirectory(dir='/run') as tmp:
++            home=Path(tmp)/'home';home.mkdir(mode=0o700)
++            a=home/'.Xauthority';a.write_bytes(record());a.chmod(0o600)
++            self.assertEqual(s.read_source(home,0),record())
++            a.chmod(0o644)
++            with self.assertRaises(CheckpointError):s.read_source(home,0)
++            a.chmod(0o600);os.link(a,home/'link')
++            with self.assertRaises(CheckpointError):s.read_source(home,0)
++            (home/'link').unlink();a.unlink();a.symlink_to('/dev/null')
++            with self.assertRaises(OSError):s.read_source(home,0)
++            directory=Path(tmp)/'display';directory.mkdir(mode=0o700);cookie=directory/'Xauthority'
++            with patch.object(r,'DISPLAY_DIR',directory),patch.object(r,'COOKIE',cookie):
++                first=s.install_cookie(0,record(),lambda:None)
++                second=s.install_cookie(0,record(cookie=b'Y'*16),lambda:None)
++                self.assertNotEqual(first,second)
++                s.retire_cookie(0,first);self.assertEqual(cookie.read_bytes(),record(cookie=b'Y'*16))
++                with self.assertRaises(CheckpointError):s.install_cookie(0,record(),Mock(side_effect=CheckpointError('session_changed')))
++                self.assertEqual(cookie.read_bytes(),record(cookie=b'Y'*16))
++                self.assertEqual(list(directory.iterdir()),[cookie])
++                s.retire_cookie(0,second);self.assertFalse(cookie.exists())
++
++    def test_xhost_denies_additional_grants_and_disabled_acl(self):
++        with patch.object(s.subprocess,'run',return_value=Mock(stdout='access control enabled, only authorized clients can connect\n')) as call:
++            r.verify_display(':12');self.assertEqual(call.call_args.kwargs['env']['DISPLAY'],':12')
++        for bad in ('access control disabled, clients can connect from any host\n','access control enabled, only authorized clients can connect\nSI:localuser:maj-vaj\n'):
++            with patch.object(s.subprocess,'run',return_value=Mock(stdout=bad)),self.assertRaises(CheckpointError):r.verify_display(':12')
++
++    def test_provision_refuses_caller_and_foreign_cookie_before_io(self):
++        user=Mock(pw_dir='/home/maj-vaj-approval')
++        with patch.object(r,'authority_uid',return_value=65533),patch.object(r,'_sessions',return_value=('3',':12')),patch.object(r,'caller_session',side_effect=CheckpointError('review_caller_session_required')),patch.object(s,'read_source') as read:
++            with self.assertRaises(CheckpointError):s.provision()
++            read.assert_not_called()
++        with patch.object(r,'authority_uid',return_value=65533),patch.object(r,'_sessions',return_value=('3',':12')),patch.object(r,'caller_session'),patch.object(s.pwd,'getpwuid',return_value=user),patch.dict(os.environ,{'DISPLAY':':12','XAUTHORITY':'/tmp/foreign'}),patch.object(s,'read_source') as read:
++            with self.assertRaises(CheckpointError):s.provision()
++            read.assert_not_called()
++
++    def test_provision_rechecks_and_retires_on_display_failure(self):
++        user=Mock(pw_dir='/home/maj-vaj-approval');ident=(1,2,3,4)
++        def install(uid,data,check):check();return ident
++        with patch.object(r,'authority_uid',return_value=65533),patch.object(r,'_sessions',return_value=('3',':12')),patch.object(r,'caller_session'),patch.object(s.pwd,'getpwuid',return_value=user),patch.object(s.socket,'gethostname',return_value=HOST.decode()),patch.dict(os.environ,{'DISPLAY':':12','XAUTHORITY':'/home/maj-vaj-approval/.Xauthority'}),patch.object(s,'read_source',return_value=record()),patch.object(s,'install_cookie',side_effect=install),patch.object(r,'verify_display',side_effect=CheckpointError('display_denied')),patch.object(s,'retire_cookie') as retire:
++            with self.assertRaises(CheckpointError):s.provision()
++            retire.assert_called_once_with(65533,ident)

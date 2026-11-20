@@ -1,0 +1,393 @@
+diff --git a/docs/tasks.md b/docs/tasks.md
+index 22e0228..dd55d55 100644
+--- a/docs/tasks.md
++++ b/docs/tasks.md
+@@ -419,3 +419,8 @@ Warm exclusive native proof generation before snapshot deadline; verified minima
+ Dedicated local X11 approval launcher, fixed service and narrow polkit start rule with independent approval UID and session/cookie revalidation; root-reviewed provisioning required. Narrow native snapshot availability routing; invalid trust material remains fail-closed. Exact-parent local candidate: 498/500 regression tests passed, 2 optional skips, 0 failures; genuine separate-UID retained-driver PAPER expiry and checkpoint-change controlled-book cases 8/8 each PASS. No live permission, actual desk change, new CI or main merge. [Qualification and deployment limits](tb-fin-01c-r2-r5-r5-snapshot-desktop.md). Installed production desktop positive authorization and actual named-service in-flight snapshot-expiry/checkpoint-change qualification remain open; preserve earlier scoped R5-R4 acceptance. Public sustained PAPER, migrated goals, forward validation and credential-security acceptance still required.
+ 
+ Offline systemd guest follow-up: 209/209 code/deployment hashes matched, graphical service syntax and missing-opt-in refusal PASS. Transient cross-UID expiry failed its warm-runtime test deadline; checkpoint transient case stopped after signed wallet verification, not accepted. Clean guest poweroff, child integrity PASS, immutable base unchanged. Production installed positive approval and named-service wall-clock snapshot/checkpoint tests still open.
++
++## TB-FIN-01C / TB-08-R2-R5-R5-R1 — installed readiness and snapshot protection (partial installed acceptance)
++
++Restored R5-R5 exact candidate tree. Corrected test-only readiness deadline to existing production allowance; actual time limits unchanged. Offline systemd transient signed snapshot expiry and independent checkpoint-change tests 8/8 each, focused 12/12 PASS. Actual named native service readiness, real wall-clock expiry and same-PID protected settlement PASS; $100 principal / $4.8951 simulated gain / two orders / one authenticated release / zero restarts. Installed wrong-identity and no-session GUI refusal PASS; positive genuine local desktop remains open. See [qualification, failures and remaining gates](tb-fin-01c-r2-r5-r5-r1-installed-acceptance.md). No live credentials or funds, actual desk change, CI or main merge.
++Named checkpoint correction and fresh retry PASS: actual independently adopted/revoked policy through installed authority, rejection of still-unexpired old snapshot, same-PID reduction, reservation held until fresh signed snapshot, exactly one authenticated settlement, $100 principal / $4.8951 simulated gain / two orders / zero restarts. Both named protection scenarios accepted in controlled-book PAPER scope; clean shutdown and child integrity. Remaining R5-R5-R2: genuine positive local approval desktop/polkit, session/cookie invalidation and recovery lifecycle. Public PAPER/credential gates unchanged.
+diff --git a/docs/tb-fin-01c-r2-r5-r5-r1-installed-acceptance.md b/docs/tb-fin-01c-r2-r5-r5-r1-installed-acceptance.md
+new file mode 100644
+index 0000000..9c8e0c3
+--- /dev/null
++++ b/docs/tb-fin-01c-r2-r5-r5-r1-installed-acceptance.md
+@@ -0,0 +1,18 @@
++# TB-FIN-01C / TB-08-R2-R5-R5-R1 — installed qualification
++
++Parent source tree `d3283d5038590d34deb4cdaf3c0b4cba4a1e44db` restored from the R5-R5 archive and verified using Git's tree hash. No production runtime, policy, service deadline or graphical authorization implementation changes. Qualification-only changes: warm harness readiness observation waits up to the existing 120-second production allowance (rather than 20 seconds); other harness response waits 30 seconds. Actual production watchdog 30 seconds, snapshot freshness 30 seconds and synchronous permit 2 seconds unchanged.
++
++## Accepted evidence
++
++* Offline Debian 13 QEMU guest, systemd PID 1, cgroup v2, loopback only, pinned Python 3.12.16/Freqtrade 2026.10. Actual independent identities and native signed wallet. Both transient systemd controlled-book scenarios pass 8/8 checkpoints each and exit zero; warm readiness 18.608 s (expiry), 18.774 s (checkpoint). Expiry uses logical clock in this fixture; checkpoint really advances through independent adoption/revocation. Entries and settlement use actual Freqtrade PAPER persistence, not public-market data. Each verifies retained runtime, protection, reservation held until authenticated evidence, no duplicate entry or settlement, clean lease close.
++* Focused seven graphical and five protection tests pass on pinned host runtime. No claim of a new full regression run; parent had 498 passed, two optional skips.
++* Actual named native service in a new disposable guest passes wall-clock expiry: readiness without snapshot in 23 s, Type=notify, cgroup membership and live 30 s watchdog. Actual named relay, desk broker and terminal settlement units, controlled market fixture with root-owned temporary ExecStart override; no live exchange or production network constructor. Native wallet admission, one actual PAPER trade/two orders, same PID, signed snapshot ages for 32 seconds, protected exit on retained grant, held reservation until renewed signed snapshot; exactly one authenticated release, $100 principal and $4.8951 simulated protected gain, no remaining exposure or pending amount, zero restarts. Exit zero. Cleanup pauses disposable desk, stops units and removes overrides. Disk checks on completed guests pass; original base hash unchanged.
++* Actual named graphical service definition verifies. Wrong identity refused; dedicated approval UID without active trusted local X11 session refused with expected reason; direct installed service startup fails without that session, zero PID and no pending approval. Does not qualify positive graphical approval or polkit interaction. No trusted graphical seat was provisioned; prior R5-R4 isolated GUI acceptance remains scoped to that fixture.
++
++## Harness flaws corrected and remaining qualification
++
++First named run checked watchdog effectiveness while inactive (systemd reported infinity); assertion moved to live service. No production unit change. First named checkpoint test failed at synthetic reserve adoption, before any order, after successful readiness and negative graphical checks. Corrected synthetic test preparation includes risk policy, draft, signed wallet and exact independent review prerequisites. The result of the retry is recorded below. Checkpoint production named-service acceptance is distinct from the two successful transient tests. Real local unlocked X11 approval seat and positive polkit/desktop lifecycle, public-market full native startup and sustained PAPER, migrated goals, forward validation and credential-security acceptance remain required. No actual desk, main, CI or LIVE change.
++
++## Named checkpoint retry — PASS
++
++Fresh disposable guest; corrected harness independently adopted a synthetic reserve policy through the named authority, then admitted actual PAPER entry. With one open order and snapshot publication stopped, independently reviewed revocation advanced the actual witness, the still-unexpired signed snapshot was refused with `snapshot_checkpoint_changed`, and the retained native PID reduced the existing exposure. Reservation remained held until a fresh authenticated snapshot, after which exact single settlement passed. Two orders, $100 principal and $4.8951 simulated protected gain, no remaining exposure/pending/reservation, zero restarts. `NAMED_SERVICE_EXIT=0`; cleanup and graceful poweroff completed. Final child disk check clean and immutable base hash unchanged. Checkpoint protection is accepted in the named-service controlled-book fixture; no positive production desktop or live trading acceptance claimed. First expiry trial's executed harness preceded the addition of checkpoint mode; evidence includes the executed expiry shell and final combined harness. The positive independent approvals here used synthetic exact-review credentials under the independently installed authority, not a genuine graphical session.
+diff --git a/scripts/qualify_independent_entry.py b/scripts/qualify_independent_entry.py
+index 390d64d..f9ae074 100644
+--- a/scripts/qualify_independent_entry.py
++++ b/scripts/qualify_independent_entry.py
+@@ -196,8 +196,15 @@ with WarmRuntime(p,r/'relay.pub',lambda i,p,c,w:driver_context(w)).start() as wa
+                 def response(expected,action=None):
+                     import select
+                     if action:child.stdin.write(action+'\n');child.stdin.flush()
+-                    ready,_,_=select.select([child.stdout],[],[],20)
+-                    assert ready,'warm runtime deadline';line=child.stdout.readline().strip()
++                    # Qualification harness observation budget: align readiness with
++                    # the existing service startup allowance. The 30-second
++                    # signed snapshot and two-second broker permit are unchanged.
++                    budget=120 if expected=='READY' else 30
++                    started=time.monotonic()
++                    ready,_,_=select.select([child.stdout],[],[],budget)
++                    assert ready,('qualification response deadline',expected,budget,child.poll())
++                    line=child.stdout.readline().strip()
++                    if expected=='READY':print(f'Warm fixture readiness: {time.monotonic()-started:.3f}s',flush=True)
+                     assert line==expected,(line,child.stderr.read() if child.poll() is not None else '')
+                 try:
+                     response('READY');response('outage_no_open_exposure','tick')
+diff --git a/scripts/qualify_r5r5_installed.py b/scripts/qualify_r5r5_installed.py
+new file mode 100644
+index 0000000..2a5163c
+--- /dev/null
++++ b/scripts/qualify_r5r5_installed.py
+@@ -0,0 +1,197 @@
++"""Disposable offline Debian VM only: provision a synthetic PAPER portfolio.
++Never run against an existing desk. No production override or external API.
++"""
++import os, pwd, grp, sqlite3, subprocess, sys, tempfile, time, shutil
++from pathlib import Path
++from contextlib import contextmanager, closing
++ROOT=Path(__file__).resolve().parents[1]
++sys.path[:0]=[str(ROOT),str(ROOT/'scripts'),str(ROOT/'tests'),str(ROOT/'engine_strategies')]
++I='a'*32
++BASE=Path('/var/lib'); PINS=Path('/etc/maj-vaj'); DATA=BASE/'maj-vaj/data'; WORK=BASE/'maj-vaj-native'
++
++def offline():
++    assert os.geteuid()==0 and Path('/proc/1/comm').read_text().strip()=='systemd'
++    assert sorted(p.name for p in Path('/sys/class/net').iterdir())==['lo']
++    assert subprocess.check_output(['systemd-detect-virt'],text=True).strip()=='qemu'
++
++
++def provision():
++    offline();os.umask(0o077)
++    # No ordinary installed portfolio, no reuse or modification of old data.
++    assert not list(BASE.glob('maj-vaj*')) and not list(PINS.glob('*'))
++    for n in ('maj-vaj-transfer','maj-vaj-recovery'):
++        try:grp.getgrnam(n)
++        except KeyError:subprocess.run(['groupadd','--system',n],check=True)
++    for n in ('maj-vaj','maj-vaj-native','maj-vaj-approval'):
++        try:pwd.getpwnam(n)
++        except KeyError:subprocess.run(['useradd','--system','--user-group','--no-create-home','--shell','/usr/sbin/nologin',n],check=True)
++    d,n,a=(pwd.getpwnam(x) for x in ('maj-vaj','maj-vaj-native','maj-vaj-approval'));g=grp.getgrnam('maj-vaj-transfer').gr_gid;rec=grp.getgrnam('maj-vaj-recovery').gr_gid
++    ids=dict(native_uid=n.pw_uid,desk_uid=d.pw_uid,authority_uid=a.pw_uid)
++    def directory(p,uid=0,gid=0,mode=0o700):
++        p.mkdir(exist_ok=True);os.chown(p,uid,gid);p.chmod(mode)
++    directory(PINS,mode=0o755);directory(PINS/'reserve-rebind',mode=0o755)
++    for name,uid,gid,mode in [('maj-vaj',d.pw_uid,d.pw_gid,0o700),('maj-vaj/data',d.pw_uid,d.pw_gid,0o700),('maj-vaj-reserve-authority',a.pw_uid,a.pw_gid,0o755),('maj-vaj-reserve-approval',a.pw_uid,a.pw_gid,0o700),('maj-vaj-native-signing',n.pw_uid,n.pw_gid,0o700),('maj-vaj-reserve-relay',0,0,0o700),('maj-vaj-native-inbox',0,n.pw_gid,0o750),('maj-vaj-terminal-outbox',n.pw_uid,g,0o750),('maj-vaj-recovery-native',n.pw_uid,rec,0o750),('maj-vaj-recovery-human',a.pw_uid,rec,0o750)]:directory(BASE/name,uid,gid,mode)
++    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
++    from cryptography.hazmat.primitives.serialization import Encoding,PublicFormat
++    from reserve_checkpoint import AuthorityStore
++    from reserve_native_migration import stage_pristine,digest
++    from reserve_native_rebind import issue
++    from financial_ledger import initialize
++    from reserve_preview import initialize as drafts_init
++    from risk_gate import initialize as gate_init
++    from paper_provision import provision as provision_legacy
++    relay,rebind,native=[os.urandom(32) for _ in range(3)]
++    for label,seed in [('relay',relay),('rebind',rebind),('native',native)]:
++        p=PINS/f'reserve-{label}.pub';p.write_bytes(Ed25519PrivateKey.from_private_bytes(seed).public_key().public_bytes(Encoding.Raw,PublicFormat.Raw));p.chmod(0o644)
++    for p,seed,uid,gid in [(BASE/'maj-vaj-reserve-relay/relay.key',relay,0,0),(BASE/'maj-vaj-native-signing/native-ed25519.key',native,n.pw_uid,n.pw_gid)]:
++        p.write_bytes(seed);os.chown(p,uid,gid);p.chmod(0o600)
++    def auth(code):
++        return subprocess.check_output(['setpriv',f'--reuid={a.pw_uid}',f'--regid={a.pw_gid}','--clear-groups',sys.executable,'-B','-c',code],env={'PATH':'/usr/bin:/bin','PYTHONPATH':str(ROOT)},text=True,timeout=60)
++    code=f'''from reserve_checkpoint import AuthorityStore
++from reserve_enrollment import enroll
++import sqlite3
++s=AuthorityStore('/var/lib/maj-vaj-reserve-authority',authority_uid={a.pw_uid},desk_uid={d.pw_uid});db=sqlite3.connect(':memory:');db.execute('CREATE TABLE fin_events(seq INTEGER,kind TEXT,digest TEXT)');db.execute('BEGIN');s.initialize(db)
++print(enroll('/var/lib/maj-vaj-reserve-approval','synthetic-guest-only-qualification',authority_uid={a.pw_uid},desk_uid={d.pw_uid}).hex())'''
++    p=PINS/'reserve-checkpoint.pub';p.write_bytes(bytes.fromhex(auth(code).strip()));p.chmod(0o644)
++    store=AuthorityStore(BASE/'maj-vaj-reserve-authority',authority_uid=a.pw_uid,desk_uid=d.pw_uid)
++    dbpath=DATA/'desk.sqlite3'
++    @contextmanager
++    def tx():
++        with closing(sqlite3.connect(dbpath,isolation_level=None)) as db:
++            db.row_factory=sqlite3.Row;db.execute('BEGIN IMMEDIATE');yield db;db.commit()
++    with tx() as db:
++        db.execute('CREATE TABLE desk(id INTEGER PRIMARY KEY,paused INTEGER,human_pause INTEGER,virtual_cap_cents INTEGER)');db.execute('INSERT INTO desk VALUES(1,1,1,15000)')
++        db.execute('CREATE TABLE instances(id TEXT PRIMARY KEY,pair TEXT,virtual_cents INTEGER,mode TEXT,strategy_family TEXT,state TEXT)');db.execute('INSERT INTO instances VALUES(?,?,?,?,?,?)',(I,'BTC/USD',10000,'PAPER','numerical-baseline','RUN'))
++        db.execute('PRAGMA user_version=4');gate_init(db);initialize(db);drafts_init(db);__import__('financial_goals').initialize(db);db.execute('CREATE TABLE secrets(slot TEXT,ciphertext BLOB)');db.execute('INSERT INTO secrets VALUES(?,?)',('test',b'synthetic-vault-canary'))
++    with tempfile.TemporaryDirectory(prefix='maj-r5r5-legacy-',dir='/run') as temp:
++        r=Path(temp);legacy=r/'legacy';legacy.mkdir();export=r/'export';export.mkdir();provision_legacy(legacy,I,tx)
++        shutil.copyfile(dbpath,export/'desk.sqlite3');shutil.copyfile(legacy/'paper'/I/'paper.sqlite',export/'paper.sqlite')
++        review={'scope':{'instance':I,'pair':'BTC/USD','principal_cents':10000,'mode':'PAPER'},'native_sha256':digest((export/'paper.sqlite').read_bytes()),'desk_sha256':digest((export/'desk.sqlite3').read_bytes())}
++        stage_pristine(export,WORK,review,**ids);issue(export,WORK,PINS/'reserve-rebind',review,store,rebind,**ids)
++    os.chown(dbpath,d.pw_uid,d.pw_gid);dbpath.chmod(0o600)
++    lock=PINS/'entry-fence.lock';lock.touch();os.chown(lock,0,g);lock.chmod(0o640)
++    for marker in ('persistent-native-enabled','protected-entry-enabled','protected-exit-enabled','reserve-transport-enabled','reviewed-recovery-enabled','review-desktop-enabled'):
++        (PINS/marker).touch(mode=0o644);(PINS/marker).chmod(0o644)
++    print('PASS pristine independently rebound synthetic PAPER fixture',flush=True)
++
++
++def reviewed_policy(action):
++    """Exact synthetic review through the actual independent installed authority.
++    Root coordinates the test; each signature and ledger write occurs under its
++    respective owner. The authority receives only the minimized projection.
++    """
++    offline();assert action in ('adopt','revoke')
++    d,n,a=(pwd.getpwnam(x) for x in ('maj-vaj','maj-vaj-native','maj-vaj-approval'))
++    # Refuse nonfixture or nonpaper desks before issuing any synthetic approval.
++    with closing(sqlite3.connect(DATA/'desk.sqlite3')) as db:
++        assert db.execute('SELECT id,pair,virtual_cents,mode FROM instances').fetchall()==[(I,'BTC/USD',10000,'PAPER')]
++        assert db.execute('SELECT slot,ciphertext FROM secrets').fetchall()==[('test',b'synthetic-vault-canary')]
++        assert db.execute('SELECT COUNT(*) FROM gate_intents').fetchone()[0]==(0 if action=='adopt' else 1)
++    import json
++    def sub(user,code,raw=None,group=None):
++        args=['setpriv',f'--reuid={user.pw_uid}',f'--regid={user.pw_gid}',f'--groups={group}' if group else '--clear-groups',sys.executable,'-B','-c',code]
++        r=subprocess.run(args,input=raw,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30,env={'PATH':'/usr/bin:/bin','PYTHONPATH':str(ROOT),'OPENBLAS_NUM_THREADS':'1'})
++        if r.returncode:
++            raise RuntimeError('synthetic review subprocess failed: '+r.stderr.decode(errors='replace').strip().splitlines()[-1])
++        return r.stdout
++    group=grp.getgrnam('maj-vaj-transfer').gr_gid
++    prefix=f"""from reserve_checkpoint import AuthorityStore
++from reserve_ipc import pinned_key
++from reserve_native_wallet import rebound_bindings,projection
++from reserve_runtime import desk_transaction
++import json,time,sys
++from pathlib import Path
++P=Path('/etc/maj-vaj'); B=Path('/var/lib'); I={I!r}; W='installed-paper'; IDS=dict(native_uid={n.pw_uid},desk_uid={d.pw_uid},authority_uid={a.pw_uid})
++store=AuthorityStore(B/'maj-vaj-reserve-authority',authority_uid={a.pw_uid},desk_uid={d.pw_uid});np=P/'reserve-native.pub';hp=P/'reserve-checkpoint.pub';rp=P/'reserve-rebind.pub';sp=P/'reserve-relay.pub'
++public=pinned_key(np);human=pinned_key(hp);bindings=rebound_bindings(P/'reserve-rebind',rp,**IDS);verify=projection(bindings,public,W)
++"""
++    if action=='adopt':
++        # Draft save does not change the ledger head. Existing signed wallet must
++        # still be fresh when the native event is produced and reviewed.
++        sub(d,prefix+"""from reserve_preview import save
++from financial_ledger import SCALE
++from reserve_policy import DAY
++from risk_gate import Policy
++from reserve_entry_worker import installed_gate
++tx=desk_transaction(B/'maj-vaj/data');g,_,_=installed_gate(tx)
++with tx() as db:
++ assert g.account_projection(db,int(time.time()))[0].settled_cash_cents==10000
++ db.execute('UPDATE desk SET paused=0,human_pause=0')
++now=int(time.time());g.trusted_policy(Policy(version='setup-policy',owner='paper-worker',epoch=1,expires=now+300,strategy_revision='revision-1',max_order_cents=6000,max_total_exposure_cents=10000,max_pair_exposure_cents=6000,max_positions=1,max_loss_per_trade_cents=300,daily_loss_limit_cents=1000,weekly_loss_limit_cents=1500,drawdown_limit_cents=2000,market_max_age_sec=60,account_max_age_sec=60,max_spread_bps=25,max_volatility_bps=500,min_depth_cents=5000,cost_bps=100,min_edge_bps=10))
++policy=dict(rate_bps=5000,floor_mode='fixed',floor_fixed=0,floor_bps=0,ceiling=125*SCALE,cycle_cap=5*SCALE,lifetime_cap=25*SCALE,anchor=now%DAY,start=now,end=now+3*DAY,expiry=now+3*DAY)
++save(desk_transaction(B/'maj-vaj/data'),I,policy,0)
++""",group=group)
++        subprocess.run(["systemctl","start","maj-vaj-reserve-relay.service"],check=True,timeout=30)
++        e=sub(n,prefix+f"""from reserve_native_evidence import NativeProducer
++p=NativeProducer(W,B/'maj-vaj-native',B/'maj-vaj-native-signing',native_pin=np,human_pin=hp,rebind_dir=P/'reserve-rebind',rebind_pin=rp,**IDS)
++print(json.dumps(p.propose_from_handoff(B/'maj-vaj-native-inbox',store,sp,{n.pw_gid},I,'adopt','installed-r5r5-adopt')))
++""",group=group)
++    else:
++        e=sub(d,prefix+"""from reserve_protected import derive_event
++tx=desk_transaction(B/'maj-vaj/data')
++with tx() as db:
++ now=int(time.time());e=derive_event(db,store.read(),I,'revoke','installed-r5r5-revoke',now,now,None)
++print(json.dumps({'event':e,'evidence':None}))
++""",group=group)
++    # Extract only the minimized projection as desk, not root. A protected
++    # one-use file transfers the projection to the independent reviewer.
++    raw=sub(d,prefix+"from reserve_live_relay import extract;extract(B/'maj-vaj/data')",group=group)
++    with tempfile.TemporaryDirectory(prefix='maj-r5r5-review-',dir='/run') as tmp:
++        r=Path(tmp);r.chmod(0o755);view=r/'projected.sqlite3';view.write_bytes(raw);os.chown(view,0,a.pw_gid);view.chmod(0o640)
++        permit=sub(a,prefix+f"""from reserve_exact_review import ExactReview
++from reserve_delivery import human_revalidator
++from reserve_snapshot import open_projected
++from contextlib import contextmanager,closing
++@contextmanager
++def view():
++ with closing(open_projected(Path({str(view)!r}).read_bytes())) as db:
++  db.execute('BEGIN');yield db
++packet=json.load(sys.stdin);review=ExactReview(W,B/'maj-vaj-reserve-approval',authority_uid={a.pw_uid},desk_uid={d.pw_uid},permit_pin=hp,native_pin=np,revalidate=human_revalidator(view,store,verify_projection=verify));v=review.begin(store.read(),packet['event'],packet['evidence']);print(json.dumps(review.confirm(v['challenge'],'synthetic-guest-only-qualification')))
++""",raw=e)
++        result=json.loads(sub(d,prefix+f"""from reserve_recovery import RecoveryClient
++from reserve_protected import commit_packet
++c=RecoveryClient('/run/maj-vaj-reserve-authority',authority_uid={a.pw_uid},desk_uid={d.pw_uid},workspace=W);print(json.dumps(commit_packet(desk_transaction(B/'maj-vaj/data'),c,json.load(sys.stdin),human,public,verify_projection=verify)))
++""",raw=permit,group=group))
++    assert result['kind']=='reserve_'+action
++    print('PASS installed independently reviewed reserve '+action,flush=True)
++
++
++def admit_checkpoint():
++    from reserve_runtime import desk_transaction
++    from reserve_entry_worker import installed_gate
++    from financial_ledger import SCALE
++    from risk_gate import Policy,MarketEvidence,Proposal
++    assert os.geteuid()==pwd.getpwnam('maj-vaj').pw_uid
++    assert Path('/proc/1/comm').read_text().strip()=='systemd' and sorted(p.name for p in Path('/sys/class/net').iterdir())==['lo']
++    tx=desk_transaction(DATA);g,_,_=installed_gate(tx)
++    with tx() as db:
++        assert db.execute('SELECT id,pair,virtual_cents,mode FROM instances').fetchall()[0][:]==(I,'BTC/USD',10000,'PAPER')
++        assert db.execute('SELECT slot,ciphertext FROM secrets').fetchall()[0][:]==('test',b'synthetic-vault-canary')
++        assert db.execute('SELECT COUNT(*) FROM gate_intents').fetchone()[0]==0
++        assert g.account_projection(db,int(time.time()))[0].settled_cash_cents==10000
++    now=int(time.time());g.trusted_policy(Policy(version='policy-2',owner='paper-worker',epoch=2,expires=now+300,strategy_revision='revision-1',max_order_cents=6000,max_total_exposure_cents=10000,max_pair_exposure_cents=6000,max_positions=1,max_loss_per_trade_cents=300,daily_loss_limit_cents=1000,weekly_loss_limit_cents=1500,drawdown_limit_cents=2000,market_max_age_sec=60,account_max_age_sec=60,max_spread_bps=25,max_volatility_bps=500,min_depth_cents=5000,cost_bps=100,min_edge_bps=10))
++    g.trusted_market(MarketEvidence(receipt='native-market',pair='BTC/USD',observed=now,available=now,source_digest='a'*64,strategy_revision='revision-1',entry=100*SCALE,stop=90*SCALE,target=120*SCALE,spread_bps=10,volatility_bps=100,depth_cents=10000,min_notional_cents=100,estimated_cost_bps=80,gross_edge_bps=130,continuous=True,operational=True,trigger=True,blackout=False))
++    result=g.admit(Proposal('installed-persistent-proposal',I,'BTC/USD','native-market',5000,now+60));assert result['state']=='AUTHORIZED',result
++    print('PASS installed gate admission following reserve adoption',flush=True)
++
++@contextmanager
++def factory(i,p,c,w):
++    from qualify_independent_entry import driver_context
++    assert (i,p,c)==(I,'BTC/USD',10000)
++    with driver_context(w) as d:
++        d.clock=time.time
++        bid=d.bid
++        def controlled(row):
++            d.bot.exchange.mid=120. if Path('/run/maj-vaj-r5r5-target').is_file() else 100.
++            return bid(row)
++        d.bid=controlled
++        print('R5R5_FIXTURE_INIT',flush=True);yield d
++
++if __name__=='__main__':
++    if sys.argv[1:] == ['provision']:provision()
++    elif sys.argv[1:] in (['adopt'],['revoke']):reviewed_policy(sys.argv[1])
++    elif sys.argv[1:] == ['admit-checkpoint']:admit_checkpoint()
++    elif sys.argv[1:] == ['worker']:
++        from reserve_persistent_worker import run
++        run(factory=factory)
++    else:raise SystemExit('disposable qualification role required')
+diff --git a/scripts/qualify_r5r5_installed.sh b/scripts/qualify_r5r5_installed.sh
+new file mode 100755
+index 0000000..3e1ad1c
+--- /dev/null
++++ b/scripts/qualify_r5r5_installed.sh
+@@ -0,0 +1,125 @@
++#!/bin/bash
++# Disposable offline guest only; no existing desk or key material may be present.
++set -Eeuo pipefail
++trap 'echo "Qualification failed at line $LINENO"' ERR
++cd /opt/maj-vaj
++export PYTHONPATH=/opt/maj-vaj:/opt/maj-vaj/scripts:/opt/maj-vaj/tests:/opt/maj-vaj/engine_strategies OPENBLAS_NUM_THREADS=1
++[[ $(cat /proc/1/comm) == systemd && $(ls /sys/class/net) == lo && $(systemd-detect-virt) == qemu ]]
++U=maj-vaj-persistent-native.service; G=maj-vaj-reviewed-recovery-review.service
++MODE=${1:-expiry}; [[ $MODE == expiry || $MODE == checkpoint ]]
++for f in deploy/maj-vaj-{persistent-native,entry-desk,reserve-relay,terminal-desk,reviewed-recovery-review,reserve-authority}.service deploy/maj-vaj-{reserve-relay,terminal-desk}.timer; do install -m644 "$f" /etc/systemd/system/; done
++systemctl daemon-reload
++systemd-analyze verify "/etc/systemd/system/$U" "/etc/systemd/system/$G"
++venv/bin/python -B scripts/qualify_r5r5_installed.py provision
++[[ $(systemctl show -P TimeoutStartUSec "$U") == 2min ]]
++# Genuine installed launcher must reject the dedicated identity without a trusted
++# active X11 session. This does NOT constitute positive desktop acceptance.
++if setpriv --reuid=maj-vaj --regid=maj-vaj --clear-groups venv/bin/python -B reserve_review_launcher.py launch >/dev/null 2>&1; then exit 21; fi
++setpriv --reuid=maj-vaj-approval --regid=maj-vaj-approval --clear-groups venv/bin/python -B -c 'from reserve_review_launcher import session_identity;from reserve_checkpoint import CheckpointError;exec("try:\n session_identity()\nexcept CheckpointError as e:\n assert str(e)==\"review_local_session_required\",str(e)\nelse: raise AssertionError(\"no-session acceptance\")")'
++systemctl start "$G" || true
++for i in $(seq 1 15);do [[ $(systemctl show -P MainPID "$G") == 0 ]] && break; sleep 1; done
++[[ $(systemctl show -P Result "$G") == exit-code && $(systemctl show -P MainPID "$G") == 0 ]]
++[[ ! -e /var/lib/maj-vaj-recovery-human/pending.json ]]
++echo 'PASS installed GUI user isolation and no-session refusal (positive active X11 not eligible)'
++install -d -m755 "/run/systemd/system/$U.d"
++cat >"/run/systemd/system/$U.d/fixture.conf" <<'UNIT'
++[Service]
++ExecStart=
++ExecStart=/opt/maj-vaj/venv/bin/python -B /opt/maj-vaj/scripts/qualify_r5r5_installed.py worker
++Environment=OPENBLAS_NUM_THREADS=1
++StandardOutput=journal
++StandardError=journal
++UNIT
++cleanup(){
++ systemctl stop maj-vaj-reserve-relay.timer maj-vaj-terminal-desk.timer || true
++ systemctl stop "$U" "$G" maj-vaj-entry-desk.service maj-vaj-terminal-desk.service maj-vaj-reserve-relay.service maj-vaj-reserve-authority.service || true
++ setpriv --reuid=maj-vaj --regid=maj-vaj --groups=maj-vaj-transfer venv/bin/python -B -c 'from reserve_runtime import desk_transaction;t=desk_transaction("/var/lib/maj-vaj/data");exec("with t() as db:\n db.execute(\"UPDATE desk SET paused=1,human_pause=1\")")'
++ rm -f "/run/systemd/system/$U.d/fixture.conf" /run/maj-vaj-r5r5-target
++ systemctl daemon-reload
++}
++trap cleanup EXIT
++systemctl daemon-reload
++# Start without a snapshot (readiness is not trading authority).
++T=$(date +%s);systemctl start "$U"; P=$(systemctl show -P MainPID "$U")
++[[ $P -gt 0 && $(systemctl show -P Type "$U") == notify && $(systemctl show -P WatchdogUSec "$U") == 30s ]]
++C=$(systemctl show -P ControlGroup "$U");grep -qx "$P" "/sys/fs/cgroup$C/cgroup.procs"
++echo "PASS named native service readiness without snapshot in $(($(date +%s)-T))s"
++systemctl start maj-vaj-reserve-relay.service;systemctl start maj-vaj-reserve-relay.timer maj-vaj-terminal-desk.timer
++for i in $(seq 1 45); do
++ if setpriv --reuid=maj-vaj --regid=maj-vaj --groups=maj-vaj-transfer venv/bin/python -B -c 'import time;from reserve_entry_worker import installed_gate;from reserve_runtime import desk_transaction;t=desk_transaction("/var/lib/maj-vaj/data");g,_,_=installed_gate(t);exec("with t() as db:\n assert g.account_projection(db,int(time.time()))[0].settled_cash_cents==10000")' >/dev/null 2>&1; then break; fi
++ sleep 2
++done
++if [[ $MODE == checkpoint ]];then
++ systemctl stop maj-vaj-terminal-desk.timer maj-vaj-reserve-relay.timer;systemctl stop maj-vaj-terminal-desk.service maj-vaj-reserve-relay.service "$U"
++ systemctl start maj-vaj-reserve-authority.service;for i in $(seq 1 10);do [[ -S /run/maj-vaj-reserve-authority/authority.sock ]] && break;sleep 1;done
++ [[ -S /run/maj-vaj-reserve-authority/authority.sock ]]
++ systemctl start maj-vaj-reserve-relay.service
++ venv/bin/python -B scripts/qualify_r5r5_installed.py adopt
++ systemctl start maj-vaj-reserve-relay.timer maj-vaj-terminal-desk.timer;systemctl start "$U";P=$(systemctl show -P MainPID "$U")
++ for i in $(seq 1 45);do
++  if setpriv --reuid=maj-vaj --regid=maj-vaj --groups=maj-vaj-transfer venv/bin/python -B -c 'import time;from reserve_entry_worker import installed_gate;from reserve_runtime import desk_transaction;t=desk_transaction("/var/lib/maj-vaj/data");g,_,_=installed_gate(t);exec("with t() as db:\n assert g.account_projection(db,int(time.time()))[0].settled_cash_cents==10000")' >/dev/null 2>&1;then break;fi
++  sleep 2
++ done
++fi
++if [[ $MODE == checkpoint ]];then
++ setpriv --reuid=maj-vaj --regid=maj-vaj --groups=maj-vaj-transfer venv/bin/python -B scripts/qualify_r5r5_installed.py admit-checkpoint
++else
++ setpriv --reuid=maj-vaj --regid=maj-vaj --groups=maj-vaj-transfer venv/bin/python -B scripts/qualify_persistent_systemd_fixture.py admit
++fi
++orders(){ /usr/bin/python3 -c 'import sqlite3;d=sqlite3.connect("/var/lib/maj-vaj-native/paper/"+"a"*32+"/paper.sqlite");print(d.execute("select count(*) from orders").fetchone()[0])'; }
++for i in $(seq 1 45);do [[ $(orders) == 1 ]] && break; sleep 1;done
++[[ $(orders) == 1 && $(systemctl show -P MainPID "$U") == "$P" ]]
++# Publish a signed snapshot of the actual held order; stop automatic publication.
++systemctl stop maj-vaj-reserve-relay.timer;systemctl stop maj-vaj-reserve-relay.service;systemctl start maj-vaj-reserve-relay.service
++if [[ $MODE == expiry ]];then
++ # Retain the actual stale packet, no editing its time or signature, no clock mock.
++ sleep 32
++ [[ $(orders) == 1 && $(systemctl show -P MainPID "$U") == "$P" ]]
++ venv/bin/python -B - <<'PY1'
++from pathlib import Path
++import time
++assert time.time()-Path('/var/lib/maj-vaj-native-inbox/snapshot.bin').stat().st_mtime>=30
++PY1
++else
++ # The exact checkpoint really advances through the independent authority;
++ # the signed old snapshot is deliberately not renewed until after reduction.
++ venv/bin/python -B scripts/qualify_r5r5_installed.py revoke
++ setpriv --reuid=maj-vaj-native --regid=maj-vaj-native --groups=maj-vaj-transfer venv/bin/python -B - <<'PY1'
++import pwd
++from reserve_checkpoint import AuthorityStore,CheckpointError
++from reserve_native_handoff import open_reviewed
++n,d,a=(pwd.getpwnam(x) for x in ('maj-vaj-native','maj-vaj','maj-vaj-approval'))
++s=AuthorityStore('/var/lib/maj-vaj-reserve-authority',authority_uid=a.pw_uid,desk_uid=d.pw_uid)
++try:
++ with open_reviewed('/var/lib/maj-vaj-native-inbox','installed-paper',s,'/etc/maj-vaj/reserve-relay.pub',native_uid=n.pw_uid,native_gid=n.pw_gid,desk_uid=d.pw_uid,authority_uid=a.pw_uid):pass
++except CheckpointError as e:assert str(e)=='snapshot_checkpoint_changed',str(e)
++else:raise AssertionError('old checkpoint accepted')
++print('PASS actual still-unexpired signed snapshot rejected after independent checkpoint advance')
++PY1
++fi
++install -m644 /dev/null /run/maj-vaj-r5r5-target
++for i in $(seq 1 45);do [[ $(orders) == 2 ]] && break; sleep 1;done
++[[ $(orders) == 2 && $(systemctl show -P MainPID "$U") == "$P" && ! -e /var/lib/maj-vaj-terminal-outbox/pending.json ]]
++MODE=$MODE venv/bin/python -B - <<'PY'
++import sqlite3,os
++from financial_ledger import gate_reserve
++with sqlite3.connect('/var/lib/maj-vaj/data/desk.sqlite3',isolation_level=None) as db:
++ db.row_factory=sqlite3.Row;db.execute('BEGIN');assert gate_reserve(db,'a'*32)>0
++ assert db.execute("SELECT count(*) FROM gate_events WHERE action='native_released'").fetchone()[0]==0
++print('PASS real '+os.environ['MODE']+', same-PID reduce-only exit, held reservation before renewal')
++PY
++systemctl start maj-vaj-reserve-relay.service;systemctl start maj-vaj-reserve-relay.timer
++for i in $(seq 1 60);do
++ if /usr/bin/python3 -c 'import sqlite3;d=sqlite3.connect("/var/lib/maj-vaj/data/desk.sqlite3");assert d.execute("select count(*) from gate_events where action=\x27native_released\x27").fetchone()[0]==1' >/dev/null 2>&1;then break;fi
++ sleep 2
++done
++venv/bin/python -B - <<'PY'
++import sqlite3
++from financial_ledger import replay,observed,gate_reserve,SCALE
++with sqlite3.connect('/var/lib/maj-vaj/data/desk.sqlite3',isolation_level=None) as db:
++ db.row_factory=sqlite3.Row;db.execute('BEGIN');v=observed(replay(db)[0]['a'*32]);assert v['active']==100*SCALE and v['protected']==489510000 and v['qty']==v['pending']==gate_reserve(db,'a'*32)==0
++ assert db.execute("SELECT count(*) FROM gate_events WHERE action='native_released'").fetchone()[0]==1
++print('PASS exact authenticated PAPER settlement; no duplicate release; principal intact')
++PY
++[[ $(orders) == 2 && $(systemctl show -P MainPID "$U") == "$P" && $(systemctl show -P NRestarts "$U") == 0 ]]
++echo "PASS installed named-service $MODE scenario"

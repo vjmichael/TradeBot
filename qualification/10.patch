@@ -1,0 +1,588 @@
+diff --git a/credential_handoff.py b/credential_handoff.py
+new file mode 100644
+index 0000000..de576e1
+--- /dev/null
++++ b/credential_handoff.py
+@@ -0,0 +1,168 @@
++"""Local console -> independent credential login. Never carries authorization.
++
++The URI is a constant UI intent, not a ticket. Only the dedicated, active
++console principal may request its own session's termination; LightDM requires
++fresh credential-operator authentication before enrollment can begin.
++"""
++import os
++from pathlib import Path
++import pwd
++import socket
++import stat
++import subprocess
++import sys
++import tempfile
++
++from paper_credential_vault import harden_process
++from reserve_checkpoint import require
++from reserve_ipc import protected_dir
++from reserve_review_launcher import _login, _sessions, caller_session
++from reserve_review_session import read_source, select_cookie
++from reserve_review_events import SessionEvents
++
++URI = 'majvaj-account:open'
++CONSOLE = 'maj-vaj-console'
++MARKER = Path('/etc/maj-vaj/account-handoff-enabled')
++HANDLER = 'maj-vaj-account-handoff.desktop'
++BROWSER = '/usr/bin/chromium'
++BASE_ENV = {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'}
++
++
++def validate_uri(args):
++    require(tuple(args) == (URI,), 'account_handoff_request_refused')
++
++
++def identity():
++    user = pwd.getpwnam(CONSOLE)
++    uid = user.pw_uid
++    require(uid > 0 and os.getuid() == os.geteuid() == uid, 'account_console_required')
++    require(os.getgid() == os.getegid() == user.pw_gid and set(os.getgroups()) <= {user.pw_gid}
++            and set(os.getgrouplist(CONSOLE, user.pw_gid)) == {user.pw_gid}, 'account_console_groups')
++    require(all(uid != pwd.getpwnam(name).pw_uid and user.pw_gid != pwd.getpwnam(name).pw_gid
++                for name in ('maj-vaj-credential-operator', 'maj-vaj-vault', 'maj-vaj',
++                             'maj-vaj-dashboard-auth', 'maj-vaj-approval', 'maj-vaj-native')), 'account_console_separation')
++    with protected_dir(MARKER.parent, 0, 0o755) as fd:
++        f = os.open(MARKER.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=fd)
++        try:
++            st = os.fstat(f)
++            require(stat.S_ISREG(st.st_mode) and st.st_uid == 0 and st.st_nlink == 1 and not st.st_mode & 0o022,
++                    'account_handoff_disabled')
++        finally:
++            os.close(f)
++    session, display = _sessions(uid)
++    caller_session(session)
++    require(_login('show-session', session, '--property=Seat', '--value').strip() == 'seat0', 'account_console_seat')
++    home = Path(user.pw_dir)
++    require(home.is_absolute() and home != Path('/'), 'account_console_home')
++    auth = home / '.Xauthority'
++    require(os.environ.get('DISPLAY') == display and
++            os.environ.get('XAUTHORITY', str(auth)) == str(auth), 'account_console_display')
++    cookie = select_cookie(read_source(home, uid), display, socket.gethostname().encode())
++    result = subprocess.run(['/usr/bin/xhost'], check=True, stdout=subprocess.PIPE,
++                            stderr=subprocess.DEVNULL, text=True, timeout=5,
++                            env=BASE_ENV | {'DISPLAY': display, 'XAUTHORITY': str(auth)})
++    require([line.strip() for line in result.stdout.splitlines() if line.strip()] ==
++            ['access control enabled, only authorized clients can connect'], 'account_console_display_access')
++    require(_sessions(uid) == (session, display) and
++            select_cookie(read_source(home, uid), display, socket.gethostname().encode()) == cookie,
++            'account_console_session_changed')
++    caller_session(session)
++    import hashlib
++    return session, display, str(auth), hashlib.sha256(cookie).digest()
++
++
++def confirm():
++    import tkinter as tk
++    from tkinter import messagebox
++    root = tk.Tk()
++    root.withdraw()
++    try:
++        return messagebox.askokcancel('Maj Vaj — Open account connections',
++                                      'End this local Maj Vaj dashboard session and return to sign-in?\n\n'
++                                      'Choose Maj Vaj Account connections and authenticate with the credential-operator account. '
++                                      'No credential or trading authorization will be transferred.', parent=root)
++    finally:
++        root.destroy()
++
++
++def terminate(session):
++    # No sudo, service activation, target UID, password, or caller-specified session.
++    subprocess.run(['/usr/bin/loginctl', 'terminate-session', session], check=True,
++                   timeout=8, env=BASE_ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++
++
++def handoff(args, *, snapshot=identity, events_factory=SessionEvents, ask=confirm, end=terminate):
++    validate_uri(args)
++    start = snapshot()
++    with events_factory(start[0]) as events:
++        def guard():
++            events.check()
++            require(snapshot() == start, 'account_console_session_changed')
++            events.check()
++        guard()
++        if ask() is not True:
++            return False
++        guard()
++        end(start[0])
++        return True
++
++
++def console():
++    # A separately authenticated, dedicated browser session; no admin-token
++    # injection or profile reuse. Browser must retain its normal OS sandbox.
++    before = identity()
++    uid = os.getuid()
++    runtime = Path(f'/run/user/{uid}')
++    with protected_dir(runtime, uid, 0o700):
++        pass
++    require(os.environ.get('XDG_RUNTIME_DIR') == str(runtime), 'account_console_runtime')
++    require(os.environ.get('HOME') == pwd.getpwnam(CONSOLE).pw_dir, 'account_console_home')
++    require(Path(BROWSER).is_file() and os.access(BROWSER, os.X_OK), 'account_console_browser_missing')
++    # Do not pass secrets through argv, the environment or a protocol URL.
++    # Keep the PAM session bus environment supplied by the actual desktop.
++    env = BASE_ENV | {k: os.environ[k] for k in ('HOME', 'DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS', 'XDG_SESSION_TYPE', 'XDG_CURRENT_DESKTOP') if k in os.environ}
++    env['XAUTHORITY'] = before[2]
++    subprocess.run(['/usr/bin/xdg-mime', 'default', HANDLER, 'x-scheme-handler/majvaj-account'],
++                   check=True, timeout=8, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++    result = subprocess.run(['/usr/bin/xdg-mime', 'query', 'default', 'x-scheme-handler/majvaj-account'],
++                            check=True, timeout=8, env=env, capture_output=True, text=True)
++    require(result.stdout.strip() == HANDLER, 'account_console_handler_missing')
++    with SessionEvents(before[0]) as events, tempfile.TemporaryDirectory(prefix='maj-vaj-browser-', dir=runtime) as profile:
++        events.check()
++        require(identity() == before, 'account_console_session_changed')
++        child = subprocess.Popen([BROWSER, '--incognito', '--no-first-run', '--no-default-browser-check',
++                                  '--disable-sync', '--disable-background-networking', '--disable-component-update',
++                                  '--no-proxy-server', '--user-data-dir=' + profile, 'http://127.0.0.1:8765/'],
++                                 env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++        try:
++            while child.poll() is None:
++                events.check()
++                require(identity() == before, 'account_console_session_changed')
++                try:
++                    child.wait(timeout=0.5)
++                except subprocess.TimeoutExpired:
++                    pass
++        finally:
++            if child.poll() is None:
++                child.terminate()
++                try:
++                    child.wait(timeout=5)
++                except subprocess.TimeoutExpired:
++                    child.kill()
++                    child.wait()
++
++
++def main():
++    harden_process()
++    os.umask(0o077)
++    try:
++        if sys.argv[1:] == ['console']:
++            console()
++        else:
++            handoff(sys.argv[1:])
++    except Exception:
++        raise SystemExit('Local Maj Vaj account handoff unavailable. Sign out and choose Account connections at login.') from None
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/dashboard/app.js b/dashboard/app.js
+index 03179af..3b9058c 100644
+--- a/dashboard/app.js
++++ b/dashboard/app.js
+@@ -12,15 +12,15 @@ const panel = (title,...children) => h('section',{className:'panel'},h('h2',null
+ function cents(value) { if (!/^\d{1,10}(\.\d{1,2})?$/.test(value)) throw Error('Enter a valid dollar amount with up to two decimals.'); const [a,b='']=value.split('.'); const n=Number(a)*100+Number((b+'00').slice(0,2)); if(!Number.isSafeInteger(n)||n>100000000000)throw Error('Amount is outside the supported range.'); return n; }
+ class Desk extends React.Component {
+   constructor(props){super(props); this.state={logged:false,tab:'Dashboard',status:null,instances:[],setup:null,calendar:null,economic:null,busy:false,error:'',notice:'',wizard:false,step:1,form:this.newForm(),capital:'',market:null,marketAsset:'BTC',marketInterval:'60',profile:null,quality:null,storage:null,preparation:null,profileDays:'90',profileZone:'UTC',selected:null,directory:null,marketQuery:'',readiness:null,goalReport:null,goalDraft:null,goalInstance:null,historyReport:null,historyDays:'7',historyEnd:'',reserveReport:null,reserveDraft:null,reserveResult:null,reserveReview:null}; this.token=''; this.generation=0;}
+-  componentDidMount(){this.prepTimer=setInterval(()=>this.pollPreparation(),5000);}
+-  componentWillUnmount(){clearInterval(this.prepTimer);}
++  componentDidMount(){this.prepTimer=setInterval(()=>this.pollPreparation(),5000);this.leavePage=()=>this.logout();this.restorePage=e=>{if(e.persisted)this.logout();};window.addEventListener('pagehide',this.leavePage);window.addEventListener('pageshow',this.restorePage);}
++  componentWillUnmount(){clearInterval(this.prepTimer);window.removeEventListener('pagehide',this.leavePage);window.removeEventListener('pageshow',this.restorePage);this.token='';this.generation++;}
+   async pollPreparation(){const s=this.state,p=s.preparation,j=p&&p.job;if(!s.logged||s.tab!=='Market Research'||!j||(!(p.schedule&&p.schedule.enabled)&&j.state!=='running')||this.lock||this.prepPolling)return;this.prepPolling=true;const gen=this.generation;try{const v=await this.api('/api/data-preparation');const completed=j.state==='running'&&v.job.state!=='running'&&['backup','preview-retention','retire','consolidate','preview-rotation','rotate','vintages'].includes(j.mode);const storage=completed?await this.api('/api/market-storage'):s.storage;if(gen===this.generation&&!this.lock&&this.state.tab==='Market Research')this.setState({preparation:v,storage,prepOutdated:false});}catch(e){if(gen===this.generation&&!this.lock)this.setState({prepOutdated:true});}finally{this.prepPolling=false;}}
+   newForm(){return {name:'',pair:'BTC/USD',model:'',strategy_family:'research-assisted',history_years:'5',allocation:'',budget:'0'};}
+   async api(path, body){const res=await fetch(path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+this.token,...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',credentials:'omit',redirect:'error'}); if(res.status===401)throw Error('Authentication failed. Sign in again.'); if(!res.ok){const j=await res.json().catch(()=>({}));throw Error(typeof j.detail==='string'?j.detail:'Request failed.');}return res.json();}
+   async load(){const [status,instances,setup,calendar]=await Promise.all(['/api/status','/api/instances','/api/setup','/api/calendar'].map(p=>this.api(p)));return {status,instances,setup,calendar};}
+   async action(fn){if(this.lock)return; this.lock=true; const gen=this.generation;this.setState({busy:true,error:'',notice:''});try{await fn(gen);}catch(e){if(gen===this.generation)this.setState({error:e.message||'Request failed.'});}finally{this.lock=false;if(gen===this.generation)this.setState({busy:false});}}
+-  login(e){e.preventDefault();const input=e.currentTarget.elements.access;this.token=input.value;input.value='';this.action(async gen=>{try{const info=await this.load();if(gen===this.generation)this.setState({...info,logged:true,capital:(info.status.virtual_cap_cents/100).toFixed(2)});}catch(e){this.token='';throw e;}});}
+-  logout(){this.generation++;this.token='';this.setState({logged:false,status:null,instances:[],setup:null,calendar:null,economic:null,market:null,profile:null,quality:null,storage:null,preparation:null,selected:null,directory:null,marketQuery:'',readiness:null,wizard:false,step:1,form:this.newForm(),capital:'',tab:'Dashboard',goalReport:null,goalDraft:null,goalInstance:null,historyReport:null,historyDays:'7',historyEnd:'',reserveReport:null,reserveDraft:null,reserveResult:null,reserveReview:null,liveWarning:null,busy:false,error:'',notice:''});}
++  login(e){e.preventDefault();const input=e.currentTarget.elements.access;if(this.lock){input.value='';return;}this.token=input.value;input.value='';this.action(async gen=>{try{const info=await this.load();if(gen===this.generation)this.setState({...info,logged:true,capital:(info.status.virtual_cap_cents/100).toFixed(2)});}catch(e){this.token='';throw e;}});}
++  logout(){this.generation++;this.token='';this.setState({accountHelp:false,logged:false,status:null,instances:[],setup:null,calendar:null,economic:null,market:null,profile:null,quality:null,storage:null,preparation:null,selected:null,directory:null,marketQuery:'',readiness:null,wizard:false,step:1,form:this.newForm(),capital:'',tab:'Dashboard',goalReport:null,goalDraft:null,goalInstance:null,historyReport:null,historyDays:'7',historyEnd:'',reserveReport:null,reserveDraft:null,reserveResult:null,reserveReview:null,liveWarning:null,busy:false,error:'',notice:''});}
+   refresh(){if(this.state.tab==='Financial Goals'){this.loadGoals(this.state.goalInstance);return;}this.action(async gen=>{const info=await this.load();if(gen===this.generation)this.setState({...info,notice:'Dashboard refreshed.'});});}
+   saveCapital(e){e.preventDefault();this.action(async gen=>{const status=await this.api('/api/setup/paper-capital',{virtual_cap_cents:cents(this.state.capital)});if(gen===this.generation)this.setState({status,notice:'Paper capital saved. No real funds moved.'});});}
+   saveCredentials(e){e.preventDefault();if(this.state.setup.enrollment_mode==='dedicated_local_window')return;const form=e.currentTarget;const values={};for(const [slot] of slots){const value=form.elements[slot].value;if(value)values[slot]=value;form.elements[slot].value='';}this.action(async gen=>{const setup=await this.api('/api/setup/credentials',values);if(gen===this.generation)this.setState({setup,notice:'Credentials stored. Connections have not been verified.'});});}
+@@ -73,7 +73,7 @@ class Desk extends React.Component {
+       r&&f?h('div',{className:'columns'},panel('Monthly income planning',h('p',null,'For '+r.day.slice(0,7)+' · '+r.plan.days+' calendar days · '+r.zone),this.evidenceTable(['Planning estimate','USD'],[['After-tax funding shortfall',money(r.plan.shortfall_usd)],['Monthly pre-tax target',money(r.plan.monthly_pre_tax_usd)],['Daily equivalent',money(r.plan.daily_plan_usd)]],''),h('form',{onSubmit:e=>this.saveGoals(e)},input('Monthly expenses (USD)','expenses'),input('Other monthly take-home income (USD)','income'),input('Desired monthly savings (USD)','savings'),input('Additional monthly costs not counted above (USD)','costs'),input('Estimated tax rate (%)','tax'),input('Reporting time zone (IANA)','zone',{inputMode:'text',disabled:r.settings.version>0}),select('Daily goal type',{value:f.kind,onChange:e=>change('kind',e)},[['none','No personal target'],['usd','Dollars'],['points','Portfolio return points']]),f.kind!=='none'?input(f.kind==='usd'?'Daily target (USD)':'Daily target (points)','value'):null,f.kind!=='none'?select('After reaching daily goal',{value:f.after,onChange:e=>change('after',e)},[['continue','Continue within approved limits'],['stop','Stop new entries for the day'],['conservative','Continue with reduced limits']]):null,f.kind!=='none'&&f.after==='conservative'?input('Keep this percentage of approved risk limits','limit',{type:'number',min:1,max:99,step:1}):null,h('p',{className:'hint'},'Reduced limits only narrow approved order, exposure and loss ceilings. Stop and reduced limits apply to new entries, never exits, until the next reporting day even if profit later falls. Missing verified point baseline blocks new entries when a restrictive point goal is selected. Smaller orders still need to meet exchange minimums.'),h('p',{className:'hint'},'1 point = 1% of verified opening active equity, excluding protected profit. Later setting updates take effect on the next local calendar day. Changing the reporting calendar after the first save requires a separate migration.'),h('button',{type:'submit',disabled:s.busy},'Save planning settings'),h('p',{className:'hint'},'Saved version '+r.settings.version+' · effective '+r.settings.effective_day+' · current version '+r.effective_version))),
+       panel('Daily progress',h('p',{className:'muted'},r.day+' · posted financial records · PAPER'),this.evidenceTable(['Metric','Value'],[['Net realized today',money(r.daily_realized_usd)],['Net settled today',money(r.daily_settled_usd)],['Daily return points',points(r.daily_points)],['Opening active equity',money(r.day_start_active_usd)],['Personal daily dollar target',money(r.target_usd)],['Personal daily points target',points(r.target_points)],['Remaining daily target',money(r.target_shortfall_usd)],['Month-to-date net realized',money(r.month_realized_usd)],['Opening baseline evidence',r.baseline_state==='verified_open_bid_snapshot'?'Verified open position at pre-midnight bid':r.baseline_state==='verified_flat_snapshot'?'Verified flat wallet':'Unavailable'],['Execution-day original sales P/L',money(r.execution_day_original_pl_usd)],['Execution-month original sales P/L',money(r.execution_month_original_pl_usd)],['Unattributed sales (day / month)',r.execution_day_unknown+' / '+r.execution_month_unknown],['Posted adjustments today',money(r.posting_day_adjustments_usd)],['Posted adjustments this month',money(r.posting_month_adjustments_usd)],['Trading fees today',money(r.daily_fees_usd)],['Trading fees this month',money(r.month_fees_usd)],['Authorized original principal',money(r.authorized_principal_usd)],['Active cash',money(r.active_cash_usd)],['Protected settled profit',money(r.protected_usd)],['Unrealized P/L (ledger mark)',money(r.unrealized_usd)],['Active equity (excludes protected)',money(r.active_equity_usd)],['Active equity change (includes transfers)',money(r.active_equity_change_usd)],['Actual service costs',money(r.actual_service_costs_usd)],['Withdrawals','Not available']],''),r.goal_notification?h('p',{role:'status',className:'notice'},'Verified daily goal reached. '+(r.goal_pause_latched?'New entries paused for this reporting day. Protective exits continue.':r.conservative_active_bps?'Reduced risk limits active: '+(r.conservative_active_bps/100)+'% of approved ceilings. Protective exits continue.':'Notification only; no entry pause.')):r.target_reached===true?h('p',{className:'hint'},'Recorded goal reached; awaiting verified financial confirmation.'):null,r.goal_pause_enabled?h('p',{className:'hint'},'Daily goal entry restriction is enabled. Other risk and manual pauses are unchanged.'):null,r.conservative_bps?h('p',{className:'hint'},'Conservative continuation configured: '+(r.conservative_bps/100)+'% of approved ceilings after verified goal. No guaranteed profit or additional capital.'):null,r.baseline_state==='unavailable'?h('p',{className:'hint'},'No verified day-start observation. Dollar progress is shown when available; points cannot be calculated from today’s balance.'):null,!r.posting_time_valid?h('p',{className:'warning'},'Posting clock inconsistency. Daily progress unavailable.'):null,r.reserve_earmarks_usd?this.evidenceTable(['Protected reserve allocation','USD'],Object.entries(r.reserve_earmarks_usd).map(([k,v])=>[({tax:'Estimated tax',household:'Household',emergency:'Emergency savings',savings:'Other savings'})[k]||k,money(v)]),''):null,h('p',{className:'hint'},'Goals use journal posting time, including corrections when posted. Execution-day figures separately use bounded native full-fill observations, exclude adjustments, and show unavailable when evidence is incomplete. Opening bid equity is a mark, not guaranteed exit proceeds. Goals are not permission to trade. A new local day expires only its goal restriction.'))):null,r&&f?this.financialHistory():null,r&&f?this.reinvestment():null);
+   }
+-  accountConnections(){const s=this.state;if(s.setup.enrollment_mode==='dedicated_local_window')return panel('1. Account connections',h('p',{className:'muted'},'Connect through the dedicated local Account connections window. API keys and bot tokens never enter this browser. PAPER testing only.'),...slots.map(([slot,label])=>h('p',{key:slot},label+' · '+(textStatus[s.setup.credentials[slot]]||'Unavailable'))),h('p',{className:'muted'},'Kraken trading keys and provider connection tests are not enabled yet.'),button('Manage account connections',()=>this.setState({accountHelp:!s.accountHelp})),s.accountHelp?h('div',null,h('p',null,'On the Maj Vaj computer, sign out of the current desktop, select the Maj Vaj Account connections session at the login screen, and sign in with your credential-operator account. The secure window opens automatically.'),h('p',{className:'hint'},'Return here and refresh after saving or removing a connection. Removing a saved key does not revoke it at its provider.')):null,button('Refresh connection status',()=>this.refresh(),{disabled:s.busy}),!s.setup.vault_available?h('p',{className:'warning'},'The credential service is unavailable.'):null);return panel('1. Account connections',h('p',{className:'muted'},'Development only: use test credentials here. Never enter a withdrawal or trading-enabled key. Connection verification and production credential custody are not available in this build.'),h('form',{onSubmit:e=>this.saveCredentials(e),autoComplete:'off'},...slots.map(([slot,label])=>h('div',{key:slot},field(label,{name:slot,type:'password',maxLength:8192,autoComplete:'new-password',disabled:s.busy||!s.setup.vault_available}),h('p',{className:'hint'},textStatus[s.setup.credentials[slot]]))),h('button',{type:'submit',disabled:s.busy||!s.setup.vault_available},'Save credentials')),!s.setup.vault_available?h('p',{className:'warning'},'Secure storage is not configured on this server.'):null);}
++  accountConnections(){const s=this.state;if(s.setup.enrollment_mode==='dedicated_local_window')return panel('1. Account connections',h('p',{className:'muted'},'Connect through the dedicated local Account connections window. API keys and bot tokens never enter this browser. PAPER testing only.'),...slots.map(([slot,label])=>h('p',{key:slot},label+' · '+(textStatus[s.setup.credentials[slot]]||'Unavailable'))),h('p',{className:'muted'},'Kraken trading keys and provider connection tests are not enabled yet.'),button('Manage account connections',()=>this.setState({accountHelp:!s.accountHelp})),s.accountHelp?h('div',null,h('p',null,'On the Maj Vaj computer, use Open secure account sign-in from the dedicated Trading desk session. Confirm the local sign-out, select Maj Vaj Account connections at the login screen, and authenticate with your credential-operator account. The browser signs out; no token is transferred.'),h('a',{href:'majvaj-account:open',className:'account-handoff',onClick:()=>this.logout()},'Open secure account sign-in'),h('p',{className:'hint'},'If the local handler is unavailable, sign out of the Maj Vaj computer manually and select Account connections. On a remote browser, use the physical Maj Vaj computer. Sign in to the desk again after making changes. Removing a saved key does not revoke it at its provider.')):null,button('Refresh connection status',()=>this.refresh(),{disabled:s.busy}),!s.setup.vault_available?h('p',{className:'warning'},'The credential service is unavailable.'):null);return panel('1. Account connections',h('p',{className:'muted'},'Development only: use test credentials here. Never enter a withdrawal or trading-enabled key. Connection verification and production credential custody are not available in this build.'),h('form',{onSubmit:e=>this.saveCredentials(e),autoComplete:'off'},...slots.map(([slot,label])=>h('div',{key:slot},field(label,{name:slot,type:'password',maxLength:8192,autoComplete:'new-password',disabled:s.busy||!s.setup.vault_available}),h('p',{className:'hint'},textStatus[s.setup.credentials[slot]]))),h('button',{type:'submit',disabled:s.busy||!s.setup.vault_available},'Save credentials')),!s.setup.vault_available?h('p',{className:'warning'},'Secure storage is not configured on this server.'):null);}
+   settings(){const s=this.state;return h('div',{className:'columns'},this.accountConnections(),panel('2. Paper capital',h('p',{className:'muted'},'This is simulated capital, not your Kraken balance.'),h('form',{onSubmit:e=>this.saveCapital(e)},field('Total virtual capital (USD)',{value:s.capital,onChange:e=>this.setState({capital:e.target.value}),inputMode:'decimal',required:true}),h('button',{type:'submit',disabled:s.busy},'Save paper capital')),h('p',null,'Allocated: '+funds(s.status.allocated_cents)),h('p',{className:'muted'},'No real-money execution is available.'),button('Continue to add instance',()=>{this.setState({tab:'Dashboard'});this.add();},{disabled:s.busy||s.status.virtual_cap_cents<=s.status.allocated_cents})),panel('3. Cloud deployment',h('p',null,'DigitalOcean · Linux (planned)'),h('p',{className:'muted'},'This is a local development dashboard. Secure remote sign-in, HTTPS, Telegram chat pairing, recovery, connection tests and backups require deployment qualification.')));}
+   overview(){const s=this.state;return h('div',null,h('div',{className:'metrics'},...[[ 'Virtual capital',funds(s.status.virtual_cap_cents) ],['Allocated',funds(s.status.allocated_cents)],['Available',funds(Math.max(0,s.status.virtual_cap_cents-s.status.allocated_cents))],['Instances',String(s.instances.length)]].map(([label,value])=>h('div',{className:'metric',key:label},h('span',null,label),h('strong',null,value)))),h('div',{className:'section-head'},h('h2',null,'Trading instances'),button('+ Add instance',()=>this.add(),{disabled:s.busy})),s.instances.length===0?panel('Create your first instance',h('p',null,'Set up your paper capital and register a BTC, ETH or SOL trading instance. Historical preparation must finish before simulated trading begins.'),button('Open setup',()=>this.setState({tab:'Settings'}),{className:'secondary'})):h('div',{className:'instance-grid'},...s.instances.map(i=>h('article',{key:i.id,className:'panel instance'},h('div',{className:'section-head'},h('h3',null,i.name),h('span',{className:'tag'},'PAUSED')),h('p',null,i.pair+' · Kraken Spot'),h('strong',{className:'amount'},funds(i.virtual_cents)),h('p',{className:'muted'},'Waiting for historical preparation'),h('p',{className:'hint'},(i.strategy_family==='numerical-baseline'?'Numerical only · No Grok required':'Grok '+(i.model||'not selected'))+' · '+i.history_years+' years requested · '+funds(i.monthly_budget_cents)+' monthly research budget (not active)'),h('label',{className:'switch-label'},h('input',{type:'checkbox',checked:true,onChange:()=>this.live(i),'aria-label':'Paper trading for '+i.name,disabled:s.busy}),'Paper trading'),button('View preparation',()=>this.setState({selected:s.selected===i.id?null:i.id}),{className:'secondary'}),s.selected===i.id?h('ol',{className:'steps'},...stages.map((v,k)=>h('li',{key:v},v+' — '+(k===0?'Registration complete':'Not started')))):null))),h('p',{className:'muted'},'Engine not attached to this dashboard. No positions, orders or performance data are available yet.'));}
+   async loadProfile(e){e.preventDefault();this.action(async gen=>{this.setState({profile:null});const p=await this.api('/api/markets/'+this.state.marketAsset+'/session-profile?days='+this.state.profileDays+'&zone='+encodeURIComponent(this.state.profileZone));if(gen===this.generation)this.setState({profile:p});});}
+diff --git a/dashboard/style.css b/dashboard/style.css
+index 6e150a9..3936ad8 100644
+--- a/dashboard/style.css
++++ b/dashboard/style.css
+@@ -1,3 +1,6 @@
+ :root{color-scheme:dark;font:16px/1.55 system-ui,sans-serif;background:#101820;color:#e8edf1;--panel:#19252e;--border:#34434e;--muted:#a6b5c0;--accent:#86d9ba}*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{border:1px solid transparent;background:var(--accent);color:#102b23;padding:.7rem 1rem;border-radius:8px;font-weight:650;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #b4e5ff;outline-offset:3px}button.secondary{color:#e8edf1;background:#25343f;border-color:var(--border)}button.danger{background:#44282b;color:#ffd8d5;border-color:#754346}.shell{max-width:1400px;margin:auto}header{padding:1.25rem 2rem;display:flex;justify-content:space-between;gap:1rem;align-items:center;border-bottom:1px solid var(--border)}.brand{font-size:1.6rem;letter-spacing:-.04em}.subtitle{color:var(--muted);margin-left:1rem}nav{display:flex;gap:.4rem;padding:.8rem 2rem;overflow:auto;border-bottom:1px solid var(--border)}nav button{white-space:nowrap;background:transparent;color:var(--muted);font-size:.9rem}nav button.active{color:var(--accent);background:#233c37}.content{padding:1.5rem 2rem 3rem}.section-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}.actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}h1,h2,h3{line-height:1.2;margin:0 0 .8rem}h1{font-size:1.8rem}h2{font-size:1.25rem}h3{font-size:1.15rem}p{margin:.65rem 0}.tag{border-radius:5px;background:#394741;color:#c6ecd9;font-size:.75rem;font-weight:700;padding:.35rem .6rem;white-space:nowrap}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;margin:1rem 0 2rem}.metric,.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.2rem;min-width:0}.metric span{color:var(--muted);display:block;font-size:.85rem}.metric strong,.amount{display:block;font-size:1.45rem;overflow-wrap:anywhere}.panel{margin:1rem 0}.columns,.instance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.columns .panel,.instance-grid .panel{margin:0}.muted,.hint{color:var(--muted)}.hint{font-size:.8rem;margin:0 0 .9rem}.field{display:block;margin:.7rem 0 .4rem}.field span{display:block;font-size:.9rem;margin-bottom:.35rem;color:#d5e0e8}.field input,.field select{width:100%;min-width:0;background:#101b23;border:1px solid #52616c;border-radius:7px;padding:.63rem;color:#eef3f6}.warning,.notice{border:1px solid #705c45;background:#30281f;padding:.7rem 1rem;border-radius:7px;color:#ffe1ac}.notice{border-color:#426457;background:#20382f;color:#bcead4}.switch-label{display:flex;align-items:center;gap:.6rem;margin:1rem 0}.switch-label input{accent-color:var(--accent);width:1.2rem;height:1.2rem}.steps{padding:0 0 0 1.35rem;color:var(--muted);font-size:.9rem}.wizard{max-width:700px}.wizard .actions{margin-top:1.3rem}.signin{max-width:460px;margin:8vh auto;padding:1rem}.signin .panel{padding:2rem}.inline-form{display:flex;align-items:end;gap:1rem;flex-wrap:wrap}.inline-form .field{min-width:125px}.table-scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{border-bottom:1px solid var(--border);padding:.6rem;text-align:left;white-space:nowrap}th{color:var(--muted)}.loading{margin:3rem}.panel p{overflow-wrap:anywhere}@media(max-width:700px){header,.content{padding:1rem}nav{padding:.6rem 1rem}.subtitle{display:none}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}.metric{padding:.8rem}.metric strong{font-size:1.12rem}.columns,.instance-grid{grid-template-columns:minmax(0,1fr)}.section-head h1{font-size:1.55rem}header .actions{justify-content:flex-end}.signin{margin:2vh auto}}@media(max-width:360px){header{flex-wrap:wrap}.metrics{grid-template-columns:1fr}}
+ 
+ .heatmap td,.heatmap th{padding:.35rem .32rem;text-align:center;font-size:.7rem}.heatmap{min-width:760px}.heatmap td{border:2px solid var(--panel)}.heat-missing{background:#23303a;color:#a6b5c0}.heat-0{background:#1d3a40;color:#d9ecef}.heat-1{background:#245151;color:#d9ecef}.heat-2{background:#316a5d;color:#e7faf0}.heat-3{background:#43846b;color:#fff}.heat-4{background:#70b78e;color:#102b23}.heat-5{background:#a0dfac;color:#102b23}
++
++.account-handoff {display:inline-block;padding:0.55rem 0.8rem;border:1px solid currentColor;border-radius:6px;font-weight:600;color:inherit;margin:0.25rem 0;}
++.account-handoff:focus-visible {outline:2px solid currentColor;outline-offset:3px;}
+diff --git a/deploy/maj-vaj-account-handoff.desktop b/deploy/maj-vaj-account-handoff.desktop
+new file mode 100644
+index 0000000..7d12bc9
+--- /dev/null
++++ b/deploy/maj-vaj-account-handoff.desktop
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Type=Application
++Name=Open Maj Vaj Account connections
++Exec=/opt/maj-vaj/scripts/account_handoff_wrapper.sh %u
++TryExec=/opt/maj-vaj/scripts/account_handoff_wrapper.sh
++NoDisplay=true
++Terminal=false
++MimeType=x-scheme-handler/majvaj-account;
+diff --git a/deploy/maj-vaj-console.desktop b/deploy/maj-vaj-console.desktop
+new file mode 100644
+index 0000000..12cfeae
+--- /dev/null
++++ b/deploy/maj-vaj-console.desktop
+@@ -0,0 +1,7 @@
++[Desktop Entry]
++Type=Application
++Name=Maj Vaj Trading desk
++Comment=Dedicated local PAPER browser session
++Exec=/opt/maj-vaj/scripts/account_console_wrapper.sh
++TryExec=/opt/maj-vaj/scripts/account_console_wrapper.sh
++DesktopNames=MajVajConsole
+diff --git a/docs/tasks.md b/docs/tasks.md
+index a20687a..2ccce97 100644
+--- a/docs/tasks.md
++++ b/docs/tasks.md
+@@ -452,12 +452,16 @@ Operator requirement (2026-11-20): Settings → Account connections is the singl
+ 
+ | Subtask | Binding scope and acceptance | State |
+ |---|---|---|
+-| TB-SEC-KEY-01-R2A | Settings → Account connections: status-only cards, Connect/Test/Replace/Disconnect; launch authenticated independent secure credential window; masked write-only input, cancellation and session-loss refusal, no browser persistence or plaintext readback, actionable non-secret status and errors; disable legacy enrollment in installed mode. | Scoped installed enrollment/status/lock PASS; authenticated direct handoff and browser closeout pending |
++| TB-SEC-KEY-01-R2A | Settings → Account connections: status-only cards, Connect/Test/Replace/Disconnect; launch authenticated independent secure credential window; masked write-only input, cancellation and session-loss refusal, no browser persistence or plaintext readback, actionable non-secret status and errors; disable legacy enrollment in installed mode. | Scoped installed enrollment/status/lock PASS; R2A-R1 handoff implementation and local tests PASS; installed browser and positive handoff acceptance pending |
+ | TB-SEC-KEY-01-R2B | Kraken separate read-only and trading credential pairs, permission verification through an isolated authorized adapter; refuse withdrawal and transfer permissions, unverified scopes and unintended trading; distinguish test connectivity from authorization, prohibit live orders, support rotation/revocation and readiness receipts. Telegram desk and recovery bot pairing separately, verify bot identity and explicit intended chat, send operator-requested test notification without exposing token or credential-bearing URL; delivery success/failure, replace/remove and notification non-disclosure. Preserve optional Grok as a separate opt-in restricted account connection, no model access to other credentials. | Planned |
+ | TB-SEC-KEY-01-R2C | Complete original R2 release-gate obligations: installed browser/session/cache/autofill/error/support/notification and constrained outbound synthetic-canary matrix, authenticated KEK rotation, operator-reviewed encrypted recovery with separate custody; verify restart, corruption, cancellation and previous-key/session invalidation. | Planned |
+ 
+ Acceptance: test the installed graphical flow with synthetic credentials and mock/sandbox providers, including valid and invalid inputs, refused/unknown Kraken permissions, wrong Telegram bot/chat, failed connectivity, replacement, local disconnect versus provider-side revocation, explicit test notifications, restart, unauthorized identity refusal and no secret propagation into desk, browser persistence, public workers, Cognitum, logs, archives or outputs. Never request wallet seed phrases or private keys. No production remote enrollment until authenticated TLS and remaining deployment gates pass. No actual credentials, live trading or production activation authorized. R1 accepted evidence retained; full gate stays open until all relevant installed tests pass.
+ 
++## TB-SEC-KEY-01-R2A-R1 — local authenticated account handoff (partial acceptance)
++
++Implemented fixed local handoff intent, explicit confirmation, separate console identity and browser-state retirement. Focused 9/9; full Python 541 PASS, 2 optional skips. Actual installed negative identity tests passed; authenticated local fixture reached the console, but positive confirmation and browser acceptance remain unqualified (missing exact locked npm packages and guest Chromium/xdg-utils; host browser policy refused initial navigation). See [handoff qualification](tb-sec-key-01-r2ar1-handoff.md). Keep this gate open; no provider calls or LIVE authorization.
++
+ ## TB-SEC-KEY-01-R2A — independent graphical enrollment (scoped installed PASS)
+ 
+ Local graphical account connections implemented: status-only dashboard, immutable scope of local write API, independent credential-operator identity and private X11 session, masked confirmation/write/replace/remove and fixed errors. 532/534 full local tests passed (2 optional skips), focused 7/7; real systemd status and separate UID refusals and actual LightDM graphical Kraken save/replace/remove, both Telegram roles and Grok enrollment and lock refusal PASS, synthetic canaries absent in checked disk/journals, final nine runtime hashes and guest integrity PASS. Direct authenticated browser-to-local window handoff and actual browser persistence, further interruption matrix and all provider verification remain open. [Qualification](tb-sec-key-01-r2a-graphical-enrollment.md). Continue R2A-R1 integrated handoff and installed browser acceptance, then R2B/C; no live authorization, real credentials, CI or mainline changes.
+diff --git a/docs/tb-sec-key-01-r2ar1-handoff.md b/docs/tb-sec-key-01-r2ar1-handoff.md
+new file mode 100644
+index 0000000..e981c15
+--- /dev/null
++++ b/docs/tb-sec-key-01-r2ar1-handoff.md
+@@ -0,0 +1,18 @@
++# TB-SEC-KEY-01-R2A-R1 — local authenticated account handoff
++
++Status: implementation candidate, partial acceptance. No real credentials, provider calls or live authorization.
++
++## Implementation
++
++Settings retains status-only account connections for installed mode. The opt-in local handoff is the fixed `majvaj-account:open` intent, without a bearer, credential, caller-selected target, or trading authorization. Clicking the handoff clears the browser's authenticated application state; page departure and persisted-page restoration also clear that state. A dedicated, independently authenticated `maj-vaj-console` Linux desktop is designed to start a local browser with a temporary private profile. The handler requires the console principal, separated groups, an explicit root-owned activation marker, the same active local seat and caller session, and a stable private display identity. It requires explicit local confirmation to end only its own session; entry to the existing independent credential-operator desktop requires fresh OS authentication. Cancellation, changed identity and lock events refuse the transition. Local manual sign-out remains the fallback; a remote browser does not gain a local launch or enrollment capability. The native browser and desktop provisioning require administrator review and cannot create credentials or enable trading. The original development test-only form remains distinct.
++
++## Executed qualification
++
++- Restored R2A source candidate and retained locked React 18.3.1 dependencies unchanged.
++- Nine focused handoff tests passed. Full Python suite: 543 discovered, 541 passed, two optional skips, exit 0. Node render/source check and Python/shell syntax checks passed.
++- Offline QEMU child of the previously qualified Debian desktop: nine changed runtime/deployment files were hashed; provision preflight refused missing Chromium and xdg-utils, as expected. Desk, credential operator, dashboard-auth and a console principal with no active local session were refused. A test-only LightDM fixture reached an authenticated console seat, following initial greeter authentication/session-selection retries; positive native confirmation and session retirement were NOT verified. Fixture teardown completed; child disk check passed and all three backing image hashes remained unchanged.
++- The shared npm cache contained React 19, not the exact React 18.3.1 lock. Offline locked install failed. Host browser smoke attempted with separate compatibility fixture assets, not a replacement lockfile or production build; Chromium returned ERR_BLOCKED_BY_ADMINISTRATOR on initial navigation. No browser security or persistence result is claimed; no restriction was bypassed. Prepared synthetic browser test remains unexecuted beyond initial navigation. Browser-to-desktop URI dispatch, browser lifecycle and no-persistence checks, actual confirmation/cancellation and fresh credential operator login after handoff require qualification on an authorized installed desktop with the exact assets and supported browser.
++
++## Remaining gates
++
++Obtain/restore the exact locked dashboard npm packages and a supported offline browser/xdg package set (or an authorized equivalent deployment environment), then execute installed positive and negative handoff, browser persistence, independent identity and post-handoff graphical enrollment checks. This is local console handoff, not remote HTTPS account enrollment. R2B provider permission checks/pairing, R2C security and recovery, and separate PAPER/forward-validation release gates remain open. Do not enter real credentials.
+diff --git a/scripts/account_console_wrapper.sh b/scripts/account_console_wrapper.sh
+new file mode 100755
+index 0000000..1fb1b2d
+--- /dev/null
++++ b/scripts/account_console_wrapper.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++set -eu
++expected=/opt/maj-vaj/scripts/account_console_wrapper.sh
++[ "$#" -eq 1 ] && [ "$1" = "$expected" ] || exit 1
++exec /opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from credential_handoff import main;main()' console
+diff --git a/scripts/account_handoff_wrapper.sh b/scripts/account_handoff_wrapper.sh
+new file mode 100755
+index 0000000..c7d49c2
+--- /dev/null
++++ b/scripts/account_handoff_wrapper.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++# Unprivileged, fixed external-protocol handler. No shell evaluation of URI.
++set -eu
++[ "$#" -eq 1 ] && [ "$1" = 'majvaj-account:open' ] || exit 1
++exec /opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from credential_handoff import main;main()' "$1"
+diff --git a/scripts/provision_account_handoff.sh b/scripts/provision_account_handoff.sh
+new file mode 100755
+index 0000000..1059f53
+--- /dev/null
++++ b/scripts/provision_account_handoff.sh
+@@ -0,0 +1,41 @@
++#!/bin/bash
++# Root-reviewed staging only. Never creates a login password, enables a marker,
++# changes an existing session, or enables exchange access.
++set -euo pipefail
++[[ $# == 1 && ( $1 == --check || $1 == --install ) ]] || exit 2
++[[ $EUID == 0 && $(cat /proc/1/comm) == systemd ]] || exit 1
++cd /opt/maj-vaj
++for p in chromium xdg-utils lightdm lightdm-gtk-greeter xserver-xorg-core x11-xserver-utils xauth libpam-systemd libsystemd0; do
++ [[ $(dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null || :) == 'ii ' ]] || { echo "Missing installed package: $p" >&2; exit 1; }
++done
++venv/bin/python -I -B - <<'PY'
++import grp,os,pwd,stat,tkinter
++from pathlib import Path
++names=('maj-vaj-console','maj-vaj-credential-operator','maj-vaj-vault','maj-vaj','maj-vaj-dashboard-auth','maj-vaj-approval','maj-vaj-native')
++users=[pwd.getpwnam(n) for n in names];p=users[0]
++assert all(u.pw_uid>0 for u in users) and len({u.pw_uid for u in users})==len(users)
++assert p.pw_gid==grp.getgrnam(p.pw_name).gr_gid and p.pw_gid not in {u.pw_gid for u in users[1:]}
++assert set(os.getgrouplist(p.pw_name,p.pw_gid))=={p.pw_gid}
++assert all(u.pw_gid!=p.pw_gid or u.pw_name==p.pw_name for u in pwd.getpwall())
++assert set(grp.getgrnam(p.pw_name).gr_mem)<={p.pw_name}
++home=Path(p.pw_dir);st=home.lstat()
++assert home.is_absolute() and home!=Path('/') and stat.S_ISDIR(st.st_mode) and st.st_uid==p.pw_uid and stat.S_IMODE(st.st_mode)==0o700
++assert p.pw_shell not in ('/usr/sbin/nologin','/sbin/nologin','/bin/false') and os.access(p.pw_shell,os.X_OK)
++assert not Path('/var/lib/systemd/linger/maj-vaj-console').exists()
++for n in ('.','credential_handoff.py','scripts','scripts/account_handoff_wrapper.sh','scripts/account_console_wrapper.sh','scripts/review_session_wrapper.sh','deploy','deploy/maj-vaj-account-handoff.desktop','deploy/maj-vaj-console.desktop'):
++ s=Path(n).lstat();assert s.st_uid==0 and not s.st_mode&0o022 and not stat.S_ISLNK(s.st_mode)
++for n in ('scripts/account_handoff_wrapper.sh','scripts/account_console_wrapper.sh','scripts/review_session_wrapper.sh'):
++ assert os.access(n,os.X_OK)
++print('Dedicated local console source and identity preflight passed.')
++PY
++[[ $1 == --install ]] || exit 0
++for pair in 'deploy/maj-vaj-console.desktop:/usr/share/xsessions/maj-vaj-console.desktop' 'deploy/maj-vaj-account-handoff.desktop:/usr/share/applications/maj-vaj-account-handoff.desktop'; do
++ src=${pair%%:*}; dest=${pair#*:}
++ if [[ -e $dest || -L $dest ]];then
++  [[ ! -L $dest && -f $dest && $(stat -c '%u:%a' "$dest") == 0:644 ]] && cmp -s "$src" "$dest" || exit 1
++ else
++  install -o root -g root -m644 "$src" "$dest"
++ fi
++done
++if command -v update-desktop-database >/dev/null; then update-desktop-database /usr/share/applications; fi
++echo 'Installed console and URI entries. Review the dedicated seat setup and activate account-handoff-enabled separately.'
+diff --git a/scripts/qualify_account_browser.py b/scripts/qualify_account_browser.py
+new file mode 100644
+index 0000000..740b2bb
+--- /dev/null
++++ b/scripts/qualify_account_browser.py
+@@ -0,0 +1,122 @@
++"""Disposable synthetic-only private gateway/browser qualification.
++
++Run serve under the pinned server runtime, then browser under Playwright. The
++optional compatibility assets are for an explicitly nonqualifying smoke test.
++Never use against a real desk; the test creates a fresh local vault and backend.
++"""
++import argparse
++from pathlib import Path
++import base64
++import os
++import sys
++import tempfile
++import threading
++import time
++
++ROOT = Path(__file__).resolve().parents[1]
++TOKEN = 'synthetic-r2ar1-browser-bearer-' * 2
++CANARY = 'synthetic-r2ar1-provider-value-not-for-browser'
++BASE = 'http://127.0.0.1:8765'
++
++
++def serve(directory, assets):
++    sys.path.insert(0, str(ROOT))
++    from cryptography.fernet import Fernet
++    from paper_credential_vault import PaperVault, Server, send, checked_status
++    import paper_credential_vault
++    from tradebot import create_app
++    from dashboard_auth_gateway import create_gateway
++    import httpx
++    import uvicorn
++    if not directory.is_dir() or any(directory.iterdir()):
++        raise RuntimeError('empty disposable fixture directory required')
++    vault_dir = directory / 'vault'; vault_dir.mkdir(mode=0o700)
++    vault = PaperVault(vault_dir, Fernet.generate_key())
++    vault.enroll({'grok':CANARY})
++    status = Server(directory/'status.sock', vault, os.getuid(), read_only=True)
++    worker = threading.Thread(target=status.serve_forever,daemon=True);worker.start()
++    paper_credential_vault.dashboard_status = lambda: checked_status(send({'op':'status'}, directory/'status.sock', os.getuid()))
++    backend_path = str(directory/'backend.sock')
++    backend=uvicorn.Server(uvicorn.Config(create_app(directory/'desk',None,_private_backend=True,dashboard_dir=assets),uds=backend_path,access_log=False,log_level='warning'))
++    thread=threading.Thread(target=backend.run,daemon=True);thread.start()
++    for _ in range(200):
++        if backend.started:break
++        time.sleep(.05)
++    else:raise RuntimeError('backend did not start')
++    try:
++        uvicorn.run(create_gateway(TOKEN,lambda:httpx.AsyncHTTPTransport(uds=backend_path)),host='127.0.0.1',port=8765,access_log=False,log_level='warning',proxy_headers=False)
++    finally:
++        backend.should_exit=True;thread.join(10);status.shutdown();worker.join(5);status.server_close()
++
++
++def browser(directory, executable, expected_version):
++    from playwright.sync_api import sync_playwright, expect
++    errors=[]; external=[]; leaks=[]; requests=[]
++    variants = [v for x in (TOKEN,CANARY) for v in (x.encode(),x.encode().hex().encode(),base64.b64encode(x.encode()))]
++    def check_storage(page):
++        data=page.evaluate('''async()=>({local:Object.keys(localStorage),session:Object.keys(sessionStorage),cookies:document.cookie,db:(await indexedDB.databases()).length,caches:(await caches.keys()).length,workers:(await navigator.serviceWorker.getRegistrations()).length})''')
++        assert data=={'local':[],'session':[],'cookies':'','db':0,'caches':0,'workers':0},'unexpected browser state'
++    def sign_in(page):
++        page.get_by_label('Admin access token').fill(TOKEN)
++        page.get_by_role('button',name='Sign in',exact=True).click()
++        expect(page.get_by_role('heading',name='Dashboard',exact=True)).to_be_visible()
++    def open_settings(page):
++        page.get_by_role('button',name='Settings',exact=True).click()
++        expect(page.get_by_text('Grok API key · Stored · not verified',exact=True)).to_be_visible()
++        assert page.locator('input[type=password]').count()==0
++        assert page.get_by_role('button',name='Save credentials').count()==0
++        page.get_by_role('button',name='Manage account connections').click()
++        link=page.get_by_role('link',name='Open secure account sign-in')
++        expect(link).to_have_attribute('href','majvaj-account:open')
++        return link
++    with sync_playwright() as p:
++        profile=directory/'profile'
++        # The host smoke uses Playwright's default process sandbox policy, not the
++        # installed console launcher. Real enrolled credentials are forbidden.
++        ctx=p.chromium.launch_persistent_context(str(profile),executable_path=executable,headless=True,args=['--disable-sync','--disable-background-networking','--no-proxy-server'])
++        try:
++            page=ctx.pages[0]
++            page.on('pageerror',lambda e:errors.append(type(e).__name__))
++            def route(r):
++                if not r.request.url.startswith(BASE+'/'):
++                    external.append(r.request.url.split(':',1)[0]);r.abort();return
++                req=r.request;requests.append((req.method,req.url.removeprefix(BASE)))
++                if CANARY in (req.post_data or '') or CANARY in req.url or TOKEN in (req.post_data or '') or TOKEN in req.url:leaks.append('request')
++                r.continue_()
++            ctx.route('**/*',route)
++            response=page.goto(BASE+'/');assert response.headers['cache-control']=='no-store';assert "frame-ancestors 'none'" in response.headers['content-security-policy']
++            assert page.evaluate('React.version')==expected_version,'unexpected frontend runtime'
++            expect(page.get_by_role('heading',name='Maj Vaj Trade Bot',exact=True)).to_be_visible()
++            sign_in(page);link=open_settings(page);check_storage(page)
++            assert CANARY not in page.content()
++            # Trigger the real click handler while suppressing the OS external
++            # navigation in this host-only browser fixture. Native dispatch is a
++            # separate installed desktop test, not claimed by this check.
++            page.evaluate("document.addEventListener('click',e=>{if(e.target.closest('a.account-handoff'))e.preventDefault()},true)")
++            link.click();expect(page.get_by_role('heading',name='Maj Vaj Trade Bot',exact=True)).to_be_visible();check_storage(page)
++            sign_in(page);open_settings(page)
++            page.evaluate("window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));")
++            expect(page.get_by_role('heading',name='Maj Vaj Trade Bot',exact=True)).to_be_visible();check_storage(page)
++            sign_in(page);page.get_by_role('button',name='Sign out',exact=True).click();expect(page.get_by_role('heading',name='Maj Vaj Trade Bot',exact=True)).to_be_visible()
++            sign_in(page);page.reload();expect(page.get_by_role('heading',name='Maj Vaj Trade Bot',exact=True)).to_be_visible();expect(page.get_by_label('Admin access token')).to_have_value('');check_storage(page)
++            assert not any(m=='POST' for m,_ in requests),'unexpected browser mutation'
++            assert not errors and not leaks and not external,(errors,leaks,external)
++            # Direct attempted browser enrollment remains rejected by the real gateway.
++            r=page.request.post(BASE+'/api/setup/credentials',headers={'Authorization':'Bearer '+TOKEN},data={'grok':'synthetic-refused'});assert r.status==503
++            assert CANARY not in r.text()
++        finally:ctx.close()
++        ctx=p.chromium.launch_persistent_context(str(profile),executable_path=executable,headless=True,args=['--disable-sync','--disable-background-networking','--no-proxy-server'])
++        try:
++            page=ctx.pages[0];page.goto(BASE+'/');expect(page.get_by_role('heading',name='Maj Vaj Trade Bot',exact=True)).to_be_visible();expect(page.get_by_label('Admin access token')).to_have_value('');check_storage(page)
++        finally:ctx.close()
++    checked=0
++    for file in profile.rglob('*'):
++        if file.is_file() and not file.is_symlink():
++            raw=file.read_bytes();assert not any(v in raw for v in variants),'synthetic marker persisted in profile';checked+=1
++    print(f'PASS browser smoke: React {expected_version}; status-only, logout, page lifecycle, reload, restart, no web enrollment, no browser storage/canaries ({checked} files); native protocol dispatch not tested in browser.')
++
++
++if __name__=='__main__':
++    ap=argparse.ArgumentParser(); ap.add_argument('mode',choices=('serve','browser'));ap.add_argument('directory',type=Path);ap.add_argument('--assets',type=Path,default=ROOT/'dashboard');ap.add_argument('--browser',default='/usr/bin/chromium');ap.add_argument('--expected-version',default='18.3.1');a=ap.parse_args()
++    if a.mode=='serve':serve(a.directory,a.assets)
++    else:browser(a.directory,a.browser,a.expected_version)
+diff --git a/scripts/review_session_wrapper.sh b/scripts/review_session_wrapper.sh
+index b5adbc3..c445d33 100755
+--- a/scripts/review_session_wrapper.sh
++++ b/scripts/review_session_wrapper.sh
+@@ -7,5 +7,8 @@ expected=/opt/maj-vaj/scripts/review_session_wrapper.sh
+ if [ "$1" = /opt/maj-vaj/scripts/credential_session_wrapper.sh ]; then
+     exec /opt/maj-vaj/scripts/credential_session_wrapper.sh "$1"
+ fi
++if [ "$1" = /opt/maj-vaj/scripts/account_console_wrapper.sh ]; then
++    exec /opt/maj-vaj/scripts/account_console_wrapper.sh "$1"
++fi
+ [ "$1" = "$expected" ] || exit 1
+ exec /opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from reserve_review_session import run;run()'
+diff --git a/tests/account_connections_render.cjs b/tests/account_connections_render.cjs
+index ba3b230..b57a928 100644
+--- a/tests/account_connections_render.cjs
++++ b/tests/account_connections_render.cjs
+@@ -14,6 +14,7 @@ let buttons=[];let inputs=[];let render=desk.accountConnections();walk(render,n=
+ assert.equal(inputs.length,0);
+ const manage=buttons.find(b=>b.children[0]==='Manage account connections');assert(manage);manage.props.onClick();
+ assert.match(JSON.stringify(desk.accountConnections()),/credential-operator account/);
++let links=[];walk(desk.accountConnections(),n=>{if(n.type==='a')links.push(n)});assert.equal(links.length,1);assert.equal(links[0].props.href,'majvaj-account:open');desk.token='synthetic-bearer';desk.state.logged=true;links[0].props.onClick();assert.equal(desk.token,'');assert.equal(desk.state.logged,false);desk.state.setup={vault_available:true,credentials:Object.fromEntries(names.map(n=>[n,'stored_unverified'])),enrollment_mode:'dedicated_local_window'};
+ let calls=0;desk.action=()=>calls++;desk.saveCredentials({preventDefault(){}});assert.equal(calls,0);
+ delete desk.state.setup.enrollment_mode;inputs=[];walk(desk.accountConnections(),n=>{if(n.type==='input')inputs.push(n)});assert.equal(inputs.length,5);assert(inputs.every(n=>n.props.type==='password'));
+ console.log('PASS installed branch has no credential input or save request; development compatibility retained.');
+diff --git a/tests/test_credential_handoff.py b/tests/test_credential_handoff.py
+new file mode 100644
+index 0000000..685ba50
+--- /dev/null
++++ b/tests/test_credential_handoff.py
+@@ -0,0 +1,69 @@
++"""Handoff intent is never authority; synthetic state only."""
++from contextlib import contextmanager
++import unittest
++from unittest.mock import Mock, patch
++from credential_handoff import URI, handoff, identity, validate_uri, terminate
++
++
++class HandoffTests(unittest.TestCase):
++    def setUp(self):
++        self.initial = ('c42', ':0', '/home/test/.Xauthority', b'cookie-digest')
++        self.snapshot = Mock(return_value=self.initial)
++        self.ask = Mock(return_value=True)
++        self.end = Mock()
++        self.check = Mock()
++        @contextmanager
++        def events(session):
++            self.assertEqual(session, self.initial[0])
++            yield type('Events', (), {'check': self.check})()
++        self.events = events
++
++    def run_handoff(self, args=(URI,)):
++        return handoff(args, snapshot=self.snapshot, events_factory=self.events,
++                       ask=self.ask, end=self.end)
++
++    def test_exact_uri_only(self):
++        validate_uri([URI])
++        for args in ([], ['majvaj-account:open?token=synthetic'], ['majvaj-account:open#x'],
++                     ['majvaj-account://open'], [URI, 'another-session'], ['https://localhost/'],
++                     ['majvaj-account:OPEN'], ['majvaj-account:open%20']):
++            with self.assertRaises(ValueError): self.run_handoff(args)
++        self.snapshot.assert_not_called();self.ask.assert_not_called();self.end.assert_not_called()
++
++    def test_explicit_confirmation_own_session(self):
++        self.assertTrue(self.run_handoff());self.end.assert_called_once_with('c42')
++        self.assertGreaterEqual(self.check.call_count,4)
++
++    def test_cancel_never_terminates(self):
++        self.ask.return_value=False
++        self.assertFalse(self.run_handoff());self.end.assert_not_called()
++
++    def test_no_active_session_refused_before_prompt(self):
++        self.snapshot.side_effect=ValueError('local session unavailable')
++        with self.assertRaises(ValueError):self.run_handoff()
++        self.ask.assert_not_called();self.end.assert_not_called()
++
++    def test_session_switch_after_confirmation(self):
++        self.ask.side_effect=lambda: (setattr(self.snapshot,'return_value',('new',':0','other',b'new')) or True)
++        with self.assertRaises(ValueError):self.run_handoff()
++        self.end.assert_not_called()
++
++    def test_same_session_changed_cookie_refused(self):
++        self.ask.side_effect=lambda: (setattr(self.snapshot,'return_value',self.initial[:3]+(b'replaced',)) or True)
++        with self.assertRaises(ValueError):self.run_handoff()
++        self.end.assert_not_called()
++
++    def test_lock_latched_even_if_snapshot_returns(self):
++        self.check.side_effect=[None,None,ValueError('locked')]
++        with self.assertRaises(ValueError):self.run_handoff()
++        self.end.assert_not_called()
++
++    def test_real_identity_rejects_root_or_wrong_uid(self):
++        with patch('credential_handoff.pwd.getpwnam',return_value=type('User',(),{'pw_uid':10001})()), patch('credential_handoff.os.getuid',return_value=0), patch('credential_handoff.os.geteuid',return_value=0):
++            with self.assertRaises(ValueError):identity()
++
++    def test_fixed_nonprivileged_terminate_command(self):
++        with patch('credential_handoff.subprocess.run') as run:
++            terminate('c42')
++            self.assertEqual(run.call_args.args[0],['/usr/bin/loginctl','terminate-session','c42'])
++            self.assertEqual(run.call_args.kwargs['env'],{'PATH':'/usr/bin:/bin','LC_ALL':'C'})

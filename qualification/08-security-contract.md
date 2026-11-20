@@ -1,0 +1,37 @@
+# TB-SEC-KEY-01 — binding secret non-disclosure and custody release gate
+
+Operator requirement, 2026-11-19. Applies to all Maj Vaj deployment profiles and integrations, including Cognitum research. No real credentials, wallet seeds, private keys, or live trading authority are authorized for tests.
+
+## Required architecture
+
+- Never request, import, transmit, store, display or operate a personal wallet seed phrase, recovery phrase or private key for ordinary exchange trading. No wallet signing/withdrawal route is authorized. Exchange deposits/withdrawals remain manually managed outside Maj Vaj. If a future wallet feature is separately approved, require external signer/hardware-wallet or separately isolated nonexportable signing service; never give models, browser, desk, research or exchange adapters private-key material.
+- Exchange API credentials are purpose-scoped: separate read-only and trading keys, no withdrawal/transfer permissions, least privilege, IP restrictions where supported, revocable and rotated. Production key permissions must be positively verified before activation; inability to verify fails closed.
+- Write-only enrollment over authenticated TLS; status only, no plaintext read/export endpoint. Encrypt at rest with distinct KEK custody outside the database; native signing seeds and receipt keys stay under distinct service principals. Use OS-protected credentials, not command-line flags, inherited environment, source, public config, plain backups or general application memory. Existing development Fernet vault and environment bootstrap are not production custody acceptance.
+- No secrets in API responses, error messages, stack traces, access/HTTP logs, dashboards, browser persistence, telemetry, notifications, crash dumps, debug tools, test evidence, GitHub/CI, recovery archives or exports. No request-body or auth-header tracing. Use fixed reason codes; never rely on redaction alone. Source control ignore rules are not a security boundary.
+- Public market data and Cognitum receive only explicitly allowlisted, non-secret data; never access vault, signing service, private config, credential-bearing URLs or environment. Models may not retrieve or use credentials directly; a narrowly scoped adapter performs authorized venue requests. No network destinations other than approved services; use TLS and verify certificates.
+- Disable core dumps and unnecessary debug/trace tooling in installed services. Verify permissions, process env/argv, child environments, filesystem and backup isolation. Encrypted credential recovery must require explicit operator approval and separate cryptographic key custody. No ordinary recovery archive includes plaintext credentials.
+- On suspected exposure contain, revoke/rotate affected credentials, invalidate sessions, investigate safely using metadata only, and keep live authorization fenced. Never claim an absolute guarantee against a compromised host or privileged operator.
+
+## Acceptance gate (synthetic canaries only)
+
+Inspect installed process boundaries and outgoing network traffic using synthetic distinct markers for exchange key, secret, signing seed, bearer token and recovery phrase. Exercise valid enrollment, malformed input, exception, fault, concurrent update, restart, denied access, support export, backup/restore, worker launch, UI/browser, notification and research handoff. Assert no canary or encoded form in unauthorized response, logs, telemetry, process arguments/environments, model data, database/WAL (plaintext), archive, CI artifacts or Git history. Verify allowed vault/adapter custody, tamper refusal and rotation/revocation. No production release or live activation until installed full matrix passes. Use mock/sandbox endpoints, not real wallet keys.
+
+## Current candidate evidence
+
+Existing development credential endpoint uses encrypted SQLite ciphertext and status-only responses; paper engine configurations contain empty exchange credentials; browser form fields are password inputs, cleared on submission; public data worker has explicit environment construction. Existing independent native public-signature path avoids delivering native secrets to desk. New credential input model uses SecretStr, masks representation and JSON serialization, hides invalid inputs in error strings, rejects unsupported wallet/live fields and unwraps only for vault write. Credential backend failure uses fixed HTTP errors. Five focused model tests passed locally with Pydantic 2.13.5. Added endpoint regression is unexecuted (complete project runtime not restored). SecretStr is defense in depth, not memory erasure or prevention of explicit access. Full production matrix, remote TLS, separate venue vault and credential lifecycle remain pending. No main merge, CI dispatch or actual desk changes.
+
+## 2026-11-20 installed custody progress
+
+See [isolated PAPER vault qualification](tb-sec-key-01-vault-qualification.md). The staged isolated vault and selected synthetic installed tests passed. Dashboard shared-UID bearer-file access independently reproduced; entire gate remains open. Qualification-only dashboard must not be deployed with real secrets. No venue access or live permission.
+
+## R1 independent dashboard authentication
+
+See [R1 qualification](tb-sec-key-01-r1-auth-custody.md). Prior shared-UID dashboard bearer-file exposure corrected in the staged local PAPER gateway/backend. Scoped installed worker, frozen research export, local credential pair lifecycle and synthetic bearer rotation verified. The full production security gate remains open; do not deploy real credentials or enable LIVE.
+
+## R2 operator-facing account connections (binding)
+
+Settings → Account connections is the single graphical entry point for Kraken, Telegram and existing optional Grok connections. The normal dashboard displays non-secret status and launches a separately authenticated credential window; the isolated vault receives write-only masked inputs and releases only status. Connect, test, replace and disconnect/revoke flows must be graphical; no CLI or manual configuration is required for ordinary operators. The development credential form is not a production enrollment path.
+
+Kraken: separate read-only and trading credential pairs, positive least-privilege permission verification, refusal of withdrawal/transfer scopes or unverified permissions, no orders during connection tests. Telegram: separate desk and recovery bot roles, verify bot identity and intended recipient/chat with explicit operator confirmation, send test notifications without exposing tokens or credential-bearing URLs. Grok: optional, opt-in and isolated; never transfer another service's secrets to it. Local credential removal is distinct from provider revocation: show which action actually succeeded; never claim remote revocation without confirmation. Neither a successful connection test nor an entered trading key grants LIVE authority.
+
+See [master task ledger](tasks.md) TB-SEC-KEY-01-R2A/B/C for the planned installed acceptance matrix. The original browser, outbound, notification, KEK rotation and reviewed recovery requirements remain binding. All acceptance uses synthetic inputs and mock/sandbox endpoints; production remote enrollment requires authenticated TLS and separate release approval.
