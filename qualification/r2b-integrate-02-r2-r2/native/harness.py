@@ -113,20 +113,24 @@ try:
     # highlighted explanatory prose as in failed D2 44810905585.
     find('Open secure account sign-in')
     key('Tab');time.sleep(1);shot('06-link-target')
-    key('Return');time.sleep(4);shot('07-after-real-link-activation')
+    # The actual 1024x768 Chromium screenshot proves the focused anchor
+    # occupies x=52..340 y=359..407; pointer-click its center instead of
+    # assuming Return dispatched an external protocol. This is a genuine
+    # browser input event, not an invocation of xdg-open or the handler.
+    click(195,383);time.sleep(4);shot('07-after-real-link-activation')
     # The only positive path is genuine browser -> desktop handler -> native
     # confirmation. Never launch xdg-open or the helper directly in a test.
     try:
         modal=wait_window('Maj Vaj.*Open account connections',30)
     except Exception:
         _, titles=command('DISPLAY=:0 XAUTHORITY=/run/lightdm/root/:0 xwininfo -root -tree | sed -n "1,70p"',ok=False)
-        (out/'window-diagnostic.txt').write_text(titles+'\\n')
+        (out/'window-diagnostic.txt').write_text(titles+'\n')
         # Read-only source-of-truth registration and post-timeout process
         # observations; no direct invocation of the protocol handler.
         rc, reg=command("runuser -u maj-vaj-console -- env HOME=/home/maj-vaj-console XDG_RUNTIME_DIR=/run/user/$(id -u maj-vaj-console) /usr/bin/xdg-mime query default x-scheme-handler/majvaj-account",ok=False)
-        (out/'handler-registration.txt').write_text('registered='+('yes' if rc==0 and reg.strip()=='maj-vaj-account-handoff.desktop' else 'no')+'\\n')
+        (out/'handler-registration.txt').write_text('registered='+('yes' if rc==0 and reg.strip()=='maj-vaj-account-handoff.desktop' else 'no')+'\n')
         rc,_=command("pgrep -u maj-vaj-console -f 'credential_handoff.py|account_handoff_wrapper.sh' >/dev/null",ok=False)
-        (out/'handler-running-after-timeout.txt').write_text('handler_visible='+('yes' if rc==0 else 'no')+'\\n')
+        (out/'handler-running-after-timeout.txt').write_text('handler_visible='+('yes' if rc==0 else 'no')+'\n')
         raise
     print('PASS browser click invoked installed native handler and real confirmation',flush=True)
     shot('08-native-confirmation')
