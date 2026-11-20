@@ -606,3 +606,17 @@ Published encrypted transactional metadata state and regression tests under [qua
 | TB-SEC-KEY-01-R2C | KEK rotation, reviewed encrypted recovery, original non-disclosure obligations and rollback/nonce continuity qualification | Pending |
 
 D2 remains blocked/open; no changes to the fixed production candidate or test harness, no CI dispatch, main merge, paid resources, Library upload or LIVE authorization. Metadata is encrypted but does not prevent privileged restore of older valid ciphertext; carry forward explicit restore/replay defenses and requalification. Next independent work can cover isolated Telegram identity/status contract or proceed with reviewed vault integration planning, without bypassing D2. See README for limitations and dependencies.
+
+
+### TB-SEC-KEY-01-R2B-B — Telegram independent bot pairing and test connection (2026-11-20)
+
+Standalone candidate [qualification/r2b-b](r2b-b/README.md) published; 31/31 local Python unittest PASS with synthetic transport and mocked TLS, zero failures/skips. Exact blobs verified against tested files: ed84fce261521892641b3788cffa3af99d968043 and 1c1446989fc0086fb3e4dffe92e168f65398fe77. Distinct Desk/Recovery bot identities, explicit private numeric recipient preview, five-minute one-time review bound to credential generation, cancellation without notification, recheck identities, fixed role-specific test message, verified response sender/chat and fixed sanitized status. Refuse duplicate bot identity, unreviewed/replayed/stale confirmation, groups/channels and unknown recipient, ambiguous delivery never auto-retried. API acceptance not proof of human receipt. No incoming bot command, trading, restart or paid broadcast authority. No actual Telegram connection, production integration, native acceptance or real credentials.
+
+| ID | Scope | State |
+|---|---|---|
+| TB-SEC-KEY-01-R2B-B | Independent Telegram role, recipient review and test notification semantics | Scoped local candidate PASS (31 tests) |
+| TB-SEC-KEY-01-R2B-B-R1 | Vault-owned durable encrypted pairing and send receipts; role/generation invalidation and serialization; authenticated GUI recipient setup and human test acknowledgement; constrained transport, token redaction, rotation and installed synthetic acceptance | Pending; after relevant D2/security prerequisites |
+| TB-SEC-KEY-01-R2B-C | Independent opt-in Grok connection verification | Pending |
+| TB-09-RECOVERY | Independent Recovery observer/heartbeat and later status notifications, no control authority | Pending as previously planned |
+
+Existing R2B-A/R1 scoped evidence retained, not rerun. D2 remains open/blocked (no changes to exact production tree a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b, no harness changes). No extra CI, main merge, paid VPS or Library upload. Next independent task R2B-C standalone opt-in Grok verification; do not close or bypass existing installed credential gates. No scope drift.
