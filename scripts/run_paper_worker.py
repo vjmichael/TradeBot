@@ -35,6 +35,8 @@ def notify(ready):
 def run(data,instance):
     """Existing private native workspace only; no auto-provision, no credentials."""
     instance_id(instance); data=private_directory(data)
+    from reserve_entry_fence import installed_enabled
+    require(not installed_enabled(data),'legacy_worker_requires_cold_migration_review')
     work=private_directory(private_directory(data/'paper')/instance)
     path=work/'paper.sqlite'
     os.close(private_open(path,os.O_RDONLY))

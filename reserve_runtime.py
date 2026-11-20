@@ -74,8 +74,10 @@ def unlock(directory,password):
 
 def desk_transaction(directory):
     path=private_directory(directory)/'desk.sqlite3'
+    @contextmanager
     def transaction():
-        return _transaction(path)
+        from reserve_entry_fence import installed_fence
+        with installed_fence(path.parent),_transaction(path) as db:yield db
     return transaction
 
 

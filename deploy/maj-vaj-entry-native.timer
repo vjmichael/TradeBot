@@ -1,0 +1,12 @@
+[Unit]
+Description=Maj Vaj staged independent PAPER entry timer
+
+[Timer]
+OnBootSec=10s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+Persistent=false
+Unit=maj-vaj-entry-native.service
+
+[Install]
+WantedBy=timers.target

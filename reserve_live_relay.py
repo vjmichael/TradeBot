@@ -44,12 +44,21 @@ def relay(data,directory,workspace,store,seed,*,desk_uid,desk_gid,native_uid,nat
     require(os.geteuid()==0 and desk_uid>0 and desk_gid>0 and native_uid>0 and desk_uid!=native_uid,'relay_identity')
     root=_source(root or Path(__file__).resolve().parent)
     issued=int(clock());before=store.read()
+    groups=[]
+    from reserve_entry_fence import installed_enabled,open_fence,LOCK
+    if installed_enabled(data):
+        import grp
+        group=grp.getgrnam('maj-vaj-transfer').gr_gid
+        fd=open_fence(LOCK)
+        try:require(os.fstat(fd).st_gid==group,'relay_entry_fence_group')
+        finally:os.close(fd)
+        groups=[group]  # only the root-pinned fence transfer group
     # Anonymous bounded-on-read spool. Child may only receive its own copy of
     # the output descriptor; no inherited secrets, journal or signing key fd.
     with tempfile.TemporaryFile() as stream:
         p=subprocess.run([sys.executable,'-I','-B','-c',
                           'import sys;sys.path.insert(0,sys.argv[1]);from reserve_live_relay import extract;extract(sys.argv[2])',str(root),str(data)],
-                         cwd=root,user=desk_uid,group=desk_gid,extra_groups=[],umask=0o077,
+                         cwd=root,user=desk_uid,group=desk_gid,extra_groups=groups,umask=0o077,
                          env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'},stdin=subprocess.DEVNULL,
                          stdout=stream,stderr=subprocess.DEVNULL,timeout=15,check=False)
         require(p.returncode==0 and 0<stream.tell()<=MAX_DB,'relay_extraction_failed')

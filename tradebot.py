@@ -145,12 +145,21 @@ class Store:
         self.cap = cap
         keys=lambda i:workspace_key(directory,i)
         projection=authenticated_projection(keys)
-        self.gate = Gate(self.transaction, account_projection=projection, entry_guard=entry_guard(keys,projection))
+        from reserve_entry_fence import installed_enabled
+        if installed_enabled(directory):
+            from reserve_entry_worker import installed_gate
+            self.gate,_,_=installed_gate(self.transaction)
+        else:self.gate = Gate(self.transaction, account_projection=projection, entry_guard=entry_guard(keys,projection))
         self.paper_execution = PaperBridge(self.transaction,self.gate)
         self.financial = FinancialLedger(self.transaction)
 
     @contextmanager
     def transaction(self):
+        from reserve_entry_fence import installed_fence
+        with installed_fence(self.path.parent),self._transaction() as db:yield db
+
+    @contextmanager
+    def _transaction(self):
         db = sqlite3.connect(self.path, timeout=10, isolation_level=None)
         db.row_factory = sqlite3.Row
         try:
@@ -164,7 +173,8 @@ class Store:
             db.close()
 
     def boot(self):
-        with closing(sqlite3.connect(self.path)) as db:
+        from reserve_entry_fence import installed_fence
+        with installed_fence(self.path.parent),closing(sqlite3.connect(self.path)) as db:
             db.execute("PRAGMA journal_mode=WAL")
         with self.transaction() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
