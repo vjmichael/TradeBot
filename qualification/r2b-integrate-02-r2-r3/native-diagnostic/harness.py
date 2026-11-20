@@ -177,7 +177,7 @@ try:
             rc,data=command('test -f '+shlex.quote(path)+' && cat '+shlex.quote(path),ok=False)
             if name=='r2b-dispatch-guard':
                 data=data.strip()
-                if not re.fullmatch(r'(?:account|review)_[a-z0-9_]{1,64}|opaque_other|[A-Za-z][A-Za-z0-9_]{0,50}:[A-Za-z_][A-Za-z0-9_]{0,50}:[A-Za-z_][A-Za-z0-9_]{0,50}:[0-9]{1,5}',data):
+                if not re.fullmatch(r'(?:account|review)_[a-z0-9_]{1,64}|opaque_other|source_[0-9]{1,5}_[A-Za-z][A-Za-z0-9_]{0,50}',data):
                     data='opaque_other'
             elif name=='r2b-dispatch-invoked':
                 data='wrapper_invoked' if rc==0 else 'not_observed'
