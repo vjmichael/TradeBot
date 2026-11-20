@@ -13,15 +13,16 @@ from pathlib import Path
 from financial_ledger import canon, replay, require, AccountingError
 from reserve_runtime import desk_transaction, private_directory, unlock
 from reserve_policy import ReserveManager
+from reserve_authority import public_key, sign, pinned_public, verify_active
 from reserve_preview import read, policy_view, preview
 from financial_goals import scope, usd
 
 
 class GraphicalBroker:
     """One exact, expiring review. UI owns password; dashboard only writes drafts."""
-    def __init__(self, transaction, credentials, verify, *, clock=time.time, monotonic=time.monotonic):
+    def __init__(self, transaction, credentials, verify, *, clock=time.time, monotonic=time.monotonic, authority_public=None):
         self.tx=transaction; self.credentials=credentials; self.verify=verify
-        self.clock=clock; self.monotonic=monotonic; self.pending=None
+        self.clock=clock; self.monotonic=monotonic; self.pending=None; self.authority_public=authority_public
 
     def portfolios(self):
         with self.tx() as db:
@@ -71,6 +72,7 @@ class GraphicalBroker:
         require(r['receipt']==receipt and r['created']<=now<=r['expires'] and self.monotonic()<=deadline,'review_expired_or_consumed')
         require(type(confirmation) is str and hmac.compare_digest(confirmation,r['confirmation']),'confirmation_mismatch')
         key=unlock(self.credentials,password)
+        if self.authority_public is not None:require(public_key(key)==self.authority_public,'approval_anchor_mismatch')
         with self.tx() as db:
             now=int(self.clock());require(r['created']<=now<=r['expires'] and self.monotonic()<=deadline,'review_expired_or_consumed')
             i=r['instance'];action=r['action'];payload=r['payload']
@@ -87,6 +89,7 @@ class GraphicalBroker:
             grant={'head':head,'expiry':r['expires']}
             msg=canon(['maj-vaj:PAPER:reserve:v1',receipt,i,action,payload,head,r['expires']]).encode()
             grant['signature']=hmac.new(key,msg,hashlib.sha256).hexdigest()
+            grant['attestation']=sign(key,msg)
             result=ReserveManager(lambda:nullcontext(db),key,clock=lambda:now,verify=self.verify).submit(receipt,i,action,payload,grant)
             result['state']=self._verified_status(db,i,now,key)
             return result
@@ -102,10 +105,12 @@ class GraphicalBroker:
         require(payload==active and grant['head']==head and event['recorded_at']<=min(grant['expiry'],now),'approval_receipt_scope')
         msg=canon(['maj-vaj:PAPER:reserve:v1',eid,instance,kind.removeprefix('reserve_'),payload,head,grant['expiry']]).encode()
         require(hmac.compare_digest(hmac.new(key,msg,hashlib.sha256).hexdigest(),grant['signature']),'approval_receipt_signature')
+        if self.authority_public is not None:verify_active(db,instance,s,now,self.authority_public)
         return 'expired' if now>=min(policy['end'],policy['expiry']) else 'scheduled' if now<policy['start'] else 'on'
 
     def verify_status(self,instance,password):
         key=unlock(self.credentials,password)
+        if self.authority_public is not None:require(public_key(key)==self.authority_public,'approval_anchor_mismatch')
         with self.tx() as db:return self._verified_status(db,instance,int(self.clock()),key)
 
 
@@ -190,7 +195,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('data_dir',type=Path);p.add_argument('--credentials',required=True,type=Path);a=p.parse_args()
     data=private_directory(a.data_dir);creds=private_directory(a.credentials)
     require(not creds.resolve().is_relative_to(data.resolve()) and not data.resolve().is_relative_to(creds.resolve()),'separate_approval_directory_required')
-    broker=GraphicalBroker(desk_transaction(data),creds,authenticated_projection(lambda i:workspace_key(data,i)))
+    broker=GraphicalBroker(desk_transaction(data),creds,authenticated_projection(lambda i:workspace_key(data,i)),authority_public=pinned_public())
     root=tk.Tk();ApprovalWindow(root,broker);root.mainloop()
 
 if __name__=='__main__':main()

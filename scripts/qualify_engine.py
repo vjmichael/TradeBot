@@ -216,7 +216,7 @@ def market_listing(base):
 def gate_native_bridge(work):
     # Copy the exact candidate modules into the pinned native environment.
     # Synthetic book and isolated database only; no public or private requests.
-    for path in ("financial_ledger.py", "reserve_policy.py", "risk_gate.py",
+    for path in ("financial_ledger.py", "reserve_policy.py", "reserve_runtime.py", "reserve_graphical.py", "reserve_authority.py", "reserve_preview.py", "risk_gate.py",
                  "paper_execution.py", "paper_supervisor.py", "paper_custody.py",
                  "paper_provision.py", "paper_recovery.py", "financial_goals.py", "goal_evidence.py", "goal_control.py", "tests/test_paper_provision.py", "tests/test_risk_gate.py",
                  "engine_strategies/GatePaper.py", "scripts/qualify_gate_native.py"):
@@ -242,6 +242,8 @@ def gate_native_bridge(work):
         raise AssertionError("missing native financial goal evidence receipt")
     if "RECEIPT: FIN-01D-R2 native verified-goal reduced second order and protected loss settlement" not in result.splitlines():
         raise AssertionError("missing conservative continuation receipt")
+    if "RECEIPT: FIN-01C native signed wallet approval, keyless bounded next-cycle release and revocation" not in result.splitlines():
+        raise AssertionError("missing native reserve approval receipt")
 
 
 def main():

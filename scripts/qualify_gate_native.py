@@ -31,6 +31,11 @@ from paper_recovery import RecoveryDriver, RecoveryWorker
 import financial_goals
 from goal_evidence import GoalRecoveryDriver, capture_open
 from goal_control import evaluate as evaluate_goal, entry_guard
+from reserve_graphical import GraphicalBroker
+from reserve_runtime import provision as provision_approval, unlock, tick_all
+from reserve_preview import initialize as initialize_drafts, save as save_draft
+from reserve_authority import public_key, verify_active
+from reserve_policy import DAY
 from test_paper_provision import ProvisionTests, I
 from risk_gate import Gate
 from test_risk_gate import GateTests
@@ -75,12 +80,17 @@ class PrecisionBook(BookFixture):
     def get_precision_price(self,pair):return .1
 
 
-def qualify(protection=None, authenticated=False, cancel=None, precision=False, goals=False, conservative=False):
+def qualify(protection=None, authenticated=False, cancel=None, precision=False, goals=False, conservative=False, reserve=False):
     book_cls=PrecisionBook if precision else BookFixture
     base=GateTests('test_size_and_exact_idempotency');base.setUp()
     try:
         h=base.h
-        with h.tx() as db:initialize(db)
+        with h.tx() as db:
+            initialize(db)
+            if reserve:
+                # Separate synthetic account cap; no actual desk mutation.
+                db.execute('UPDATE desk SET virtual_cap_cents=14000')
+                initialize_drafts(db)
         f=FinancialLedger(h.tx,clock=lambda:h.now)
         f.fund('native-fund-a','a');f.fund('native-fund-b','b')
         gate=Gate(h.tx,clock=lambda:h.now,account_projection=gate_projection)
@@ -282,19 +292,51 @@ def qualify(protection=None, authenticated=False, cancel=None, precision=False, 
                         m2=replace(market,receipt='native-post-goal',observed=h.now,available=h.now)
                         reduced_gate.trusted_market(m2)
                         publish(h.tx,{i:observation(h.tx,source,clock=lambda:h.now) for i,source in [('a',driver),('b',peer)]},key_for,clock=lambda:h.now)
+                        if reserve:
+                            creds=Path(tmp)/'approval';creds.mkdir(mode=0o700)
+                            password='native-fixture-only-passphrase'
+                            provision_approval(creds,password)
+                            public=public_key(unlock(creds,password))
+                            broker=GraphicalBroker(h.tx,creds,projection,clock=lambda:h.now,authority_public=public)
+                            policy=dict(rate_bps=1000,floor_mode='fixed',floor_fixed=0,floor_bps=0,
+                                ceiling=70*SCALE,cycle_cap=10*SCALE,lifetime_cap=10*SCALE,
+                                anchor=h.now%DAY,start=h.now,end=h.now+3*DAY,expiry=h.now+3*DAY)
+                            save_draft(h.tx,'a',policy,0,clock=lambda:h.now)
+                            reviewed=broker.review('a','adopt')
+                            assert broker.confirm(reviewed['receipt'],reviewed['confirmation'],password)['state']=='on'
+                            assert f.snapshot('a')['protected']==state['protected']
+                            publish(h.tx,{i:observation(h.tx,source,clock=lambda:h.now) for i,source in [('a',driver),('b',peer)]},key_for,clock=lambda:h.now)
                         second=reduced_gate.admit(replace(base.req,proposal_id='post-goal-2',evidence_id=m2.receipt,expires=h.now+60))
                         assert second['state']=='AUTHORIZED' and second['notional_cents']==2500 and second['reserved_cents']==2525,second
                         assert PaperBridge(h.tx,reduced_gate,clock=lambda:h.now).submit(second['intent_id'],'paper-worker',2,driver)['submitted']
                         worker=ProtectionWorker(h.tx,driver,clock=lambda:h.now)
                         assert worker.tick(second['intent_id'])['state']=='MONITORING'
                         with h.tx() as db:db.execute('UPDATE desk SET paused=1,human_pause=1')
-                        bot.exchange.mid=90.
-                        assert worker.tick(second['intent_id'])['reason']=='stop'
+                        bot.exchange.mid=120. if reserve else 90.
+                        assert worker.tick(second['intent_id'])['reason']==('target' if reserve else 'stop')
                         assert worker.tick(second['intent_id'])['state']=='ACCOUNTED'
                         final=f.snapshot('a')
-                        assert final['protected']==state['protected'] and final['active']<state['active'] and final['qty']==final['pending']==final['gate_reserved']==0,final
-                        assert financial_goals.report(h.tx,'a',clock=lambda:h.now,key_for=key_for)['conservative_active_bps']==5000
-                        print('RECEIPT: FIN-01D-R2 native verified-goal reduced second order and protected loss settlement',flush=True)
+                        assert final['qty']==final['pending']==final['gate_reserved']==0,final
+                        if reserve:
+                            new_gain=final['protected']-state['protected'];assert new_gain>0
+                            h.now+=DAY
+                            with h.tx() as db:db.execute('UPDATE desk SET paused=0,human_pause=0')
+                            reduced_gate.trusted_policy(replace(base.p,version='reserve-native-cycle',epoch=3,expires=h.now+120))
+                            publish(h.tx,{i:observation(h.tx,source,clock=lambda:h.now) for i,source in [('a',driver),('b',peer)]},key_for,clock=lambda:h.now)
+                            result=tick_all(h.tx,clock=lambda:h.now,verify=projection,verify_authority=lambda db,i,s,now:verify_active(db,i,s,now,public))
+                            expected=new_gain//10//(SCALE//100)*(SCALE//100)
+                            assert expected>0 and result['a']['release']==expected,result
+                            after=f.snapshot('a');assert after['protected']==final['protected']-expected and after['active']==final['active']+expected
+                            assert tick_all(h.tx,clock=lambda:h.now,verify=projection,verify_authority=lambda db,i,s,now:verify_active(db,i,s,now,public))=={}
+                            off=broker.review('a','revoke')
+                            assert broker.confirm(off['receipt'],off['confirmation'],password)['state']=='off'
+                            assert broker.verify_status('a',password)=='off'
+                            assert f.snapshot('a')['protected']==after['protected']
+                            print('RECEIPT: FIN-01C native signed wallet approval, keyless bounded next-cycle release and revocation',flush=True)
+                        else:
+                            assert final['protected']==state['protected'] and final['active']<state['active'],final
+                            assert financial_goals.report(h.tx,'a',clock=lambda:h.now,key_for=key_for)['conservative_active_bps']==5000
+                            print('RECEIPT: FIN-01D-R2 native verified-goal reduced second order and protected loss settlement',flush=True)
                 print('RECEIPT: native protected '+protection+' exit while paused, verified terminal wallet and released reservation',flush=True)
                 if precision:
                     print('RECEIPT: R3-R1-R2 native fractional USD fees and BTC precision after ORM reopen, exact settlement',flush=True)
@@ -344,3 +386,4 @@ if __name__=='__main__':
     qualify('target',authenticated=True,precision=True)
     qualify('target',authenticated=True,goals=True)
     qualify('target',authenticated=True,goals=True,conservative=True)
+    qualify('target',authenticated=True,goals=True,conservative=True,reserve=True)

@@ -120,14 +120,15 @@ class ReserveManager:
 
     No default key, no public HTTP route, no model access. Test keys are fixtures.
     """
-    def __init__(self, transaction, approval_key=None, *, clock=time.time, verify=None):
+    def __init__(self, transaction, approval_key=None, *, clock=time.time, verify=None, verify_authority=None):
         self.verify=verify
+        self.verify_authority=verify_authority
         require(approval_key is None or type(approval_key) is bytes and len(approval_key)>=32,'invalid_approval_broker_key')
         self.tx=transaction; self.key=approval_key; self.clock=clock
 
     def _grant(self, db, receipt, instance, action, payload, grant, now, head):
         require(self.key is not None,'approval_broker_required')
-        require(type(grant) is dict and set(grant)=={'expiry','head','signature'},'human_approval_required')
+        require(type(grant) is dict and set(grant) in ({'expiry','head','signature'},{'expiry','head','signature','attestation'}),'human_approval_required')
         expiry=amount(grant['expiry'],True)
         require(now<=expiry<=now+900 and (action=='revoke' or grant['head']==head),'stale_human_approval')
         # Restrictive revocation can race with a new observation; its exact policy
@@ -135,6 +136,9 @@ class ReserveManager:
         msg=canon(['maj-vaj:PAPER:reserve:v1',receipt,instance,action,payload,grant['head'],expiry]).encode()
         expected=hmac.new(self.key,msg,hashlib.sha256).hexdigest()
         require(type(grant['signature']) is str and hmac.compare_digest(expected,grant['signature']),'invalid_human_approval')
+        if 'attestation' in grant:
+            from reserve_authority import check, public_key
+            check(public_key(self.key),msg,grant['attestation'])
 
     def _limits(self,db,states,now):
         # No release while an order reservation or hard pause exists. Check the
@@ -203,6 +207,7 @@ class ReserveManager:
                 if cycle<=r['last_cycle']:
                     return {'duplicate':True,'receipt':receipt,'release':0}
                 try:
+                    if self.verify_authority is not None:self.verify_authority(db,instance,s,now)
                     if self.verify is not None:self.verify(db,now)
                     room=self._limits(db,states,now); allowed=True
                 except (AccountingError,OSError,KeyError,ValueError): room=0; allowed=False

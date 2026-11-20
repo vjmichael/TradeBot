@@ -21,3 +21,6 @@ The native approval window is an independent local process, not yet a packaged d
 ## Next existing ledger work
 
 Complete TB-FIN-01C-R1 / TB-08 operational broker and scheduler closeout: protected native approval launch/custody, actual signed native evidence, graphical and installed acceptance, confirmed status in normal UI. Consolidate pending candidates with prior FIN-01D-R2 market-memory repair after installed run 44636388048 terminates. Do not start overlapping CI; no automatic promotion.
+
+
+Operational follow-up adds independently verifiable Ed25519 receipts and bounded actual systemd scheduler/timer acceptance; see [TB-FIN-01C operational closeout](tb-fin-01c-operational.md). Production graphical launcher, independent principal/rollback custody and actual native-wallet/installed active release still require qualification.

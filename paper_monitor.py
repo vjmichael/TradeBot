@@ -11,7 +11,7 @@ import time
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 
-from financial_ledger import UNRELEASED, canon, replay, require, sha
+from financial_ledger import AccountingError, UNRELEASED, canon, replay, require, sha
 from paper_custody import authenticate, packet, workspace_key
 from paper_provision import instance_id, sync_dir, installed_workspace, private_open
 
@@ -56,13 +56,19 @@ def public_book(pair,*,clock=time.time):
     return validate_book(pair,book,now,sha(doc))
 
 
+class PublicBookStale(AccountingError):
+    """Only an otherwise valid book with old exchange timestamps."""
+
+
 def validate_book(pair,book,now,digest):
     require(pair in PAIRS and type(book) is dict,'public_book_scope')
     bid,ask=book['bids'][0],book['asks'][0]
     require(len(bid)==len(ask)==3,'public_book_shape')
     bp,bq,ap,aq=(Decimal(str(v)) for v in (bid[0],bid[1],ask[0],ask[1]))
     require(all(v.is_finite() and v>0 for v in (bp,bq,ap,aq)) and bp<=ap,'public_book_values')
-    require(all(0<=now-float(v)<=120 for v in (bid[2],ask[2])),'public_book_stale')
+    ages=[now-float(v) for v in (bid[2],ask[2])]
+    require(all(0<=age<float('inf') for age in ages),'public_book_timestamp')
+    if any(age>120 for age in ages):raise PublicBookStale('public_book_stale')
     return dict(pair=pair,at=int(now),bid=str(bp),ask=str(ap),bid_qty=str(bq),ask_qty=str(aq),digest=digest)
 
 
@@ -83,9 +89,16 @@ def audit(data,instance,transaction,output,*,seconds=3600,interval=15,book=publi
         def record(body):f.write(canon(body)+'\n');f.flush();os.fsync(f.fileno())
         try:
             while True:
-                sample_start=monotonic();now=int(clock());market=book(pair,clock=clock)
+                # Retry one genuinely stale response only, never count it as a
+                # sample. Bound the gap between completed, fresh observations.
+                try:market=book(pair,clock=clock)
+                except PublicBookStale:
+                    record(dict(kind='rejected_sample',elapsed=round(monotonic()-start,3),reason='public_book_stale'))
+                    sleep(2)
+                    market=book(pair,clock=clock)
                 health=read_health(data,instance,int(clock()))
-                require(last is None or sample_start-last<=interval+15,'public_observation_gap');last=sample_start
+                sample_start=monotonic()
+                require(sample_start-(last if last is not None else start)<=interval+15,'public_observation_gap');last=sample_start
                 with transaction() as db:
                     _,_,_,head=replay(db);boot=db.execute('SELECT boot FROM fin_head WHERE id=1').fetchone()[0]
                     require(health['boot']==boot,'worker_boot_changed')

@@ -148,7 +148,7 @@ class ApprovalBroker:
         return ReserveManager(self.tx,key,clock=self.clock).submit(receipt,instance,action,payload,grant)
 
 
-def tick_all(transaction, *, clock=time.time, verify=None):
+def tick_all(transaction, *, clock=time.time, verify=None, verify_authority=None):
     """Keyless worker; immutable per-policy/cycle receipt, no activation path."""
     snapshot=status(transaction,clock=clock); result={}
     for instance,r in sorted(snapshot['instances'].items()):
@@ -156,7 +156,7 @@ def tick_all(transaction, *, clock=time.time, verify=None):
         version=r['active']['version']; p=r['active']['policy']; cycle=(int(clock())-p['anchor'])//DAY
         if cycle<=r['last_cycle'] or r['last_cycle']>=(min(p['end'],p['expiry'])-p['anchor'])//DAY+1:continue
         receipt='cycle:'+sha([instance,version,cycle])
-        result[instance]=ReserveManager(transaction,clock=clock,verify=verify).submit(receipt,instance,'tick',{'version':version,'cycle':cycle})
+        result[instance]=ReserveManager(transaction,clock=clock,verify=verify,verify_authority=verify_authority).submit(receipt,instance,'tick',{'version':version,'cycle':cycle})
     return result
 
 
@@ -167,7 +167,10 @@ def run_worker(directory):
         def verify(db,now):
             from paper_custody import authenticated_projection, workspace_key
             return authenticated_projection(lambda i:workspace_key(p,i))(db,now)
-        return tick_all(desk_transaction(p),verify=verify)
+        def authority(db,instance,s,now):
+            from reserve_authority import pinned_public, verify_active
+            verify_active(db,instance,s,now,pinned_public())
+        return tick_all(desk_transaction(p),verify=verify,verify_authority=authority)
 
 
 def main():

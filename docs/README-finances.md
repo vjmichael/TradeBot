@@ -96,3 +96,6 @@ The guided reinvestment candidate lets you preview a conditional future gain, sa
 ### How will I approve or revoke the saved reinvestment policy?
 
 A separate local Reinvestment Approval window now supports exact saved-policy review, passphrase confirmation, atomic replacement and revocation of the current policy. The ordinary dashboard still cannot collect approval credentials or independently confirm ON/OFF. Revoking a policy stops future releases once confirmed; already released funds and protective exits are unaffected. The separate desktop window passed fixture tests; the installed launcher, key custody and native service integration remain pending. See [TB-FIN-01C-R1 graphical candidate](tb-fin-01c-r1-graphical.md).
+
+
+The installed reserve scheduler now requires a separate pinned public-key approval receipt as well as verified financial evidence. It cannot sign a policy, and missing or untrusted approval records cannot release profit. The OFF scheduler and its actual timer passed isolated systemd testing. Full graphical enrollment, independent OS credential custody and installed active release acceptance remain pending. See [operational qualification](tb-fin-01c-operational.md).

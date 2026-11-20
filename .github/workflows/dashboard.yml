@@ -8,6 +8,8 @@ on:
       - 'financial_history.py'
       - 'reserve_preview.py'
       - 'reserve_graphical.py'
+      - 'reserve_authority.py'
+      - 'tests/test_reserve_authority.py'
       - 'reserve_policy.py'
       - 'reserve_runtime.py'
       - 'tests/test_reserve_graphical.py'
