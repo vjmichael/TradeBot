@@ -91,6 +91,44 @@ python3 - <<'PYDIAG'
 from pathlib import Path
 p=Path('/opt/maj-vaj/credential_handoff.py')
 source=p.read_text()
+# Disposable root-installed staging only. A fixed stage value is written by
+# the actual URI handler to its own XDG runtime; never emit params/credentials.
+intro="""
+def _r2b_stage(value):
+    from pathlib import Path
+    try:
+        Path(f'/run/user/{os.getuid()}/r2b-native-stage').write_text(value+'\\n')
+    except OSError:
+        pass
+
+"""
+assert source.count("URI = 'majvaj-account:open'")==1
+source=source.replace("URI = 'majvaj-account:open'",intro+"URI = 'majvaj-account:open'")
+stages=[
+    ("def identity():\n    user = pwd.getpwnam(CONSOLE)",
+     "def identity():\n    _r2b_stage('identity_enter')\n    user = pwd.getpwnam(CONSOLE)"),
+    ("    session, display = _sessions(uid)",
+     "    _r2b_stage('identity_sessions')\n    session, display = _sessions(uid)"),
+    ("    caller_session(session)\n    require(_login('show-session'",
+     "    _r2b_stage('identity_caller_first')\n    caller_session(session)\n    _r2b_stage('identity_seat')\n    require(_login('show-session'"),
+    ("    cookie = select_cookie(read_source(home, uid), display, socket.gethostname().encode())",
+     "    _r2b_stage('identity_cookie')\n    cookie = select_cookie(read_source(home, uid), display, socket.gethostname().encode())"),
+    ("    result = subprocess.run(['/usr/bin/xhost'], check=True",
+     "    _r2b_stage('identity_xhost')\n    result = subprocess.run(['/usr/bin/xhost'], check=True"),
+    ("    caller_session(session)\n    import hashlib",
+     "    _r2b_stage('identity_caller_second')\n    caller_session(session)\n    _r2b_stage('identity_complete')\n    import hashlib"),
+    ("def handoff(args, *, snapshot=identity, events_factory=SessionEvents, ask=confirm, end=terminate):\n    validate_uri(args)",
+     "def handoff(args, *, snapshot=identity, events_factory=SessionEvents, ask=confirm, end=terminate):\n    _r2b_stage('handoff_enter')\n    validate_uri(args)"),
+    ("    with events_factory(start[0]) as events:",
+     "    _r2b_stage('handoff_events')\n    with events_factory(start[0]) as events:"),
+    ("        if ask() is not True:",
+     "        _r2b_stage('handoff_prompt')\n        if ask() is not True:"),
+    ("        else:\n            handoff(sys.argv[1:])",
+     "        else:\n            _r2b_stage('handler_enter')\n            handoff(sys.argv[1:])")
+]
+for a,b in stages:
+    assert source.count(a)==1,(a,source.count(a))
+    source=source.replace(a,b)
 before="""    except Exception:
         raise SystemExit('Local Maj Vaj account handoff unavailable. Sign out and choose Account connections at login.') from None"""
 after="""    except Exception as exc:
