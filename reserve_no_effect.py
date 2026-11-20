@@ -108,8 +108,9 @@ def _balance(db,instance,quote):
     return count,head,db.execute('SELECT boot FROM fin_head WHERE id=1').fetchone()[0],execution_anchor(db)
 
 
-def produce(producer,inbox,store,relay_pin,native_gid,*,factory):
+def produce(producer,inbox,store,relay_pin,native_gid,*,factory,lease=None):
     from reserve_native_handoff import open_reviewed
+    lease=lease or custody
     from reserve_exit_custody import authorized_row
     require(os.geteuid()==producer.uid and producer.rebind_dir is not None,'recovery_native_identity')
     require(len({pinned_key(p) for p in (relay_pin,producer.native_pin,producer.human_pin,producer.rebind_pin)})==4,'recovery_independent_pins')
@@ -118,7 +119,7 @@ def produce(producer,inbox,store,relay_pin,native_gid,*,factory):
         rows=db.execute("SELECT id,instance_id FROM gate_intents WHERE state IN ('CLAIMED','UNKNOWN')").fetchall()
         require(len(rows)==1,'recovery_single_unresolved_intent');intent,instance=rows[0]
         work=workspace(producer.data,instance)
-        with custody(work):
+        with lease(work):
             bound=verify_rebind(db,producer.data,producer.rebind_dir,producer.rebind_pin,instance,native_uid=producer.uid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid)
             key,binding=workspace_key(producer.data,instance);require(bound['binding']==binding,'recovery_binding_changed')
             row=authorized_row(db,instance,intent,binding)

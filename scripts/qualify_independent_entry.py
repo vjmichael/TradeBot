@@ -267,6 +267,17 @@ with WarmRuntime(p,r/'relay.pub',lambda i,p,c,w:driver_context(w)).start() as wa
                 else:
                     boxes='proofbox=TerminalMailbox(r/"recovery-proof",NATIVE,65530);approvalbox=TerminalMailbox(r/"recovery-human",AUTH,65530);'
                     sub(NATIVE,common+producer+boxes+'from reserve_no_effect import produce;proofbox.publish(produce(p,r/"inbox",store,r/"relay.pub",NATIVE,factory=lambda i,p,c,w:driver_context(w)))')
+                    # Expired review cannot release its held reservation; use a
+                    # fresh signed snapshot and seal-derived proof after archival.
+                    archive='from reserve_recovery_archive import native_step as arc;'
+                    callarc='arc(p,r/"inbox",store,r/"relay.pub",NATIVE,proofbox,approvalbox)'
+                    (r/'clock').write_text(str(clock()+301));snapshot()
+                    sub(NATIVE,common+producer+boxes+archive+f'assert {callarc}=="review_pending"')
+                    (r/'clock').write_text(str(clock()+30));snapshot()
+                    sub(NATIVE,common+producer+boxes+archive+f'assert {callarc}=="archived_expired";assert {callarc}=="idle"')
+                    with tx() as db:assert gate_reserve(db,I)>0
+                    sub(NATIVE,common+producer+boxes+'from reserve_no_effect import produce;proofbox.publish(produce(p,r/"inbox",store,r/"relay.pub",NATIVE,factory=lambda i,p,c,w:driver_context(w)))')
+                    print('PASS expired proof archived with reservation held; fresh sealed proof issued',flush=True)
                     # Actual GUI and encrypted authority key; automated synthetic credentials.
                     auth='from reserve_no_effect import Review;review=Review(W,r/"credentials",r/"native.pub",r/"human.pub",authority_uid=AUTH,desk_uid=DESK,clock=clock);'
                     bad=auth+boxes+'v=review.begin(proofbox.read());review.confirm("WRONG",PASSWORD)'
@@ -277,7 +288,7 @@ with WarmRuntime(p,r/'relay.pub',lambda i,p,c,w:driver_context(w)).start() as wa
                     call='desk_once(tx,proofbox,approvalbox,bindings,public,human,W,store,clock=clock)'
                     sub(DESK,common+boxes+apply+f'assert {call}=="review_required"')
                     if os.environ.get('DISPLAY'):
-                        gui='from reserve_no_effect_worker import review_window;import tkinter as tk;t=tk.Tk();v=review_window(t,review,proofbox.read(),approvalbox.publish);t.update();v["challenge"].set(v["review"]["challenge"]);v["password"].set(PASSWORD);v["confirm"].invoke();t.update();assert approvalbox.read() is not None and "Approval recorded" in v["status"].get();t.destroy()'
+                        gui='from reserve_no_effect_worker import review_window;import tkinter as tk;t=tk.Tk();from reserve_recovery_archive import publish_review;proof=proofbox.read();v=review_window(t,review,proof,lambda approved:publish_review(proofbox,approvalbox,proof,approved,clock=clock));t.update();v["challenge"].set(v["review"]["challenge"]);v["password"].set(PASSWORD);v["confirm"].invoke();t.update();assert approvalbox.read() is not None and "Approval recorded" in v["status"].get();t.destroy()'
                         sub(AUTH,common+boxes+auth+gui)
                         print('PASS actual graphical local review and independent protected mailbox delivery',flush=True)
                     else:
@@ -295,6 +306,18 @@ with WarmRuntime(p,r/'relay.pub',lambda i,p,c,w:driver_context(w)).start() as wa
                         v=__import__('financial_ledger').observed(replay(db)[0][I]);assert v['active']==100*SCALE and v['protected']==v['qty']==v['pending']==0
                         assert tuple(db.execute('SELECT paused,human_pause FROM desk').fetchone())==(1,1)
                     print('PASS exact independent review, modified approval refusal, duplicate nonmutation, principal preserved and desk paused',flush=True)
+                    archive='from reserve_recovery_archive import native_step as arc;'
+                    callarc='arc(p,r/"inbox",store,r/"relay.pub",NATIVE,proofbox,approvalbox)'
+                    humanarc='from reserve_recovery_archive import authority_step;'
+                    callhuman='authority_step(proofbox,approvalbox,public,human,W)'
+                    # Old snapshot has no exact resolution and must not retire.
+                    sub(NATIVE,common+producer+boxes+archive+f'assert {callarc}=="review_pending"')
+                    snapshot();sub(NATIVE,common+producer+boxes+archive+f'assert {callarc}=="authority_archive_pending";assert {callarc}=="authority_archive_pending"')
+                    sub(AUTH,common+boxes+humanarc+f'assert {callhuman}=="archived_accounted";assert {callhuman}=="awaiting_native_retirement"')
+                    sub(NATIVE,common+producer+boxes+archive+f'assert {callarc}=="archived_accounted";assert {callarc}=="idle"')
+                    sub(DESK,common+boxes+apply+f'assert {call}=="idle"')
+                    with tx() as db:assert gate_reserve(db,I)==0 and db.execute("SELECT COUNT(*) FROM gate_events WHERE action='native_reviewed_no_effect'").fetchone()[0]==1
+                    print('PASS independent two-owner durable archive and exact mailbox retirement; no second ledger effect',flush=True)
             if mode=='kill':
                 # Missing native order is not proof of no fill. Even an accepted
                 # permit with no observed open exposure cannot release capital.

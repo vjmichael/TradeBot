@@ -32,9 +32,9 @@ def review_window(root,review,proof,publish):
         except (ValueError,OSError,KeyError,TypeError):status.set('Delivery not confirmed. No retry until reviewed.');return
         status.set('Approval recorded. Await reconciliation. Trading remains paused.')
     button=ttk.Button(root,text='Confirm release of unused reservation',command=confirm);button.pack(pady=4)
-    ttk.Button(root,text='Close',command=cancel).pack(pady=4)
+    close=ttk.Button(root,text='Close',command=cancel);close.pack(pady=4)
     root.protocol('WM_DELETE_WINDOW',cancel)
-    return dict(confirm=button,challenge=challenge,password=password,status=status,review=v)
+    return dict(confirm=button,close=close,challenge=challenge,password=password,status=status,review=v)
 
 
 def desk_once(transaction,proofbox,approvalbox,bindings,native,human,workspace,store,*,clock=None):
@@ -44,10 +44,12 @@ def desk_once(transaction,proofbox,approvalbox,bindings,native,human,workspace,s
     return consume(transaction,review,bindings,native,human,workspace,store=store,**({} if clock is None else {'clock':clock}))
 
 
-def main():
+def main(*,factory=None,window=review_window):
     from reserve_runtime import desk_transaction
     from reserve_entry_fence import open_fence,LOCK
     from reserve_terminal_worker import native_driver_context
+    factory=factory or native_driver_context
+    from reserve_recovery_archive import native_step as archive_native, authority_step, publish_review
     p=argparse.ArgumentParser();p.add_argument('role',choices=('native','review','desk'));a=p.parse_args()
     marker=Path('/etc/maj-vaj/reviewed-recovery-enabled')
     require(marker.is_file() and not marker.is_symlink() and marker.stat().st_uid==0 and not marker.stat().st_mode&0o022,'recovery_disabled')
@@ -63,14 +65,21 @@ def main():
     proofbox=TerminalMailbox('/var/lib/maj-vaj-recovery-native',native.pw_uid,group)
     approvalbox=TerminalMailbox('/var/lib/maj-vaj-recovery-human',auth.pw_uid,group)
     if a.role=='native':
-        if proofbox.read() is not None:return  # immutable until explicit reviewed archival
         producer=NativeProducer(w,'/var/lib/maj-vaj-native','/var/lib/maj-vaj-native-signing',native_pin=np,human_pin=hp,rebind_dir=records,rebind_pin=rp,**ids)
-        proofbox.publish(produce(producer,'/var/lib/maj-vaj-native-inbox',store,sp,native.pw_gid,factory=native_driver_context))
+        outcome=archive_native(producer,'/var/lib/maj-vaj-native-inbox',store,sp,native.pw_gid,proofbox,approvalbox)
+        if outcome!='idle':print(outcome,flush=True);return
+        # Cold startup happens BEFORE reading the short-lived signed snapshot.
+        # The warm service must have been explicitly stopped by the operator.
+        from reserve_persistent_worker import WarmRuntime
+        with WarmRuntime(producer,sp,factory).start() as warm:
+            proofbox.publish(produce(producer,'/var/lib/maj-vaj-native-inbox',store,sp,native.pw_gid,factory=warm.borrow,lease=warm.lease))
     elif a.role=='review':
+        outcome=authority_step(proofbox,approvalbox,pinned_key(np),pinned_key(hp),w)
+        if outcome!='idle':print(outcome,flush=True);return
         proof=proofbox.read();require(proof is not None and approvalbox.read() is None,'recovery_no_pending_review')
         review=Review(w,'/var/lib/maj-vaj-reserve-approval',np,hp,authority_uid=auth.pw_uid,desk_uid=desk.pw_uid)
         import tkinter as tk
-        root=tk.Tk();review_window(root,review,proof,approvalbox.publish);root.mainloop()
+        root=tk.Tk();window(root,review,proof,lambda approved:publish_review(proofbox,approvalbox,proof,approved));root.mainloop()
     else:
         print(desk_once(desk_transaction('/var/lib/maj-vaj/data'),proofbox,approvalbox,rebound_bindings(records,rp,**ids),pinned_key(np),pinned_key(hp),w,store),flush=True)
 
