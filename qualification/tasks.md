@@ -636,3 +636,21 @@ Standalone candidate [qualification/r2b-c](r2b-c/README.md), **28/28 local tests
 | TB-SEC-KEY-01-R2C | Credential rotation and secure reviewed recovery | Pending |
 
 D2 remains open/blocked; exact production tree a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b unchanged. No extra CI, main merge, real credentials, paid VPS or Library upload. Earlier independent acceptance retained, not rerun: A 28, A-R1 21, B 31. Recommended next independent task: R2B-INTEGRATE-01, review and qualify the shared protected provider lifecycle/receipt integration contract and dependency/negative-test matrix without changing the frozen D2 candidate. D2 mandatory native acceptance remains open before installed convergence. No scope drift.
+
+
+### TB-SEC-KEY-01-R2B-INTEGRATE-01 — Shared provider lifecycle and connection diagnostics (2026-11-20)
+
+Consolidated [provider custody and diagnostic contract](r2b-integrate-01/README.md) and implemented pure diagnostic projection. Reuse existing single protected vault owner, independent authenticated operator, provider-specific restricted adapters, status-only dashboard, independent financial Gate. Shared generation/binding, reviewed policy/recipient, durable attempt reservation, receipt commit/invalidation, serialized per-key transport, bounded timeout/cooldown and separate operator/diagnostic/financial authority contract; actual installed transaction hooks, custody and transport still pending. No new vault or authorization path.
+
+User explicitly requested persistent Steam-like no-internet indication. Added independent **server connection / VPS internet / provider status** semantics, stale/unknown handling, no route, DNS/TLS failure, multiple approved origins unreachable, contradictory evidence, single provider outage distinction. Approved non-secret existing observations only, not a new always-on daemon or credentialed/paid probe. External Recovery Bot heartbeat remains TB-09; don't claim local host can send when offline. Pure projection does no network or financial actions and does not confer verification authority.
+
+**137/137 local tests rerun and passed**, zero skips/failures: Kraken 28, credential state 21, Telegram 31, Grok 28, diagnostic projection 29. All ten local source/test Git blob hashes independently matched published files; new diagnostic source 54fa59dd7088f50306246621833c8cae6aab2d42, test eec3bbf08913d9659fa3c27b31ead2888bf13579. Not a composed runtime or installed acceptance. No real credentials or external calls.
+
+| ID | Scope | State |
+|---|---|---|
+| TB-SEC-KEY-01-R2B-INTEGRATE-01 | Consolidated architecture/acceptance contract and pure common provider/connectivity diagnostic projection | Scoped local pass (137 tests including rerun of inherited suites) |
+| TB-SEC-KEY-01-R2B-INTEGRATE-02 | Actual protected vault migration, version/policy/attempt/receipt lifecycle and authenticated admission; transactional synthetic integration, role separation and negative tests | Pending; stage separately without changing D2 candidate |
+| TB-SEC-KEY-01-R2B-INTEGRATE-03 | Installed restricted provider transport and status-only IPC/GUI tests, human Telegram acknowledgment, cross-UID, timeout, restart and canary acceptance | Pending after mandatory D2 and integration prerequisites |
+| TB-SEC-KEY-01-R2B-DX-NET | Persistent bottom-of-app connectivity strip and lightweight trusted observations; offline/restored/stale/selective outage tests; integrate with R2B-DX, RESOURCE and TB-09/TB-11 | Projection passed locally; actual collection/UI/native acceptance pending |
+
+D2 still open/blocked: unchanged production candidate tree a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b; no D2 harness modification, CI dispatch, main merge, production source change, spending or LIVE authorization. R2C and full installed matrix remain mandatory. Next independent task R2B-INTEGRATE-02; no scope drift. Carry contract forward at source convergence.
