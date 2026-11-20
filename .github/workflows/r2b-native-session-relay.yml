@@ -1,0 +1,60 @@
+name: R2B source-locked PAM-console native handoff acceptance
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2a-r1-d1]
+    paths: ['.github/workflows/r2b-native-session-relay.yml']
+permissions:
+  contents: read
+jobs:
+  native-session-relay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Restore frozen D2, R2B and exactly scoped native repair
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Test fixed native intent and original guarded handoff
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r3/tests"
+          python -m compileall -q "$RUNNER_TEMP/r2b-r3/credential_handoff.py"
+          python -m unittest discover -s "$RUNNER_TEMP/r2b-r3/tests" -p test_credential_handoff.py -v 2>&1 | tee receipt/original-guard-tests.txt
+          python -m unittest -v test_credential_intent 2>&1 | tee receipt/intent-tests.txt
+      - name: Install native VM prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build Debian 13 with unchanged non-diagnostic installed fixture
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-r3" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/native" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Browser consent then actual native modal and separate operator enrollment
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 qualification/r2b-integrate-02-r2-r3/native/harness.py "$RUNNER_TEMP/r2b-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/native.txt
+          grep -Fx R2B_NATIVE_INSTALLED_PASS receipt/native.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-native-session-relay-receipts
+          path: receipt/
+          retention-days: 3
