@@ -172,9 +172,13 @@ try:
         (out/'handler-running-after-timeout.txt').write_text('handler_visible='+('yes' if rc==0 else 'no')+'\n')
         # Non-secret, disposable-VM-only scheme launch/refusal classification.
         # These files are written only by a fixture probe, not product source.
-        for name in ('r2b-dispatch-invoked','r2b-dispatch-exit','r2b-dispatch-guard'):
+        for name in ('r2b-dispatch-invoked','r2b-dispatch-exit','r2b-dispatch-guard','r2b-native-stage'):
             path='/run/user/'+str(command('id -u maj-vaj-console')[1].strip())+'/'+name
             rc,data=command('test -f '+shlex.quote(path)+' && cat '+shlex.quote(path),ok=False)
+            if name=='r2b-native-stage':
+                data=data.strip()
+                if re.fullmatch(r'(?:identity|handoff|handler)_[a-z_]{1,45}',data) is None:
+                    data='unknown_stage'
             if name=='r2b-dispatch-guard':
                 data=data.strip()
                 if not re.fullmatch(r'(?:account|review)_[a-z0-9_]{1,64}|opaque_other|source_[0-9]{1,5}_[A-Za-z][A-Za-z0-9_]{0,50}',data):
