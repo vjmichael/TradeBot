@@ -1,0 +1,22 @@
+# TB-FIN-01C / TB-08 — independent approval IPC candidate
+
+Existing ledger task; PAPER fixtures only. Parent a515221056bca751bd6cd4f048cb37c901a5c1ec. No actual desk enrollment, live authority, trading orders, or mainline advancement.
+
+## Delivered
+
+- reserve_enrollment.py: exclusive encrypted permit-key enrollment under a distinct non-root authority UID; protected root-owned ancestry, private owner-only credential directory and file, scrypt/AES-GCM, interactive double passphrase, independently reviewed public-key fingerprint. No automatic trust pin or re-enrollment. New permit key is separate from the legacy approval key.
+- reserve_ipc.py: pathname Unix service with mutual Linux peer-UID authentication, protected socket path, single-server lock, bounded canonical messages, workspace/nonce binding, root-pinned Ed25519 public key. The desk may obtain the witness or submit an exact independently signed permit for a monotonic checkpoint advance. Signature binds workspace, prior and next exact event digest/sequence and short expiration; persistent compare-and-swap rejects replays. No signing, password, private credential, SQL, order or arbitrary command endpoint. Authority service never opens a desk database. The service only verifies the permit, not the financial justification behind it.
+- Client transaction helpers verify the witness prefix and require exactly one next reserve event matching the signed permit within a serialized SQLite transaction. Caller must perform full financial replay and independent approval/evidence validation before signing or invoking these helpers. Durable witness advance precedes desk commit; lost acknowledgement/commit requires explicit reconciliation, not automatic rollback.
+- deploy/maj-vaj-reserve-authority.service: staged Linux unit under separate authority account; restricted filesystem access and AF_UNIX only. Requires explicit independently reviewed enrollment, trusted pin, initialized witness and administrator-created identities/paths. Unit has no automatic enablement. Unique key/pin per installation is required. No production unit was installed or started; actual systemd sandbox, peer and power-loss behavior remain unqualified.
+
+## Local qualification
+
+Five focused cases passed using actual distinct Linux UIDs, real Unix sockets and encrypted fixture enrollment. Aggregate invocation timed out after the first three cases reported OK; two remaining cases completed together with terminal OK in 16.925 seconds. Tests used reconstructed in-memory SQLite journal event sequences, not a real native wallet or production desk. Passed: enrollment/refusal of overwrite and wrong password; desk cannot read or unlock authority credentials; signed exact advancement and persistence across service restart; rollback and permit replay refusal; malformed, forged, expired and wrong-scope refusal; no sign API; different UID refused; unavailable service refuses; mismatched event and interrupted desk commit fail closed. Python syntax compile passed. systemd-analyze verify identified missing installed /opt/maj-vaj/venv/bin/python; installed service verification is not a pass.
+
+Exact blobs: reserve_ipc.py 98155456d7c7d4e62df40d29114d7a474cc24042; reserve_enrollment.py 6c5cf84c412058f644eb536cfb11f1471d867ad1; tests/test_reserve_ipc.py cd072c4ced67a034d4e8095ccc102ff665d3a4ec; deploy/maj-vaj-reserve-authority.service d6f5b29ab5e5c358704c96a2b6c27a13786a8b75.
+
+## Open — do not activate
+
+This is the IPC and enrollment foundation, not full independent production broker integration. Wire genuine graphical operator review and independent authenticated native financial validation to the permit signer. No desk supplied assertion alone may authorize a permit, including scheduler ticks. Migrate credential/state only with independent authenticated existing-history review, no silent genesis or automatic pinning. Enforce witness checks across all production mutations, legacy CLI routes and status reads; reconcile the exact pending permit after a cross-store crash. Add native installed GUI launcher, service and scheduler integration, cold reboot and revoke/tick concurrency qualification. Ensure installed service failure never permits a release. No real credentials or money used.
+
+Main 90d1424ab4a8f354c8b41d9f006f83508ba0d959: market memory 44646221414 now passed; one-hour installed 44646221309 was still active at final inspection. Preserve main while this acceptance runs.
