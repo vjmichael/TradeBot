@@ -47,8 +47,9 @@ class Tests(unittest.TestCase):
     def test_error_redaction(self): self.override[PATHS[0]]=RuntimeError(KEY);self.assertNotIn(KEY,repr(self.runcheck()))
     def test_metadata_redaction(self): r=repr(self.runcheck());self.assertNotIn(KEY,r);self.assertNotIn('PRIVATE',r)
     def test_receipt_binding(self):
-        r=self.runcheck();self.assertTrue(r.current(GEN,MODEL,399,True));self.assertFalse(r.current('b'*32,MODEL,399,True));self.assertFalse(r.current(GEN,'other',399,True));self.assertFalse(r.current(GEN,MODEL,399,False));self.assertFalse(r.current(GEN,MODEL,400,True));self.assertFalse(r.current(GEN,MODEL,99,True))
-    def test_refused_receipt(self): self.inspect_disabled=self.runcheck(opted_in=False);self.assertFalse(self.inspect_disabled.current(GEN,MODEL,100,True))
+        r=self.runcheck();self.assertTrue(r.current(GEN,MODEL,ACL,399,True));self.assertFalse(r.current('b'*32,MODEL,ACL,399,True));self.assertFalse(r.current(GEN,'other',ACL,399,True));self.assertFalse(r.current(GEN,MODEL,ACL,399,False));self.assertFalse(r.current(GEN,MODEL,ACL,400,True));self.assertFalse(r.current(GEN,MODEL,ACL,99,True))
+    def test_policy_change(self): self.assertFalse(self.runcheck().current(GEN,MODEL,'api-key:endpoint:Other',100,True))
+    def test_refused_receipt(self): self.inspect_disabled=self.runcheck(opted_in=False);self.assertFalse(self.inspect_disabled.current(GEN,MODEL,ACL,100,True))
     def test_bad_context(self):
         for args in [dict(endpoint_acl='api-key:endpoint:*'),dict(model='*'),dict(generation='oops'),dict(now=True)]:
             with self.assertRaises(ValueError):self.runcheck(**args)
