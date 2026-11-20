@@ -758,3 +758,23 @@ Remaining engineering task: **TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2 — Qualify n
 | R2C | Key rotation and rollback-safe recovery still pending |
 
 Preserve existing D2 candidate, owner/network isolation, financial Gate and separation of regular Desk/Recovery Telegram bots. No real user credentials, live orders or paid calls. Do not report complete R2B installed acceptance while any of these gates remain open.
+
+
+### R2B-INTEGRATE-02-R2-R2 — terminal reconciliation, protected native gate still OPEN (2026-11-20)
+
+**Evidence and outcome:** [complete native run comparison](r2b-integrate-02-r2-r2/README.md). Original source-locked D2 tree `a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b` and R2B base tree `250310b3409dd4c0feffa33eba1fe74d8b4ca54a` preserved. Actual installed Debian 13 Chromium/LightDM console, isolated encrypted vault with separately provisioned *synthetic* provider tag-key, native VM preflight and true console PAM/X11 login repeatedly PASS. Legacy migration source candidate **15/15 tests PASS** against exact original PaperVault; preserves encrypted ciphertext/atomic refusal but still requires unimplemented native one-use review and remains **NOT enabled**. Local Unix peer-authenticated non-secret health witness **16/16 PASS**; positive actual business readiness and internet observation NOT installed/wired.
+
+**Failed protected browser→native handoff:** [44827704438](https://github.com/vjmichael/TradeBot/actions/runs/44827704438) initial actual anchor activation; [44828735766](https://github.com/vjmichael/TradeBot/actions/runs/44828735766) deferred logout (still fail); [44829990507](https://github.com/vjmichael/TradeBot/actions/runs/44829990507) OS-owned URI (still fail); [44830728106](https://github.com/vjmichael/TradeBot/actions/runs/44830728106) first attempt Debian mirror reset, second attempt proved **Chromium external-app consent prompt** (without approving it). Final [44831780644](https://github.com/vjmichael/TradeBot/actions/runs/44831780644) browser prompt approved through actual pointer input without persistent always-allow; prompt dismissed, **native protected Tk confirmation did not appear**; terminal FAIL, receipt [14677106702](https://github.com/vjmichael/TradeBot/actions/runs/44831780644/artifacts/14677106702) with screenshots / fixed OS process/registration observations. `xdg-mime` reports registered handler; handler not visible at *late timeout*, cannot conclude whether a short-lived guarded child was launched. Do not claim genuine native operator enrollment, provider test, or full D2/R2B installed pass.
+
+**Next focused task:** `TB-SEC-KEY-01-R2A-R1-D2-R3-NATIVE` — add read-only native process/file-open and desktop scheme launch observations to independently classify whether approved browser handoff reaches handler and which protected guard refuses; repair only established failure, then requalify unchanged source SHA with actual browser→native confirmation→independent PAM operator login/enrollment, cancellation/refusal and restart. No direct handler launch as a substitute for browser intent.
+
+| Remaining mandatory gate | State |
+|---|---|
+| Protected native handoff and operator enrollment | **FAIL / OPEN** after Chromium consent, no native window |
+| Actual legacy credential migration | Source-only pass, genuine one-use protected review and installed tests OPEN |
+| Owner-only tag key custody, nonce/KEK/rollback-safe restore | Synthetic installed preflight only; full migration/recovery OPEN |
+| Real authenticated supervisory health + VPS internet witnesses, positive/negative offline UI | Read-only collector local 16/16; installed publishers and acceptance OPEN; no false green |
+| Kraken/Telegram/Grok protected Test connection and genuine receipt admission | Still **DISABLED**; custody and real isolation unqualified |
+| Consolidated production and financial Gate acceptance | Not attempted, all LIVE and paid controls remain refused |
+
+One completed CI run at a time; all failed attempts preserved, no main merge, real secrets, trades, paid resource, or automatic LIVE activation. Avoid more blind native retries until a new, discriminating receipt is prepared. The R2B installed task remains **PARTIAL**, not closed.
