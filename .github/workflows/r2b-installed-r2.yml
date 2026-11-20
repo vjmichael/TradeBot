@@ -17,16 +17,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - name: Exact source locked R2B restore and pinned dashboard
         run: |
           set -euo pipefail
           mkdir -p receipt
-          bash qualification/r2b-integrate-02-r2-r1/restore-r2b.sh "$RUNNER_TEMP/r2b-installed" | tee receipt/source-tree.txt
-          test "$(git -C "$RUNNER_TEMP/r2b-installed" write-tree)" = 250310b3409dd4c0feffa33eba1fe74d8b4ca54a
+          bash qualification/r2b-integrate-02-r2-r2/restore-r2.sh "$RUNNER_TEMP/r2b-installed" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-installed" hash-object dashboard/app.js)" = 9142d3780d9bdedde9f21ca332d8e7383ad4223a
           cd "$RUNNER_TEMP/r2b-installed/dashboard"
           npm ci --ignore-scripts --no-audit --no-fund
           npm run build
           test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Qualify reviewed legacy migration against exact original vault
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-installed/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-installed:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/migration"
+          python -m unittest -v test_reviewed_migration 2>&1 | tee receipt/migration-tests.txt
       - name: Install native VM prerequisites
         run: |
           sudo apt-get update
