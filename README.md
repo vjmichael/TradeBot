@@ -4,7 +4,7 @@ Formerly TradeBot. Existing repository, package/module names, environment variab
 
 **Component roles:** Maj Vaj Trade Bot is the user-facing trading desk, public data collector, supervisor and independent financial/risk authority. Freqtrade is the strategy execution engine. FreqAI is Freqtrade's machine-learning extension; the first planned numerical baseline uses LightGBM trained on approved historical features. Grok is optional fundamental research, not the execution engine. Direct Kraken public API calls maintain the future browsable market directory independently of either engine. TB-02 qualified the synthetic FreqAI mechanism, not real-market training or profitability; numerical strategy acceptance remains TB-06.
 
-A 24/7 cloud trading desk based on [design v0.7](docs/design-v0.7.md), the binding [v0.8 design addendum](docs/design-v0.8-addendum.md) and [implementation decisions](docs/decisions.md). See the [task ledger](docs/tasks.md) and [financial goals and profit protection amendment](docs/tb-fin-01.md).
+A 24/7 cloud trading desk based on [design v0.7](docs/design-v0.7.md), the binding [v0.8 design addendum](docs/design-v0.8-addendum.md) and [implementation decisions](docs/decisions.md). See the [task ledger](docs/tasks.md), [financial goals and profit protection amendment](docs/tb-fin-01.md), and mandatory [secret custody and non-disclosure contract](docs/tb-sec-key-01.md). Never enter real wallet private keys, recovery phrases or live exchange keys into the development dashboard.
 
 **New to the financial controls?** Read the [Money, trading capital and protected profit FAQ](docs/README-finances.md) for examples of a fixed bankroll, profit goals, losses, settled profits, reinvestment, and what OFF means.
 

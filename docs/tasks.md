@@ -2,7 +2,7 @@
 
 Product renamed from TradeBot; historical internal identifiers and all task IDs remain unchanged. Public branding updated; existing financial and execution authorization gates remain binding.
 
-No automatic progression to real money. Design v0.7 plus the binding [v0.8 addendum](design-v0.8-addendum.md), the binding [TB-FIN-01 financial protection amendment](tb-fin-01.md), and [decisions.md](decisions.md) govern every group. Acceptance must demonstrate behavior, not just source presence. Consolidate tests per task group. No live keys in CI; no paid resources without authorization.
+No automatic progression to real money. Design v0.7 plus the binding [v0.8 addendum](design-v0.8-addendum.md), the binding [TB-FIN-01 financial protection amendment](tb-fin-01.md), [TB-SEC-KEY-01 secret custody](tb-sec-key-01.md), and [decisions.md](decisions.md) govern every group. Acceptance must demonstrate behavior, not just source presence. Consolidate tests per task group. No live keys in CI; no paid resources without authorization.
 
 | ID | Scope / acceptance | State |
 |---|---|---|
@@ -16,6 +16,7 @@ No automatic progression to real money. Design v0.7 plus the binding [v0.8 adden
 | TB-08 | Multi-instance shared data and research budget, isolated rules/numerical/fundamental paper portfolios, allocation/reservations, preparation lifecycle, paper switch with separate live confirmation and protected exits; TB-FIN-01A/C/D/E financial goals, human-controlled reserve release and paper verification | Pending |
 | TB-09 | Central Telegram Desk, external Recovery bot, allowlisted chats, test messages, durable controls and secondary email | Pending |
 | TB-10 | Signed one-click DigitalOcean Linux VPS deployment and prepopulated historical seed installation, measured storage sizing, disk monitoring and consistent SQLite/Parquet/model restore, private APIs, HTTPS, external heartbeat/recovery, backups, upgrade/rollback; graphical fresh-host acceptance | Pending; see TB-10-SEED below |
+| TB-SEC-KEY-01 | Mandatory secret custody and non-disclosure across API, wallet, native signer, UI, logs, process/IPC, backups, notifications, research and deployment; separate vault keys, withdrawal-disabled exchange keys, revocation/rotation and synthetic-canary installed matrix | In progress — masked input and fixed errors candidate; 5/5 model tests; endpoint and installed matrix pending; blocks TB-10/11/12 production and live release |
 | TB-11 | Consolidated functional/security and failure drills per design section 9 and v0.8; AI-absence, session/timezone and budget cap tests; real venue eligibility and stop/ownership qualification; 24h laptop-off check | Pending |
 | TB-12 | At least seven consecutive days real-time simulated trading after historical readiness; freeze evaluation and extend as needed, no automatic live promotion | Pending |
 
