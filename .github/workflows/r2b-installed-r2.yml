@@ -1,3 +1,4 @@
+# R2B native pointer-input qualification: exact browser-driven click, no direct handler launch.
 name: R2B installed Debian graphical and owner custody qualification
 on:
   push:
