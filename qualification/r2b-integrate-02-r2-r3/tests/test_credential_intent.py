@@ -53,9 +53,20 @@ class IntentTests(unittest.TestCase):
             value=receive_intent(listener, self.uid if uid is None else uid)
             worker.join(3)
             self.assertFalse(worker.is_alive())
-            self.assertFalse(errors)
             self.assertEqual(value,accepted)
-            self.assertEqual(responses,[ACK if accepted else b''])
+            if accepted:
+                self.assertFalse(errors)
+                self.assertEqual(responses,[ACK])
+            else:
+                # Linux can reset a Unix stream when the server rejects an
+                # oversized/malformed frame without draining unread bytes.
+                # A rejected request must never receive a positive ACK.
+                self.assertNotIn(ACK,responses)
+                self.assertTrue(
+                    (responses == [b''] and not errors) or
+                    (not responses and errors == ['ConnectionResetError']),
+                    (responses,errors)
+                )
         self.assertFalse(path.exists())
         return value
 
