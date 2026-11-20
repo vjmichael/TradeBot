@@ -1,0 +1,50 @@
+name: D2 integrated installed Debian browser-to-native handoff
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2a-r1-d1]
+    paths: ['.github/workflows/d2-integrated.yml','qualification/d2/**']
+permissions:
+  contents: read
+jobs:
+  integrated-desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Restore unchanged exact source and build locked dashboard
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/restore.sh "$RUNNER_TEMP/exact-candidate" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/exact-candidate" write-tree)" = a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b
+          cd "$RUNNER_TEMP/exact-candidate/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Install VM build prerequisites on transient runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build disposable Debian 13 VM with genuine Chromium and LightDM
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/exact-candidate" "$RUNNER_TEMP/d2-root" "$GITHUB_WORKSPACE/qualification/d2" "$RUNNER_TEMP/d2-vm"
+          cp "$RUNNER_TEMP/d2-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Execute exact installed offline graphical journey
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 qualification/d2/harness.py "$RUNNER_TEMP/d2-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/integrated.txt
+          grep -Fx D2_INTEGRATED_PASS receipt/integrated.txt
+      - name: Preserve only small synthetic fixture receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d2-integrated-graphical-receipt
+          path: receipt/
+          retention-days: 3
