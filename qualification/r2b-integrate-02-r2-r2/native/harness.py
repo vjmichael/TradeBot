@@ -123,7 +123,7 @@ try:
         (out/'window-diagnostic.txt').write_text(titles+'\\n')
         # Read-only source-of-truth registration and post-timeout process
         # observations; no direct invocation of the protocol handler.
-        rc, reg=command("runuser -u maj-vaj-console -- env HOME=/home/maj-vaj-console XDG_RUNTIME_DIR=$(id -u maj-vaj-console | xargs -I {} printf '/run/user/%s' '{}') /usr/bin/xdg-mime query default x-scheme-handler/majvaj-account",ok=False)
+        rc, reg=command("runuser -u maj-vaj-console -- env HOME=/home/maj-vaj-console XDG_RUNTIME_DIR=/run/user/$(id -u maj-vaj-console) /usr/bin/xdg-mime query default x-scheme-handler/majvaj-account",ok=False)
         (out/'handler-registration.txt').write_text('registered='+('yes' if rc==0 and reg.strip()=='maj-vaj-account-handoff.desktop' else 'no')+'\\n')
         rc,_=command("pgrep -u maj-vaj-console -f 'credential_handoff.py|account_handoff_wrapper.sh' >/dev/null",ok=False)
         (out/'handler-running-after-timeout.txt').write_text('handler_visible='+('yes' if rc==0 else 'no')+'\\n')
