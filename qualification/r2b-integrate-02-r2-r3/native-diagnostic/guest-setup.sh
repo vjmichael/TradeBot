@@ -101,22 +101,17 @@ after="""    except Exception as exc:
         if re.fullmatch(r'(?:account|review)_[a-z0-9_]{1,64}',reason) is None:
             import traceback
             frames=traceback.extract_tb(exc.__traceback__)
-            origin=frames[-1] if frames else None
+            source_frames=[item for item in frames
+                           if item.filename.endswith('/credential_handoff.py')]
+            origin=source_frames[-1] if source_frames else None
             kind=type(exc).__name__
-            module=Path(origin.filename).stem if origin is not None else 'unknown'
-            func=origin.name if origin is not None else 'unknown'
             line=origin.lineno if origin is not None else 0
-            allowed={'credential_handoff','reserve_review_launcher',
-                     'reserve_review_session','reserve_review_events',
-                     'reserve_ipc','reserve_checkpoint','subprocess',
-                     'paper_credential_vault','tkinter','__init__'}
-            if (module not in allowed or
-                re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,50}',kind) is None or
-                re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,50}',func) is None or
-                not 0 <= line <= 10000):
+            # Own source line and Python exception *class* only, never text.
+            if (re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,50}',kind) is None
+                or not 1 <= line <= 10000):
                 reason='opaque_other'
             else:
-                reason=f'{kind}:{module}:{func}:{line}'
+                reason=f'source_{line}_{kind}'
         try:
             Path(f'/run/user/{os.getuid()}/r2b-dispatch-guard').write_text(reason+'\\\\n')
         except OSError:
