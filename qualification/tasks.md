@@ -523,3 +523,15 @@ User requests baseline benchmark and possible resource controller, $4 DigitalOce
 | TB-10-MIGRATE | Graphical atomic migration/restore, compatibility checks, financial reconciliation, restart and rollback | Planned; never automatically resume LIVE |
 
 No new paid resources, Library upload, production code change, live authorization or main merge. Carry these requirements forward to authoritative design and ledger upon source convergence. Next immediate security work remains D2 closeout.
+
+### TB-10 resource controller — adaptive scheduling and self-recovery refinement (2026-11-20)
+
+User prioritizes lean unattended 24/7 operation and explicitly requires one feature group at a time. Extend existing RESOURCE-03/04, TB-04F2A/F2B/F4-B, TB-07A2-R1/R2, TB-09/10/11/12; do not duplicate schedulers or recovery supervision. [Binding resource/recovery amendment](resource/requirements.md). The $4 host is a qualification target, not an accepted capacity claim.
+
+| ID | Scope | State |
+|---|---|---|
+| TB-10-RESOURCE-03A | Deterministic adaptive workload admission, priority/deadline scheduling, lightweight pressure observation, approved bounded thread/batch adjustment, hysteresis, measured overhead; reuse existing scheduling subsystem | Planned after RESOURCE-02 |
+| TB-10-RESOURCE-03B | Reuse service watchdogs and leased workers for bounded restart/backoff, durable checkpoint and model preservation, account reconciliation, safe degraded latch and independent recovery alerts; no duplicate order, code self-modification or automatic LIVE authorization | Planned after 03A and existing recovery/security prerequisites |
+| TB-10-RESOURCE-04A | Installed lean 24/7 resilience acceptance with actual recovery times/data-loss bounds, resource/deadline budgets, 24-hour computer-off test and existing seven-day PAPER requirement; fail safe under faults | Planned within RESOURCE-04 and TB-11/12 |
+
+**Scope freeze:** current immediate task remains TB-SEC-KEY-01-R2A-R1-D2 closeout, then R2B and R2C; no parallel resource implementation initiated. Existing qualified recovery evidence remains valid only for its tested scope. Carry forward to authoritative design and ledger on source convergence. Documentation-only change; no CI dispatch, production source change, LIVE authorization, Library upload or paid VPS.
