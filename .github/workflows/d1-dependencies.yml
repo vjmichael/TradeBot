@@ -1,0 +1,105 @@
+name: D1 locked npm and browser dependency qualification
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2a-r1-d1]
+    paths: ['.github/workflows/d1-dependencies.yml']
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Verify exact lock and restore online then offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/receipt/npm"
+          cd dashboard
+          echo '22a690a17d2b9fc5ce162ca86043ee68854df46d2d06f076d8cbc4eb9b593e9d  package-lock.json' | sha256sum -c
+          echo '35fffad6d5fae41238878e0188c2806ff987942273a33259d2e3399ed81871ec  package.json' | sha256sum -c
+          node --version
+          npm --version
+          npm ci --ignore-scripts --no-audit --no-fund --cache "$RUNNER_TEMP/d1-npm-cache"
+          rm -rf node_modules
+          npm ci --offline --ignore-scripts --no-audit --no-fund --cache "$RUNNER_TEMP/d1-npm-cache"
+          npm run build
+          node - <<'NODE'
+          const fs=require('node:fs'), crypto=require('node:crypto'), path=require('node:path');
+          (async()=>{
+            const entries=Object.entries(require('./package-lock.json').packages).filter(([k])=>k);
+            if(entries.length!==5) throw Error('Unexpected dependency count');
+            for(const [k,v] of entries){
+              const name=k.slice('node_modules/'.length);
+              const url=new URL(v.resolved);
+              if(url.protocol!=='https:'||url.hostname!=='registry.npmjs.org') throw Error('Unexpected registry');
+              const res=await fetch(url,{redirect:'error'});
+              if(!res.ok)throw Error('Registry HTTP '+res.status);
+              const bytes=Buffer.from(await res.arrayBuffer());
+              if('sha512-'+crypto.createHash('sha512').update(bytes).digest('base64')!==v.integrity)throw Error('Integrity mismatch '+name);
+              fs.writeFileSync(path.join('..','receipt','npm',name+'-'+v.version+'.tgz'),bytes);
+              console.log(name+' '+v.version+' integrity verified');
+            }
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          NODE
+          sha256sum ../receipt/npm/*.tgz > ../receipt/npm-SHA256SUMS.txt
+          npm ls --all > ../receipt/npm-tree.txt
+          sha256sum -c <(printf '%s\n' '22a690a17d2b9fc5ce162ca86043ee68854df46d2d06f076d8cbc4eb9b593e9d  package-lock.json')
+      - name: Test pinned React assets in runner browser with standard sandbox
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v chromium)"
+          "$chrome" --version | tee receipt/browser-version.txt
+          cat > dashboard/d1-smoke.html <<'HTML'
+          <!doctype html><meta charset="utf-8"><div id="root">FAIL</div>
+          <script src="vendor/react.js"></script><script src="vendor/react-dom.js"></script>
+          <script>ReactDOM.flushSync(()=>ReactDOM.createRoot(document.getElementById('root')).render(React.createElement('p',null,'D1_PINNED_REACT_BROWSER_PASS')));</script>
+          HTML
+          python3 -m http.server 18765 --bind 127.0.0.1 --directory dashboard > "$RUNNER_TEMP/d1-http.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for i in {1..30}; do if curl -fsS http://127.0.0.1:18765/d1-smoke.html >/dev/null; then break; fi; sleep 1; done
+          timeout 45 "$chrome" --headless --disable-gpu --no-first-run --user-data-dir="$RUNNER_TEMP/d1-chrome-profile" --dump-dom http://127.0.0.1:18765/d1-smoke.html > receipt/browser-dom.html
+          grep -F '<p>D1_PINNED_REACT_BROWSER_PASS</p>' receipt/browser-dom.html
+      - name: Preserve only small locked packages and receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-small-npm-and-browser-receipt
+          path: receipt/
+          retention-days: 3
+          if-no-files-found: error
+  debian-packages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Install Chromium and xdg-utils in disposable Debian 13 chroot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring
+          root="$RUNNER_TEMP/d1-debian"
+          sudo debootstrap --variant=minbase --keyring=/usr/share/keyrings/debian-archive-keyring.gpg trixie "$root" http://deb.debian.org/debian
+          sudo chroot "$root" apt-get update
+          sudo chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install chromium chromium-sandbox xdg-utils
+          sudo chroot "$root" dpkg-query -W chromium chromium-sandbox xdg-utils | tee receipt/debian-packages.txt
+          sudo chroot "$root" dpkg --audit | tee receipt/debian-dpkg-audit.txt
+          test ! -s receipt/debian-dpkg-audit.txt
+          sudo chroot "$root" chromium --version | tee receipt/debian-chromium-version.txt
+      - name: Preserve tiny Debian receipt only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-debian-package-receipt
+          path: receipt/
+          retention-days: 3
+          if-no-files-found: warn
