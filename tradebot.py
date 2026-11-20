@@ -15,6 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from credential_input import CredentialSetup
 from engine import candles, MarketUnavailable
 from market_directory import MarketDirectory, DirectoryUnavailable
 from market_memory import MarketMemory, MemoryUnavailable, session_profile
@@ -131,15 +132,6 @@ class DataScheduleSpec(BaseModel):
 class CleanupSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     preview_id: str = Field(pattern=r"^[0-9a-f]{32}$")
-
-
-class CredentialSetup(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    grok: str | None = Field(default=None, min_length=1, max_length=8192)
-    telegram_desk: str | None = Field(default=None, min_length=1, max_length=8192)
-    telegram_recovery: str | None = Field(default=None, min_length=1, max_length=8192)
-    kraken_read_key: str | None = Field(default=None, min_length=1, max_length=8192)
-    kraken_read_secret: str | None = Field(default=None, min_length=1, max_length=8192)
 
 
 class Store:
@@ -509,12 +501,18 @@ def create_app(directory: Path, token: str, cap: int = 0, *, vault_key: bytes | 
         if vault is None:
             raise HTTPException(503, "Secure credential storage unavailable")
         try:
-            vault.setup(spec.model_dump(exclude_none=True))
+            vault.setup(spec.vault_values())
         except InvalidToken:
             raise HTTPException(503, "Secure credential storage unavailable") from None
         except (ValueError, UnicodeError):
             raise HTTPException(422, "Invalid credential selection; Kraken key and secret must be saved together") from None
-        return setup_status()
+        except Exception:
+            # Never propagate credential-bearing backend exception messages or traces.
+            raise HTTPException(503, "Secure credential storage unavailable") from None
+        try:
+            return setup_status()
+        except Exception:
+            raise HTTPException(503, "Secure credential storage unavailable") from None
 
     @app.post("/api/setup/paper-capital", dependencies=[Depends(authorize)])
     def paper_capital(spec: PaperCapital):

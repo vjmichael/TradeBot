@@ -164,6 +164,19 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(c.post('/api/setup/credentials',json={'grok':'replacement'},headers=AUTH).status_code,503)
         self.assertEqual(Vault(Store(self.directory,0),self.key).get('grok'),values['grok'])
 
+    def test_credential_canary_not_echoed_on_backend_failure(self):
+        from unittest.mock import patch
+        secret = 'synthetic-credential-canary-never-a-real-key'
+        with self.client() as c:
+            for field in ('wallet_private_key', 'seed_phrase', 'kraken_trade_key'):
+                res = c.post('/api/setup/credentials', json={field:secret}, headers=AUTH)
+                self.assertEqual(res.status_code,422)
+                self.assertNotIn(secret,res.text)
+            with patch.object(Vault,'setup',side_effect=RuntimeError(secret)):
+                res = c.post('/api/setup/credentials',json={'grok':secret},headers=AUTH)
+                self.assertEqual(res.status_code,503)
+                self.assertNotIn(secret,res.text)
+
     def test_no_vault_no_secret_writes(self):
         with self.app(False) as c:
             self.assertFalse(c.get('/api/setup',headers=AUTH).json()['vault_available'])
