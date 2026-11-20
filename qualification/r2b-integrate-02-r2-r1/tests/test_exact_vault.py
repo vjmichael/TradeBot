@@ -57,7 +57,7 @@ class ExactVaultTests(unittest.TestCase):
         self.rpc.enroll({'grok':'synthetic-one'})
         with self.original.transaction() as db:
             db.execute('UPDATE secrets SET ciphertext=? WHERE slot=?',
-                       (self.original.cipher.encrypt(DOMAIN+b'grok\\0synthetic-other'),'grok'))
+                       (self.original.cipher.encrypt(DOMAIN+b'grok\0synthetic-other'),'grok'))
         with self.assertRaises(Refused): self.rpc.status()
     def test_ciphertext_not_plaintext(self):
         self.rpc.enroll({'grok':'CANARY_REALM_FOR_TEST'})
