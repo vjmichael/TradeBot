@@ -1,0 +1,23 @@
+# TB-FIN-01C / TB-08 — independent reserve custody stage
+
+Continuation of the existing operational closeout, not a new parent task. PAPER only. The actual desk, all live execution, and real operator authority are unchanged.
+
+## Candidate implementation
+
+reserve_checkpoint.py is an isolated Linux authority-owned witness primitive. It requires different non-root authority and desk UIDs; root-owned non-writable ancestor directories, an authority-owned witness directory, a public read-only checkpoint for the desk, and an authority-only writer lock. It refuses missing, untrusted, malformed or symlinked custody rather than treating it as a fresh genesis. The trusted writer uses lock-serialized compare-and-swap, exact next reserve-event identity, atomic file replacement and durable synchronization. The reader verifies that the independent checkpoint is present in the supplied financial journal and that there is no unwitnessed newer reserve event. New initialization is permitted only for a new desk, never an existing reserve history. All reserve event types, including adoption, revocation and tick, are covered. Non-reserve ledger events may follow a checkpoint.
+
+This primitive does not validate individual financial decisions, approve policies, sign releases or provide an IPC service; verification and advancement must occur inside the same serialized desk operation after complete financial replay, authenticated evidence and approval validation. A hostile authority principal or whole-machine rollback is outside its tested boundary. A lost pre-commit desk update after witness publication fails closed, requiring explicit reconciliation; automatic repair from the desk database is forbidden. Do not deploy the primitive as a standalone authority broker or claim transactional cross-store recovery.
+
+## Executed evidence
+
+Six of six focused tests passed in three invocations (3 tests in 11.723 s, 2 tests in 17.781 s, 1 test in 5.709 s). Actual Linux processes used two distinct non-root UIDs, real filesystem permission checks and in-memory SQLite fixtures with reconstructed event prefixes. Desk identity read the public checkpoint but could not read the independent private fixture credential, write the checkpoint or lock, or unlink the checkpoint. Older reconstructed histories before adoption, a tick and revocation were refused; correct current history with a later non-reserve event was accepted. Wrong digest, multiple unapproved events, missing/symlinked checkpoint, insecure ancestry, same-principal configuration, stale compare-and-swap and an explicitly rolled-back transaction were refused. The first two aggregate runs hit the container command timeout; all individual test cases were completed in the subsequent split runs. No guest VM, production encrypted credential, real native wallet, installed GUI, or physical cold-reboot test was used for this candidate. Tests require root and setpriv for independent UID qualification and otherwise skip.
+
+Exact tested Git blobs: reserve_checkpoint.py 6f7f0c43dcb4ba33c97d1c4aea8eec7acbb16993; tests/test_reserve_checkpoint.py 292f62f615759692c5bbb00abe91dd5ac742484d. Frozen candidate parent 90d1424ab4a8f354c8b41d9f006f83508ba0d959. Existing main is not advanced during active acceptance.
+
+## Remaining integration under the existing task
+
+Migrate the graphical credential store into a genuinely independent installed authority identity; no broad desk ACL or privilege-elevating graphical launcher. Implement the restricted, authenticated broker/desk transaction protocol, and require exact independently approved reserve-event advancement for every production reserve mutation, including cycles. Verify authority state when initializing/reopening and present unavailable rather than an optimistic ON/OFF. Disable or mediate legacy CLI routes in installed mode. Specify fail-closed cross-store crash recovery and existing-desk migration with independently authenticated history, never a silent reset. Qualify the installed graphical launcher, active scheduler, revoke/tick race, interruption, service restart and cold reboot, and dashboard confirmation semantics. No main ref or new workflow until the existing consolidated batch is terminal.
+
+## Prior exact-main CI observation
+
+On 90d1424ab4a8f354c8b41d9f006f83508ba0d959, foundation 44646221259 passed (400 discovered, 387 passed, 13 skipped), native engine 44646221417 passed including signed native wallet approval / bounded release / revoke receipt, historical streaming 44646221311, official economic evidence 44646221196 and dashboard/browser 44646221186 passed. Market memory 44646221414 and one-hour installed 44646221309 were active at the final status inspection; no terminal acceptance claimed for either.
