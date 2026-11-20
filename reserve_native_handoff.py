@@ -53,10 +53,20 @@ def issue_reviewed(export_dir, reviewed_sha, directory, workspace, store, seed, 
     with closing(check_sqlite(raw)) as db:
         db.execute('BEGIN');previous=store.read();identity=_identity(db,previous)
         raw=project(db)
+    return issue_projected(raw,directory,workspace,store,seed,native_uid=native_uid,native_gid=native_gid,expected=(previous,identity),clock=clock)
+
+
+def issue_projected(raw,directory,workspace,store,seed,*,native_uid,native_gid,expected=None,issued=None,clock=time.time):
+    """Root transport signer accepts only an independently replayed projection."""
+    require(os.geteuid()==0 and type(seed) is bytes and len(seed)==32 and type(native_uid) is int and native_uid>0 and type(native_gid) is int and native_gid>0,'snapshot_relay_identity')
+    previous=store.read()
     with closing(open_projected(raw)) as db:
-        db.execute('BEGIN')
-        require(_identity(db,previous)==identity,'snapshot_projection_identity_changed')
-    issued=int(clock());body=_body(workspace,previous,identity,raw,issued,native_uid,native_gid)
+        db.execute('BEGIN');identity=_identity(db,previous)
+    require(expected is None or expected==(previous,identity),'snapshot_projection_identity_changed')
+    require(store.read()==previous,'snapshot_checkpoint_changed')
+    issued=int(clock()) if issued is None else issued
+    require(type(issued) is int and 0<=int(clock())-issued<=TTL,'snapshot_stale')
+    body=_body(workspace,previous,identity,raw,issued,native_uid,native_gid)
     envelope=canonical({'body':body,'signature':Ed25519PrivateKey.from_private_bytes(seed).sign(DOMAIN+canonical(body)).hex()})
     require(len(envelope)<=8192,'snapshot_header_size')
     packet=len(envelope).to_bytes(4,'big')+envelope+raw

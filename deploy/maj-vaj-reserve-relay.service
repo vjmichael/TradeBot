@@ -1,0 +1,27 @@
+[Unit]
+Description=Maj Vaj minimized authenticated PAPER snapshot relay (staged)
+ConditionPathExists=/etc/maj-vaj/reserve-transport-enabled
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/maj-vaj
+ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from reserve_live_relay import main;main()'
+TimeoutStartSec=25s
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/maj-vaj-native-inbox /var/lib/maj-vaj/data
+InaccessiblePaths=-/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-reserve-approval -/var/lib/maj-vaj-terminal-outbox
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_CHOWN
+RestrictAddressFamilies=AF_UNIX
+LimitCORE=0
+MemoryMax=512M
+TasksMax=16
+StandardOutput=null
+StandardError=null

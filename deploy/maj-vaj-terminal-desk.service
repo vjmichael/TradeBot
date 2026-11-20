@@ -1,0 +1,29 @@
+[Unit]
+Description=Maj Vaj keyless PAPER terminal settlement import (staged)
+ConditionPathExists=/etc/maj-vaj/reserve-transport-enabled
+After=maj-vaj-terminal-native.service
+
+[Service]
+Type=oneshot
+User=maj-vaj
+Group=maj-vaj
+SupplementaryGroups=maj-vaj-transfer
+WorkingDirectory=/opt/maj-vaj
+ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from reserve_terminal_worker import main;main()' desk
+TimeoutStartSec=20s
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/maj-vaj/data
+InaccessiblePaths=-/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-reserve-approval -/var/lib/maj-vaj-reserve-relay -/var/lib/maj-vaj-native-inbox
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+LimitCORE=0
+MemoryMax=512M
+TasksMax=16
+StandardOutput=null
+StandardError=null
