@@ -1,0 +1,49 @@
+name: R2B installed Debian graphical and owner custody qualification
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2a-r1-d1]
+    paths: ['.github/workflows/r2b-installed-r2.yml']
+permissions:
+  contents: read
+jobs:
+  r2b-debian-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Exact source locked R2B restore and pinned dashboard
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r1/restore-r2b.sh "$RUNNER_TEMP/r2b-installed" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-installed" write-tree)" = 250310b3409dd4c0feffa33eba1fe74d8b4ca54a
+          cd "$RUNNER_TEMP/r2b-installed/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Install native VM prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build genuine Debian 13 VM with isolated vault, Chromium and LightDM
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-installed" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/native" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Execute native graphical handoff and independent operator enrollment
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 qualification/r2b-integrate-02-r2-r2/native/harness.py "$RUNNER_TEMP/r2b-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/native.txt
+          grep -Fx R2B_NATIVE_INSTALLED_PASS receipt/native.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-debian-native-receipts
+          path: receipt/
+          retention-days: 3
