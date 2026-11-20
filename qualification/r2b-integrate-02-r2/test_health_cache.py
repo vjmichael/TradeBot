@@ -28,6 +28,28 @@ class Tests(unittest.TestCase):
         finally:
             unblock.set();t.join(timeout=1)
         self.assertFalse(t.is_alive());self.assertIsNotNone(c.latest())
+    def test_demand_worker_not_on_ui_path(self):
+        started=threading.Event();release=threading.Event()
+        def slow():started.set();release.wait(1);return ACTIVE
+        c=LocalHealthCache(slow,clock=lambda:100)
+        self.assertTrue(c.ensure_fresh());self.assertTrue(started.wait(0.5))
+        self.assertFalse(c.ensure_fresh());self.assertIsNone(c.latest())
+        release.set()
+        for _ in range(300):
+            if c.latest() is not None:break
+            threading.Event().wait(0.001)
+        self.assertIsNotNone(c.latest())
+    def test_minimum_interval(self):
+        now=[100];c=LocalHealthCache(lambda:ACTIVE,clock=lambda:now[0])
+        self.assertTrue(c.ensure_fresh())
+        for _ in range(300):
+            if c.latest() is not None:break
+            threading.Event().wait(0.001)
+        self.assertFalse(c.ensure_fresh())
+        now[0]=116;self.assertTrue(c.ensure_fresh())
+    def test_invalid_polling_budget(self):
+        c=LocalHealthCache(lambda:ACTIVE)
+        with self.assertRaises(ValueError):c.ensure_fresh(0)
     def test_invalid_source_clears(self):
         c=LocalHealthCache(lambda:'SECRET_CANARY');self.assertFalse(c.sample());self.assertIsNone(c.latest())
 
