@@ -1,4 +1,5 @@
 [Unit]
+ConditionPathExists=!/etc/maj-vaj/persistent-native-enabled
 Description=Maj Vaj migrated PAPER native terminal readback (staged)
 ConditionPathExists=/etc/maj-vaj/reserve-transport-enabled
 After=maj-vaj-reserve-relay.service network-online.target

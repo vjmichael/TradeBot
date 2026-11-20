@@ -124,17 +124,18 @@ def protect(driver,row,journal,*,clock):
     return 'exit_requested'
 
 
-def step(producer,inbox,store,relay_pin,native_gid,instance,intent,factory):
+def step(producer,inbox,store,relay_pin,native_gid,instance,intent,factory,*,lease=None):
     """Verified fresh snapshot, independent migration binding and native lease."""
     from reserve_native_handoff import open_reviewed
     from reserve_native_rebind import verify
     from reserve_ipc import pinned_key
     import hmac
+    lease=lease or custody
     require(producer.rebind_dir is not None,'exit_rebind_required')
     require(len({pinned_key(p) for p in (relay_pin,producer.native_pin,producer.human_pin,producer.rebind_pin)})==4,'exit_independent_pins')
     with open_reviewed(inbox,producer.workspace,store,relay_pin,native_uid=producer.uid,native_gid=native_gid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid,clock=producer.clock) as (db,_):
         work=workspace(producer.data,instance)
-        with custody(work):
+        with lease(work):
             bound=verify(db,producer.data,producer.rebind_dir,producer.rebind_pin,instance,native_uid=producer.uid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid)
             key,binding=workspace_key(producer.data,instance)
             row=authorized_row(db,instance,intent,binding)

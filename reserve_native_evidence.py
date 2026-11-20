@@ -108,7 +108,7 @@ class NativeProducer:
                 packet=self.propose(db,previous,instance,action,receipt)
         return packet
 
-    def observe_from_handoff(self, directory, store, relay_pin, native_gid, instance, driver_context):
+    def observe_from_handoff(self, directory, store, relay_pin, native_gid, instance, driver_context, *, lease=None):
         """Obtain an actual native wallet under the migrated workspace lease.
 
         driver_context is trusted worker composition: it must construct and
@@ -120,6 +120,7 @@ class NativeProducer:
         from reserve_native_handoff import open_reviewed
         from reserve_native_rebind import verify
         from reserve_native_wallet import _sign_observed
+        lease=lease or custody
         require(self.rebind_dir is not None,'native_rebind_required')
         key=self._key()
         require(len({pinned_key(p) for p in (relay_pin,self.native_pin,self.human_pin,self.rebind_pin)})==4,'native_observation_independent_pins')
@@ -127,7 +128,7 @@ class NativeProducer:
             # Current migration gate supports one pristine funded workspace.
             require([r[0] for r in db.execute('SELECT id FROM instances')]==[instance],'native_observation_scope')
             work=workspace(self.data,instance)
-            with custody(work):
+            with lease(work):
                 bound=verify(db,self.data,self.rebind_dir,self.rebind_pin,instance,native_uid=self.uid,desk_uid=self.desk_uid,authority_uid=self.authority_uid)
                 receipt_key,binding=workspace_key(self.data,instance)
                 require(bound['binding']==binding,'native_observation_binding')

@@ -54,7 +54,7 @@ def native_driver_context(instance,pair,cents,work):
     finally:bot.cleanup()
 
 
-def native_step(producer,inbox,store,relay_pin,native_gid,mailbox,*,factory=native_driver_context,protected=False):
+def native_step(producer,inbox,store,relay_pin,native_gid,mailbox,*,factory=native_driver_context,protected=False,lease=None):
     require(os.geteuid()==producer.uid==mailbox.owner,'terminal_native_identity')
     if mailbox.read() is not None:
         return 'retired' if mailbox.retire(producer,inbox,store,relay_pin,native_gid) else 'awaiting_commit'
@@ -70,15 +70,15 @@ def native_step(producer,inbox,store,relay_pin,native_gid,mailbox,*,factory=nati
     except (FileNotFoundError, ValueError) as exc:
         if not protected or not (isinstance(exc,FileNotFoundError) or str(exc) in ('snapshot_stale','snapshot_checkpoint_changed','snapshot_changed_during_review')):raise
         from reserve_outage_protection import step as outage_step
-        return outage_step(producer,relay_pin,factory=factory)
+        return outage_step(producer,relay_pin,factory=factory,lease=lease)
     create=partial(factory,instance,pair,cents)
     if protected:
         from reserve_exit_custody import step
-        result=step(producer,inbox,store,relay_pin,native_gid,instance,intent,create)
+        result=step(producer,inbox,store,relay_pin,native_gid,instance,intent,create,lease=lease)
         if isinstance(result,dict):
             mailbox.publish(result);return 'published'
         if result!='closed':return result
-    packet=produce(producer,inbox,store,relay_pin,native_gid,instance,intent,create,protected=protected)
+    packet=produce(producer,inbox,store,relay_pin,native_gid,instance,intent,create,protected=protected,lease=lease)
     mailbox.publish(packet)
     return 'published'
 
@@ -110,7 +110,11 @@ def main():
         result=native_step(producer,'/var/lib/maj-vaj-native-inbox',store,relay_pin,native.pw_gid,mailbox,protected=Path('/etc/maj-vaj/protected-exit-enabled').is_file())
     else:
         require(os.geteuid()==desk.pw_uid,'terminal_desk_identity')
-        result=desk_step(desk_transaction('/var/lib/maj-vaj/data'),mailbox,rebound_bindings(records,rebind_pin,**ids),pinned_key(native_pin),workspace,store,desk_uid=desk.pw_uid)
+        tx=desk_transaction('/var/lib/maj-vaj/data');bindings=rebound_bindings(records,rebind_pin,**ids);public=pinned_key(native_pin)
+        result=desk_step(tx,mailbox,bindings,public,workspace,store,desk_uid=desk.pw_uid)
+        if result=='idle' and Path('/etc/maj-vaj/persistent-native-enabled').is_file():
+            from reserve_wallet_transport import consume as wallet_consume
+            result=wallet_consume(tx,mailbox,bindings,public,workspace,store)
     print('PAPER terminal:',result,flush=True)
 
 

@@ -54,7 +54,7 @@ def _scope(db,b,binding_for):
     require(binding_for(db,b['instance'])==b['binding'],'terminal_binding_changed')
 
 
-def produce(producer,directory,store,relay_pin,native_gid,instance,intent,driver_context,*,protected=False):
+def produce(producer,directory,store,relay_pin,native_gid,instance,intent,driver_context,*,protected=False,lease=None):
     """Only actual terminal native evidence under independent exclusive custody."""
     from reserve_native_handoff import open_reviewed
     from reserve_native_rebind import verify as verify_rebind
@@ -62,6 +62,7 @@ def produce(producer,directory,store,relay_pin,native_gid,instance,intent,driver
     from paper_supervisor import custody
     from reserve_ipc import pinned_key
     import hmac
+    lease=lease or custody
     require(producer.rebind_dir is not None,'terminal_rebind_required')
     require(len({pinned_key(p) for p in (relay_pin,producer.native_pin,producer.human_pin,producer.rebind_pin)})==4,'terminal_independent_pins')
     with open_reviewed(directory,producer.workspace,store,relay_pin,native_uid=producer.uid,native_gid=native_gid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid,clock=producer.clock) as (db,_):
@@ -71,7 +72,7 @@ def produce(producer,directory,store,relay_pin,native_gid,instance,intent,driver
         pair=db.execute('SELECT pair,mode FROM instances WHERE id=?',(instance,)).fetchone()
         require(pair is not None and pair[1]=='PAPER','terminal_paper_scope')
         work=workspace(producer.data,instance)
-        with custody(work):
+        with lease(work):
             bound=verify_rebind(db,producer.data,producer.rebind_dir,producer.rebind_pin,instance,native_uid=producer.uid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid)
             key,binding=workspace_key(producer.data,instance)
             with driver_context(work) as driver:

@@ -11,11 +11,12 @@ from reserve_ipc import pinned_key
 from risk_gate import Gate
 
 
-def native_once(producer,inbox,store,relay_pin,native_gid,socket_dir,lock,*,factory,connect=connection):
+def native_once(producer,inbox,store,relay_pin,native_gid,socket_dir,lock,*,factory,connect=connection,lease=None):
     from reserve_native_rebind import verify
     from paper_custody import workspace,workspace_key,AuthenticatedNativeDriver
     from paper_supervisor import custody
     import hmac
+    lease=lease or custody
     require(producer.rebind_dir is not None,'entry_rebind_required')
     require(len({pinned_key(x) for x in (relay_pin,producer.native_pin,producer.human_pin,producer.rebind_pin)})==4,'entry_independent_pins')
     with open_reviewed(inbox,producer.workspace,store,relay_pin,native_uid=producer.uid,native_gid=native_gid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid,clock=producer.clock) as (db,_):
@@ -27,9 +28,14 @@ def native_once(producer,inbox,store,relay_pin,native_gid,socket_dir,lock,*,fact
         require(len(candidates)==1,'entry_multiple_authorizations')
         intent=candidates[0][0]
         work=workspace(producer.data,instance)
-        with custody(work):
+        with lease(work):
             b=verify(db,producer.data,producer.rebind_dir,producer.rebind_pin,instance,native_uid=producer.uid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid)
             key,binding=workspace_key(producer.data,instance)
+            # A prior local attempt is always a denial hint, never authority.
+            # A lagging AUTHORIZED snapshot must not reconnect after an effect
+            # (including a buy already reduced to flat) or a pre-effect cut.
+            from financial_ledger import sha
+            if os.path.lexists(work/('entry-'+sha([binding,intent])+'.json')):return 'entry_already_attempted'
             with factory(instance,pair,cents,work) as driver:
                 require(isinstance(driver,AuthenticatedNativeDriver) and driver.binding==binding==b['binding'] and hmac.compare_digest(key,driver.key) and driver.path==work/'paper.sqlite','entry_native_driver')
                 with connect(socket_dir,producer.desk_uid) as conn:

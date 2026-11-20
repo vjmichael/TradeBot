@@ -140,6 +140,63 @@ def run(mode):
             else:raise AssertionError('server unavailable')
             native_prefix=common+producer+'from reserve_entry_worker import native_once;'
             native_call='native_once(p,r/"inbox",store,r/"relay.pub",NATIVE,r/"entry",r/"fence"/"entry.lock",factory=lambda i,p,c,w:driver_context(w))'
+            if mode=='warm':
+                # Qualification-only test orchestration over stdin. Production
+                # warm service has no command endpoint.
+                (r/'inbox'/'snapshot.bin').unlink()
+                warmcode='''from reserve_persistent_worker import WarmRuntime
+from paper_supervisor import custody
+m=TerminalMailbox(r/'terminal',NATIVE,TRANSFER)
+with WarmRuntime(p,r/'relay.pub',lambda i,p,c,w:driver_context(w)).start() as warm:
+ try:
+  with custody(warm.work):raise AssertionError('competing lease accepted')
+ except BlockingIOError:pass
+ try:
+  with warm.borrow(I,'BTC/USD',10000,warm.work):raise AssertionError('unleased borrow')
+ except ValueError:pass
+ print('READY',flush=True)
+ token=id(warm.driver)
+ for line in sys.stdin:
+  action=line.strip()
+  if action=='stop':break
+  if action=='exit':warm.driver.bot.exchange.mid=120.
+  assert id(warm.driver)==token
+  result=warm.cycle(r/'inbox',store,NATIVE,m,r/'entry',r/'fence'/'entry.lock')
+  print(result,flush=True)
+'''
+                child=subprocess.Popen(cmd(NATIVE,native_prefix+'exec('+repr(warmcode)+')'),env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                def response(expected,action=None):
+                    import select
+                    if action:child.stdin.write(action+'\n');child.stdin.flush()
+                    ready,_,_=select.select([child.stdout],[],[],20)
+                    assert ready,'warm runtime deadline';line=child.stdout.readline().strip()
+                    assert line==expected,(line,child.stderr.read() if child.poll() is not None else '')
+                try:
+                    response('READY');response('outage_no_open_exposure','tick')
+                    print('PASS readiness without snapshot, exclusive lifetime lease, no unleased access or entry',flush=True)
+                    snapshot();response('submitted','tick');out,err=server.communicate(timeout=10);assert server.returncode==0,err
+                    print('PASS warm actual synchronous native entry',flush=True)
+                    response('outage_monitoring','tick')
+                    print('PASS stale AUTHORIZED snapshot cannot cause a second entry or restart',flush=True)
+                    response('outage_exit_requested','exit');response('entry_already_attempted','tick')
+                    print('PASS stale AUTHORIZED after closed position is denied by durable local attempt',flush=True)
+                    snapshot();response('published','tick')
+                    make='m=TerminalMailbox(r/"terminal",NATIVE,TRANSFER);'
+                    sub(DESK,common+make+'assert desk_step(tx,m,bindings,public,W,store,desk_uid=DESK,clock=clock)=="accounted";assert desk_step(tx,m,bindings,public,W,store,desk_uid=DESK,clock=clock)=="already_accounted"')
+                    snapshot();response('retired','tick');snapshot();response('idle','tick')
+                    sub(DESK,common+make+'from reserve_wallet_transport import consume as read_wallet;assert read_wallet(tx,m,bindings,public,W,store,clock=clock)=="wallet_accounted";assert read_wallet(tx,m,bindings,public,W,store,clock=clock)=="wallet_held"')
+                    print('PASS independently signed warm wallet delivery and exact replay refusal',flush=True)
+                    with tx() as db:
+                        from financial_ledger import observed,gate_reserve
+                        v=observed(replay(db)[0][I]);assert v['active']==100*SCALE and v['protected']>0 and v['qty']==v['pending']==gate_reserve(db,I)==0
+                        assert db.execute("SELECT count(*) FROM gate_events WHERE action='native_return'").fetchone()[0]==1
+                    print('PASS one retained driver through entry, protection, terminal import, duplicate refusal and acknowledgment',flush=True)
+                    child.stdin.write('stop\n');child.stdin.flush();out,err=child.communicate(timeout=15);assert child.returncode==0,err
+                    sub(NATIVE,'from paper_supervisor import custody;exec('+repr('with custody(r/"native-data"/"paper"/I):pass')+')')
+                    print('PASS graceful closure releases lifetime lease',flush=True)
+                finally:
+                    if child.poll() is None:child.kill();child.wait()
+                return
             if mode in ('normal','outage'):
                 print(sub(NATIVE,native_prefix+f'assert {native_call}=="submitted";print("PASS actual independent Freqtrade entry")'))
                 out,err=server.communicate(timeout=10);assert server.returncode==0,err
@@ -269,4 +326,4 @@ def run(mode):
         finally:
             if server.poll() is None:server.kill();server.wait()
 
-if __name__=='__main__':run('review' if '--review' in sys.argv else 'outage' if '--outage' in sys.argv else 'partial' if '--partial' in sys.argv else 'after' if '--after' in sys.argv else 'kill' if '--kill' in sys.argv else 'normal')
+if __name__=='__main__':run('warm' if '--warm' in sys.argv else 'review' if '--review' in sys.argv else 'outage' if '--outage' in sys.argv else 'partial' if '--partial' in sys.argv else 'after' if '--after' in sys.argv else 'kill' if '--kill' in sys.argv else 'normal')

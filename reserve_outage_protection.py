@@ -74,9 +74,10 @@ def reduce(driver,work,key,instance,pair,binding,clock):
     return 'outage_'+protect(driver,row,journal,clock=clock)
 
 
-def step(producer,relay_pin,*,factory):
+def step(producer,relay_pin,*,factory,lease=None):
     """No desk connection or stale snapshot required to reduce held exposure."""
     import hmac
+    lease=lease or custody
     require(os.geteuid()==producer.uid and producer.rebind_dir is not None,'outage_native_identity')
     require(len({pinned_key(p) for p in (relay_pin,producer.native_pin,producer.human_pin,producer.rebind_pin)})==4,'outage_independent_pins')
     # The installed migration currently supports exactly one immutable workspace.
@@ -85,7 +86,7 @@ def step(producer,relay_pin,*,factory):
     instance=names[0][:-5]
     b=verified_identity(producer.rebind_dir,producer.rebind_pin,instance,native_uid=producer.uid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid)
     scope=b['scope'];work=workspace(producer.data,instance)
-    with custody(work):
+    with lease(work):
         with rebound_workspace(producer.data,instance,producer.uid) as (_,fd):
             require(rebound_binding(producer.data,fd,scope,producer.uid)==b['new'],'outage_rebind_changed')
         key,binding=workspace_key(producer.data,instance)

@@ -1,4 +1,5 @@
 [Unit]
+ConditionPathExists=!/etc/maj-vaj/persistent-native-enabled
 Description=Maj Vaj staged independent native PAPER entry
 ConditionPathExists=/etc/maj-vaj/protected-entry-enabled
 ConditionPathExists=/etc/maj-vaj/reserve-transport-enabled
