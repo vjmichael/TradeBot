@@ -58,14 +58,19 @@ def native_step(producer,inbox,store,relay_pin,native_gid,mailbox,*,factory=nati
     require(os.geteuid()==producer.uid==mailbox.owner,'terminal_native_identity')
     if mailbox.read() is not None:
         return 'retired' if mailbox.retire(producer,inbox,store,relay_pin,native_gid) else 'awaiting_commit'
-    with open_reviewed(inbox,producer.workspace,store,relay_pin,native_uid=producer.uid,native_gid=native_gid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid,clock=producer.clock) as (db,_):
-        rows=db.execute('SELECT id,pair,virtual_cents,mode FROM instances').fetchall()
-        require(len(rows)==1 and rows[0][3]=='PAPER','terminal_single_workspace_required')
-        instance,pair,cents,_=rows[0]
-        pending=db.execute("SELECT id,instance_id FROM gate_intents WHERE state IN ('CLAIMED','UNKNOWN','FILLED_HELD') AND "+UNRELEASED).fetchall()
-        if not pending:return 'idle'
-        require(len(pending)==1 and pending[0][1]==instance,'terminal_unresolved_scope')
-        intent=pending[0][0]
+    try:
+        with open_reviewed(inbox,producer.workspace,store,relay_pin,native_uid=producer.uid,native_gid=native_gid,desk_uid=producer.desk_uid,authority_uid=producer.authority_uid,clock=producer.clock) as (db,_):
+            rows=db.execute('SELECT id,pair,virtual_cents,mode FROM instances').fetchall()
+            require(len(rows)==1 and rows[0][3]=='PAPER','terminal_single_workspace_required')
+            instance,pair,cents,_=rows[0]
+            pending=db.execute("SELECT id,instance_id FROM gate_intents WHERE state IN ('CLAIMED','UNKNOWN','FILLED_HELD') AND "+UNRELEASED).fetchall()
+            if not pending:return 'idle'
+            require(len(pending)==1 and pending[0][1]==instance,'terminal_unresolved_scope')
+            intent=pending[0][0]
+    except (FileNotFoundError, ValueError) as exc:
+        if not protected or not (isinstance(exc,FileNotFoundError) or str(exc) in ('snapshot_stale','snapshot_checkpoint_changed','snapshot_changed_during_review')):raise
+        from reserve_outage_protection import step as outage_step
+        return outage_step(producer,relay_pin,factory=factory)
     create=partial(factory,instance,pair,cents)
     if protected:
         from reserve_exit_custody import step

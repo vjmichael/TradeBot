@@ -127,6 +127,9 @@ def execute(conn,driver,row_id,work,lock,*,desk_uid,native_uid,pair,instance,clo
             fd=accept_fence(conn,lock)
             require(int(clock())<p['until']<=row['expires'] and p['until']<=int(clock())+2,'entry_permit_expired')
             require(not select.select([conn],[],[],0)[0],'entry_guardian_disconnected')
+            from reserve_outage_protection import save_grant
+            save_grant(work,driver.key,row,nonce,binding,int(clock()),p['until'])
+            require(int(clock())<p['until'] and not select.select([conn],[],[],0)[0],'entry_permit_lost')
             return operation()
         result=driver.entry(row,guard)
         require(called and fd is not None and result=={'observed':True},'entry_outcome_unverified')

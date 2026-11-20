@@ -138,10 +138,19 @@ def run(mode):
             else:raise AssertionError('server unavailable')
             native_prefix=common+producer+'from reserve_entry_worker import native_once;'
             native_call='native_once(p,r/"inbox",store,r/"relay.pub",NATIVE,r/"entry",r/"fence"/"entry.lock",factory=lambda i,p,c,w:driver_context(w))'
-            if mode=='normal':
+            if mode in ('normal','outage'):
                 print(sub(NATIVE,native_prefix+f'assert {native_call}=="submitted";print("PASS actual independent Freqtrade entry")'))
                 out,err=server.communicate(timeout=10);assert server.returncode==0,err
                 with tx() as db:assert __import__('paper_execution').event_detail(db,intent,'native_return') is not None
+            elif mode=='partial':
+                # The dry-run simulator normally fills all-or-none. Inject a known
+                # cumulative partial observation into the genuine pending buy;
+                # freeze it under native custody, then interrupt before ORM import.
+                cut="from paper_execution import NativeDriver\nfrom reserve_cancel_custody import NativeCancellationDriver\nfrom freqtrade.persistence import Trade\nold=NativeDriver.entry\ndef interrupted(self,row,guard):\n self.bot.exchange.mid=101.\n old(self,row,guard)\n t=Trade.get_trades_proxy(is_open=True)[0];o=t.open_orders[0]\n raw=self.bot.exchange._dry_run_open_orders[o.order_id]\n raw.update(filled=.2,remaining=raw['amount']-.2,cost=20.,average=100.,fee={'currency':'USD','cost':.10,'rate':.005})\n self.cancel_before_poll(row)\n raise AssertionError('missing crash')\nNativeDriver.entry=interrupted\ndef die(self,row,raw):os.kill(os.getpid(),9)\nNativeCancellationDriver._apply_frozen=die"
+                child=subprocess.run(cmd(NATIVE,native_prefix+'exec('+repr(cut)+');'+native_call),env=env,capture_output=True,text=True,timeout=30)
+                assert child.returncode==-9,child.stderr
+                out,err=server.communicate(timeout=10);assert server.returncode!=0
+                print('PASS actual authorized pending entry, observed partial fill and durable cancellation freeze before SIGKILL',flush=True)
             elif mode=='after':
                 # After actual ORM persistence but before acknowledging the desk.
                 cut='from paper_execution import NativeDriver\nold=NativeDriver.entry\ndef die(self,row,guard):\n old(self,row,guard);os.kill(os.getpid(),9)\nNativeDriver.entry=die'
@@ -175,14 +184,42 @@ def run(mode):
                     if child.poll() is None:child.kill();child.wait()
             with tx() as db:
                 from financial_ledger import gate_reserve
-                assert db.execute('SELECT state FROM gate_intents WHERE id=?',(intent,)).fetchone()[0]==('UNKNOWN' if mode=='after' else 'CLAIMED')
+                assert db.execute('SELECT state FROM gate_intents WHERE id=?',(intent,)).fetchone()[0]==('UNKNOWN' if mode in ('after','partial') else 'CLAIMED')
                 assert gate_reserve(db,I)>0
             # Read persisted native records in a fresh unprivileged process.
             expected=0 if mode=='kill' else 1
             sub(NATIVE,f'intent={intent!r};expected={expected};exec('+repr('with closing(sqlite3.connect(r/"native-data"/"paper"/I/"paper.sqlite")) as db:\n assert db.execute("SELECT COUNT(*) FROM trades WHERE enter_tag=?",("mv:"+intent,)).fetchone()[0]==expected\n assert db.execute("SELECT COUNT(*) FROM orders").fetchone()[0]==expected') +')')
             sub(DESK,common+f'assert not Gate(tx,clock=clock,account_projection=verify).claim({intent!r},"paper-worker",1)["claimed"]')
             print('PASS no repeat authorization; in-flight principal remains reserved',flush=True)
+            if mode=='kill':
+                # Missing native order is not proof of no fill. Even an accepted
+                # permit with no observed open exposure cannot release capital.
+                (r/'inbox'/'snapshot.bin').unlink()
+                make='m=TerminalMailbox(r/"terminal",NATIVE,TRANSFER);'
+                sub(NATIVE,common+producer+make+'assert native_step(p,r/"inbox",store,r/"relay.pub",NATIVE,m,factory=lambda i,p,c,w:driver_context(w),protected=True)=="outage_no_open_exposure";assert m.read() is None')
+                with tx() as db:assert gate_reserve(db,I)>0
+                print('PASS ambiguous absence during outage remains unresolved, no inferred zero release',flush=True)
+            if mode in ('outage','partial','after'):
+                # Missing relay must not block risk reduction on an accepted
+                # existing position. No terminal import until a fresh snapshot.
+                (r/'inbox'/'snapshot.bin').unlink()
+                make='m=TerminalMailbox(r/"terminal",NATIVE,TRANSFER);'
+                code='@contextmanager\ndef exit_factory(i,p,c,w):\n with driver_context(w) as d:\n  d.bot.exchange.mid=120.\n  yield d\n'
+                terminal='native_step(p,r/"inbox",store,r/"relay.pub",NATIVE,m,factory=exit_factory,protected=True)'
+                sub(NATIVE,common+producer+make+'exec('+repr(code)+');'+f'assert {terminal}=="outage_exit_requested";assert m.read() is None')
+                sub(NATIVE,common+producer+make+'exec('+repr(code)+');'+f'assert {terminal}=="outage_no_open_exposure";assert m.read() is None')
+                with tx() as db:assert gate_reserve(db,I)>0
+                print('PASS no snapshot: actual native reduce-only exit, no unverified desk settlement or release',flush=True)
+                snapshot()
+                sub(NATIVE,common+producer+make+'exec('+repr(code)+');'+f'assert {terminal}=="published"')
+                sub(DESK,common+make+'assert desk_step(tx,m,bindings,public,W,store,desk_uid=DESK,clock=clock)=="accounted";assert desk_step(tx,m,bindings,public,W,store,desk_uid=DESK,clock=clock)=="already_accounted"')
+                snapshot();sub(NATIVE,common+producer+make+'exec('+repr(code)+');'+f'assert {terminal}=="retired"')
+                with tx() as db:
+                    st=__import__('financial_ledger').observed(replay(db)[0][I]);assert st['active']==100*SCALE and st['qty']==st['pending']==gate_reserve(db,I)==0 and st['protected']>0
+                    if mode=='partial':assert st['protected']==378000000,st
+                    print('PASS actual terminal settlement, replay safety, exact acknowledgement, protected profit units:',st['protected'],flush=True)
+
         finally:
             if server.poll() is None:server.kill();server.wait()
 
-if __name__=='__main__':run('after' if '--after' in sys.argv else 'kill' if '--kill' in sys.argv else 'normal')
+if __name__=='__main__':run('outage' if '--outage' in sys.argv else 'partial' if '--partial' in sys.argv else 'after' if '--after' in sys.argv else 'kill' if '--kill' in sys.argv else 'normal')
