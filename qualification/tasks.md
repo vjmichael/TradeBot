@@ -620,3 +620,19 @@ Standalone candidate [qualification/r2b-b](r2b-b/README.md) published; 31/31 loc
 | TB-09-RECOVERY | Independent Recovery observer/heartbeat and later status notifications, no control authority | Pending as previously planned |
 
 Existing R2B-A/R1 scoped evidence retained, not rerun. D2 remains open/blocked (no changes to exact production tree a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b, no harness changes). No extra CI, main merge, paid VPS or Library upload. Next independent task R2B-C standalone opt-in Grok verification; do not close or bypass existing installed credential gates. No scope drift.
+
+
+### TB-SEC-KEY-01-R2B-C — Optional Grok connection inspection (2026-11-20)
+
+Standalone candidate [qualification/r2b-c](r2b-c/README.md), **28/28 local tests PASS**, no skips, actual local Python unittest with synthetic transport and mocked HTTPS. Exact Git blobs match executed files: 471dea22dea35482afa1f2cf324ad24cf2058c97 and 51adcca23adc31088a2d22f83af0bd08bc45948f. Strict opt-in and explicit test approval; fixed metadata-only xAI key and language-model endpoints; exact reviewed ACL/model policy, disabled/blocked team/key and wildcard/extra/missing scope refusal, model availability inspection, bounded response and fixed sanitized reason codes. Five-minute receipt bound to credential generation, selected model and reviewed endpoint ACL; disabled/replaced/changed policy/expired receipt is not current. No inference, management key, prompt, exchange data, actual provider call, cost or trading authorization. Exact production ACL identifiers, durable vault lifecycle, trusted time, authenticated GUI, egress and installed/provider qualification remain unexecuted. No real secrets used.
+
+| ID | Scope | State |
+|---|---|---|
+| TB-SEC-KEY-01-R2B-C | Optional metadata-only Grok inspection and scoped receipt semantics | Scoped local candidate PASS (28 tests) |
+| TB-SEC-KEY-01-R2B-C-R1 | Protected vault lifecycle, exact provider policy, durable confirmation/receipt invalidation, restricted transport and installed synthetic acceptance | Pending |
+| TB-SEC-KEY-01-R2B-INTEGRATE | Consolidate existing standalone A/A-R1/B/C foundations and existing operator-facing account connections; preserve D2 prerequisite, no production activation | Pending |
+| TB-SEC-KEY-01-R2B-DX | Per-provider Test connection, plain-language outcome/last test time and next safe step; Telegram human receipt acknowledgment; no secret diagnostics or financial effects | Refinement within R2B integrated GUI and TB-09/TB-11, not separate parallel development |
+| TB-05 | Opt-in paid Grok research and independent budget/scheduler/data policy | Existing task unchanged |
+| TB-SEC-KEY-01-R2C | Credential rotation and secure reviewed recovery | Pending |
+
+D2 remains open/blocked; exact production tree a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b unchanged. No extra CI, main merge, real credentials, paid VPS or Library upload. Earlier independent acceptance retained, not rerun: A 28, A-R1 21, B 31. Recommended next independent task: R2B-INTEGRATE-01, review and qualify the shared protected provider lifecycle/receipt integration contract and dependency/negative-test matrix without changing the frozen D2 candidate. D2 mandatory native acceptance remains open before installed convergence. No scope drift.
