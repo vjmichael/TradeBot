@@ -88,6 +88,38 @@ def read_status():
     return json.loads(raw.splitlines()[-1])['credentials']
 def find(text):
     key('ctrl+f');type_text(text);time.sleep(.5);key('Escape')
+def browser_consent_visible():
+    # Observe a fixed, screenshot-confirmed Chromium 150 external-app button
+    # region in the actual 1280x800 disposable QEMU display. No OCR, browser
+    # script, direct URI/handler call, or implicit prompt auto-acceptance.
+    ppm=out/'browser-consent-probe.ppm'
+    mon('screendump '+str(ppm))
+    try:
+        with ppm.open('rb') as f:
+            if f.readline().strip()!=b'P6':
+                raise RuntimeError('unexpected_QEMU_pixel_format')
+            line=f.readline()
+            while line.startswith(b'#'):
+                line=f.readline()
+            width,height=map(int,line.split())
+            if width<810 or height<230 or f.readline().strip()!=b'255':
+                raise RuntimeError('unexpected_QEMU_display_geometry')
+            f.seek((180*width+550)*3,1)
+            pixel=f.read(3)
+            if len(pixel)!=3:
+                raise RuntimeError('incomplete_QEMU_frame')
+            red,green,blue=pixel
+            return blue>100 and green>65 and blue-red>50
+    finally:
+        ppm.unlink(missing_ok=True)
+
+def await_browser_consent(timeout=35):
+    deadline=time.monotonic()+timeout
+    while time.monotonic()<deadline:
+        if browser_consent_visible():
+            return
+        time.sleep(.6)
+    raise RuntimeError('browser_external_app_permission_not_visible')
 try:
     s.expect('login:',timeout=240);s.sendline('root');s.expect('Password:');s.sendline('d2-serial-fixture-714');s.expect(r'root@[^\r\n]+#',timeout=80)
     s.sendline("stty -echo; unset PROMPT_COMMAND; PS1=''; bind 'set enable-bracketed-paste off'; printf '\\nD2_%s\\n' READY")
@@ -117,13 +149,15 @@ try:
     # occupies x=52..340 y=359..407; pointer-click its center instead of
     # assuming Return dispatched an external protocol. This is a genuine
     # browser input event, not an invocation of xdg-open or the handler.
-    click(195,383);time.sleep(4);shot('07-browser-external-app-prompt')
-    # Physical Chromium 150 screenshot from the previous native receipt proves
-    # this is a separate browser-owned external-app permission prompt: the
-    # action button occupies x=495..810, y=162..204 at fixed 1024x768.
-    # Explicitly approve that browser prompt once, without checking the
-    # persistent "Always allow" box. Do NOT call xdg-open or the handler.
-    click(650,184);time.sleep(3);shot('07-after-browser-external-confirmation')
+    click(195,383)
+    # Never click at a fixed time: actual QEMU screenshots demonstrated a
+    # delayed Chromium prompt that appeared only AFTER the previous click.
+    await_browser_consent(35)
+    shot('07-browser-external-app-prompt')
+    # Explicit one-time browser consent, no persistent Always allow selection.
+    click(650,184)
+    time.sleep(2)
+    shot('07-after-browser-external-confirmation')
     # Only the genuine Chromium scheme -> desktop handler may open native Tk.
     try:
         modal=wait_window('Maj Vaj.*Open account connections',30)
