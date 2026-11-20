@@ -30,8 +30,8 @@ MARKER = Path('/etc/maj-vaj/account-handoff-enabled')
 HANDLER = 'maj-vaj-account-handoff.desktop'
 BROWSER = '/usr/bin/chromium'
 INTENT_NAME = 'maj-vaj-account-handoff-intent.sock'
-INTENT = b'OPEN\\n'
-ACK = b'QUEUED\\n'
+INTENT = b'OPEN\n'
+ACK = b'QUEUED\n'
 BASE_ENV = {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'}
 
 
