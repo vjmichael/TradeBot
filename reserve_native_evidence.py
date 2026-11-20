@@ -20,12 +20,15 @@ from reserve_protected import derive_event
 
 class NativeProducer:
     def __init__(self, workspace, native_data, key_dir, *, native_uid, authority_uid, desk_uid,
-                 native_pin, human_pin, clock=time.time):
+                 native_pin, human_pin, rebind_dir=None, rebind_pin=None, clock=time.time):
         require(all(type(u) is int and u>0 for u in (native_uid,authority_uid,desk_uid)) and
                 len({native_uid,authority_uid,desk_uid})==3 and os.geteuid()==native_uid,
                 'independent_native_principal_required')
         self.workspace=scope(workspace);self.data=Path(native_data);self.credentials=Path(key_dir)
-        self.uid=native_uid;self.native_pin=Path(native_pin);self.human_pin=Path(human_pin);self.clock=clock
+        self.uid=native_uid;self.desk_uid=desk_uid;self.authority_uid=authority_uid;self.native_pin=Path(native_pin);self.human_pin=Path(human_pin);self.clock=clock
+        require((rebind_dir is None)==(rebind_pin is None),'rebind_configuration_required')
+        self.rebind_dir=Path(rebind_dir) if rebind_dir is not None else None
+        self.rebind_pin=Path(rebind_pin) if rebind_pin is not None else None
 
     def _key(self):
         with protected_dir(self.credentials,self.uid,0o700) as fd:
@@ -54,7 +57,14 @@ class NativeProducer:
         # Each native workspace must be owned by this identity and bound to
         # independent provision receipts. Legacy desk-owned files cannot pass.
         def keys(i):
-            installed_workspace(self.data,i,db)
+            if self.rebind_dir is None:
+                installed_workspace(self.data,i,db)
+            else:
+                from reserve_native_rebind import verify
+                require(pinned_key(self.rebind_pin) not in (pinned_key(self.native_pin),pinned_key(self.human_pin)),
+                        'independent_rebind_pin_required')
+                verify(db,self.data,self.rebind_dir,self.rebind_pin,i,native_uid=self.uid,
+                       desk_uid=self.desk_uid,authority_uid=self.authority_uid)
             return workspace_key(self.data,i)
         projection=authenticated_projection(keys)
         verified=[]
@@ -72,3 +82,23 @@ class NativeProducer:
         if action=='adopt':
             return {'event':e,'evidence':{'body':body,'signature':Ed25519PrivateKey.from_private_bytes(key).sign(DOMAIN+canonical(body)).hex()}}
         return {'event':e,'permit':sign_permit(key,self.workspace,previous,event_checkpoint(e),end)}
+
+    def propose_from_handoff(self, directory, store, relay_pin, native_gid, instance, action, receipt):
+        """Trusted local composition of signed snapshot + independent workspace leases.
+
+        No live snapshot publisher or worker transfer is implied. All native
+        enclosing directories must be independently owned; existing desk-owned
+        provisioning markers require an authenticated rebinding.
+        """
+        from contextlib import ExitStack
+        from paper_custody import workspace
+        from paper_supervisor import custody
+        from reserve_native_handoff import open_reviewed
+        require(pinned_key(relay_pin) not in (pinned_key(self.native_pin),pinned_key(self.human_pin)), 'independent_relay_pin_required')
+        with open_reviewed(directory,self.workspace,store,relay_pin,native_uid=self.uid,native_gid=native_gid,desk_uid=self.desk_uid,authority_uid=self.authority_uid,clock=self.clock) as (db,previous):
+            with ExitStack() as leases:
+                rows=db.execute('SELECT id FROM instances ORDER BY id').fetchall()
+                require(rows and len(rows)<=128,'native_scope_bound')
+                for (i,) in rows:leases.enter_context(custody(workspace(self.data,i)))
+                packet=self.propose(db,previous,instance,action,receipt)
+        return packet
