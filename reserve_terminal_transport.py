@@ -94,6 +94,9 @@ def produce(producer,directory,store,relay_pin,native_gid,instance,intent,driver
 
 def consume(transaction,packet,binding_for,public,workspace,*,store,clock=time.time):
     """Verify and settle once inside the desk transaction, including duplicate checks."""
+    if type(packet) is dict and type(packet.get('body')) is dict and packet['body'].get('v')==3:
+        from reserve_zero_transport import consume as zero_consume
+        return zero_consume(transaction,packet,binding_for,public,workspace,store=store,clock=clock)
     b=verify(public,workspace,packet)
     with transaction() as db:
         witness=store.verify(db)
@@ -131,6 +134,9 @@ def consume(transaction,packet,binding_for,public,workspace,*,store,clock=time.t
 
 
 def acknowledged(db,packet,binding_for,public,workspace):
+    if type(packet) is dict and type(packet.get('body')) is dict and packet['body'].get('v')==3:
+        from reserve_zero_transport import acknowledged as zero_acknowledged
+        return zero_acknowledged(db,packet,binding_for,public,workspace)
     b=verify(public,workspace,packet);_scope(db,b,binding_for)
     old=released(db,b['intent'])
     if not old:return False

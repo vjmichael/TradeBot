@@ -1,6 +1,7 @@
 """Opt-in installed PAPER terminal readback and keyless settlement service.
 
-No entry, cancel, exit, activation, arbitrary RPC or secret-bearing config.
+No entry, activation, arbitrary RPC or secret-bearing config.
+Cancellation and protective exit require the explicit protected marker.
 An unresolved or incomplete native order remains held for protected recovery.
 """
 import argparse
@@ -30,7 +31,9 @@ def native_driver_context(instance,pair,cents,work):
     from engine import gate_paper_config
     from tradebot import InstanceSpec
     from paper_execution import validate_config
-    from paper_custody import AuthenticatedNativeDriver, workspace_key
+    from paper_custody import workspace_key
+    from reserve_cancel_custody import NativeCancellationDriver
+    import time
     require(not any(k.startswith('FREQTRADE__') for k in os.environ),'native_environment_override')
     spec=InstanceSpec(name='Protected terminal readback',pair=pair,virtual_cents=cents,provider='none',strategy_family='numerical-baseline')
     path=work/'paper.sqlite';root=Path(__file__).resolve().parent
@@ -45,7 +48,7 @@ def native_driver_context(instance,pair,cents,work):
     try:
         require(bot.state.name=='STOPPED','native_not_stopped')
         key,binding=workspace_key(work.parents[1],instance)
-        driver=AuthenticatedNativeDriver(bot,path,instance,key)
+        driver=NativeCancellationDriver(bot,path,instance,key,clock=time.time)
         require(driver.binding==binding,'native_db_replaced')
         yield driver
     finally:bot.cleanup()
@@ -67,6 +70,8 @@ def native_step(producer,inbox,store,relay_pin,native_gid,mailbox,*,factory=nati
     if protected:
         from reserve_exit_custody import step
         result=step(producer,inbox,store,relay_pin,native_gid,instance,intent,create)
+        if isinstance(result,dict):
+            mailbox.publish(result);return 'published'
         if result!='closed':return result
     packet=produce(producer,inbox,store,relay_pin,native_gid,instance,intent,create,protected=protected)
     mailbox.publish(packet)

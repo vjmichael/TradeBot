@@ -141,5 +141,19 @@ def step(producer,inbox,store,relay_pin,native_gid,instance,intent,factory):
             require(bound['binding']==binding,'exit_binding_changed')
             with factory(work) as driver:
                 require(isinstance(driver,AuthenticatedNativeDriver) and driver.instance==instance and driver.path==work/'paper.sqlite' and driver.binding==binding and hmac.compare_digest(driver.key,key),'exit_driver_custody')
+                from reserve_cancel_custody import NativeCancellationDriver
+                if isinstance(driver,NativeCancellationDriver):
+                    from reserve_zero_transport import produce as zero_produce
+                    from paper_execution import units
+                    frozen=driver.recover_cancel(row)
+                    if frozen is not None and not units(frozen['filled']):
+                        return zero_produce(producer,db,row,driver)
+                    paused=any(db.execute('SELECT paused,human_pause FROM desk WHERE id=1').fetchone())
+                    if frozen is None and (paused or int(producer.clock())>=row['expires']):
+                        if driver.cancel_before_poll(row):
+                            frozen=driver.frozen(row)
+                            if frozen is not None and not units(frozen['filled']):
+                                return zero_produce(producer,db,row,driver)
+                            return 'cancel_requested'
                 journal=ExitJournal(work,key,binding,intent)
                 return protect(driver,row,journal,clock=producer.clock)

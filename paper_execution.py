@@ -80,9 +80,10 @@ class PaperBridge:
                     require(event_detail(db,intent,'native_bound') is None,'native_already_bound')
                     append_event(db,intent,'native_bound',{'binding':binding,'instance':instance,'pair':pair},int(self.clock()))
                 def guard(order_call):
-                    # Final serialization with pause/restart and claim expiry,
-                    # including the actual paper exchange call. No network/live order.
-                    with self.tx() as db:
+                    # Record the attempt durably BEFORE the side effect. A
+                    # process death inside the final transaction cannot erase
+                    # the fact that execution may have begun.
+                    def validate(db):
                         now=int(self.clock()); row2=db.execute('SELECT * FROM gate_intents WHERE id=?',(intent,)).fetchone()
                         paused,human=db.execute('SELECT paused,human_pause FROM desk WHERE id=1').fetchone()
                         high=db.execute('SELECT high_water FROM gate_clock WHERE id=1').fetchone()[0]
@@ -90,12 +91,22 @@ class PaperBridge:
                         db.execute('UPDATE gate_clock SET high_water=? WHERE id=1',(now,))
                         require(not paused and not human and row2['state']=='CLAIMED'
                             and row2['claim_token']==token and now<row2['expires'],'execution_authority_revoked')
+                        require(dict(row2)==row,'execution_claim_changed')
                         check=getattr(self.gate,'entry_guard',None)
                         boundary=getattr(self.gate,'check_entry_boundary',None)
                         if boundary is not None:boundary(db,row2,now)
                         elif check is not None:check(db,instance,now,final=True)
+                        return now
+                    with self.tx() as db:
+                        now=validate(db)
                         require(event_detail(db,intent,'native_attempt') is None,'native_attempt_repeated')
                         append_event(db,intent,'native_attempt',{'binding':binding},now)
+                    # Pause and policy must still be checked inside the SAME
+                    # serialized transaction as the actual paper order call.
+                    # Any denial after the precommit leaves an unresolved hold.
+                    with self.tx() as db:
+                        validate(db)
+                        require(event_detail(db,intent,'native_attempt')=={'binding':binding},'native_attempt_changed')
                         return order_call()
                 result=driver.entry(row,guard)
                 require(type(result) is dict and result.get('observed') is True,'native_submission_unverified')

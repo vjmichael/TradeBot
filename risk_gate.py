@@ -354,13 +354,42 @@ class Gate:
                 raise GateRefusal("invalid_goal_limit") from exc
         return policy, ph
 
+    def _claim_context(self, db, row):
+        # Local desk-only context; never transfer the claim token or account
+        # source records to the native worker. Financial head protects the
+        # accounting basis while the in-flight claim prevents a new projection.
+        desk = db.execute("SELECT paused,human_pause,virtual_cap_cents FROM desk WHERE id=1").fetchone()
+        scope = [list(r) for r in db.execute("SELECT id,pair,virtual_cents,mode,strategy_family,state FROM instances ORDER BY id")]
+        others = [list(r) for r in db.execute("SELECT id,state,notional,reserved FROM gate_intents WHERE id<>? ORDER BY id",(row['id'],))]
+        immutable = {k:row[k] for k in ('id','proposal_id','instance_id','pair','evidence_id','policy_hash','account_hash','evidence_hash','owner','epoch','notional','reserved','entry','stop','target','expires')}
+        head = None
+        if self.account_projection is not None and db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fin_head'").fetchone():
+            h=db.execute('SELECT count,digest,boot FROM fin_head WHERE id=1').fetchone()
+            if h is None or db.execute('SELECT 1 FROM fin_conflicts LIMIT 1').fetchone():
+                raise GateRefusal('financial_context_changed')
+            head=list(h)
+        return digest([list(desk),scope,others,immutable,head])
+
     def check_entry_boundary(self, db, row, now):
-        # Claim is already durable. Recheck the exact approved policy and
-        # restrictive overlay before the native side effect, without treating
-        # the in-flight claim as a fresh account projection.
-        _, ph = self._entry_policy(db,row["instance_id"],now,final=True)
-        if ph != row["policy_hash"]:
+        # The claim was independently approved before the in-flight hold.
+        # Verify exact policy, current market, scope and durable claim context.
+        policy, ph = self._entry_policy(db,row["instance_id"],now,final=True)
+        if ph != row["policy_hash"] or (policy.owner,policy.epoch)!=(row['owner'],row['epoch']):
             raise GateRefusal("goal_or_policy_changed")
+        if row['state']!='CLAIMED' or not row['claim_token'] or now>=row['expires'] or any(db.execute('SELECT paused,human_pause FROM desk WHERE id=1').fetchone()):
+            raise GateRefusal('execution_authority_revoked')
+        market,mh=self._current(db,'market',row['pair'],MarketEvidence)
+        market.check(now)
+        if mh!=row['evidence_hash'] or market.receipt!=row['evidence_id'] or now-market.observed>policy.market_max_age_sec or (market.entry,market.stop,market.target)!=(row['entry'],row['stop'],row['target']):
+            raise GateRefusal('market_stale_or_changed')
+        records=db.execute("SELECT detail FROM gate_events WHERE intent_id=? AND action='CLAIMED'",(row['id'],)).fetchall()
+        if len(records)!=1 or json.loads(records[0][0])!={'context':self._claim_context(db,row)}:
+            raise GateRefusal('claim_context_changed')
+        if self.account_projection is None:
+            account,ah=self._current(db,'account','desk',RiskState)
+            account.check(now)
+            if ah!=row['account_hash'] or now-account.observed>policy.account_max_age_sec:
+                raise GateRefusal('account_stale_or_changed')
 
     def _evaluate(self, db, proposal, now, exclude=None):
         if proposal.expires <= now:
@@ -530,7 +559,7 @@ class Gate:
                 return {"claimed":False,"reason":str(exc)}
             token = uuid4().hex
             db.execute("UPDATE gate_intents SET state='CLAIMED',claim_token=? WHERE id=?",(token,ident))
-            event(db,"CLAIMED",now,ident)
+            event(db,"CLAIMED",now,ident,{"context":self._claim_context(db,row)})
             return {"claimed":True,"mode":"PAPER","claim_token":token,"intent_id":ident,
                     "notional_cents":stake,"entry":m.entry,"stop":m.stop,"target":m.target,
                     "price_scale":PRICE_SCALE}
