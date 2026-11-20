@@ -1,0 +1,13 @@
+/* Sticky visible status: icon, connection and service summary remain adjacent. */
+.maj-service-strip{position:sticky;bottom:0;z-index:10;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;padding:.55rem 1rem;border-top:1px solid #445563;background:#18252f;color:#eaf5f5;font-size:.84rem;min-height:42px}
+.maj-service-summary{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.55rem;white-space:normal}
+.maj-status-wifi{flex-shrink:0}
+.maj-network-label{font-weight:650}
+.maj-services-label{margin-left:.35rem;font-weight:700}
+.maj-service-strip.status-ready .maj-service-summary{color:#bcebd6}
+.maj-service-strip.status-offline .maj-service-summary,.maj-service-strip.status-degraded .maj-service-summary{color:#ffd5b9}
+.maj-service-strip.status-unknown .maj-service-summary{color:#d9e2e8}
+.maj-services-details{margin-left:.35rem;border:1px solid #667783;border-radius:6px;padding:.2rem .6rem;background:transparent;color:inherit;cursor:pointer;font:inherit}
+.maj-services-details:focus-visible{outline:3px solid #b4e5ff;outline-offset:2px}
+.maj-service-hint{margin-left:auto;color:#bbcad1;font-size:.74rem;max-width:36rem}
+@media(max-width:680px){.maj-service-hint{display:none}.maj-services-label{margin-left:0}}
