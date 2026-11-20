@@ -20,7 +20,13 @@ class IntentTests(unittest.TestCase):
         self.runtime = Path(self.tmp.name)
         os.chmod(self.runtime, 0o700)
         self.uid = os.getuid()
+        # Synthetic sockets live under /tmp, unlike installed /run/user/<uid>.
+        # Only the parent-path custody prerequisite is mocked here; real peer
+        # credentials, exact frames, socket modes and cleanup remain exercised.
+        self._custody_patch = patch('credential_handoff.protected_dir')
+        self._custody_patch.start()
     def tearDown(self):
+        self._custody_patch.stop()
         self.tmp.cleanup()
 
     def _client(self, path, data, response, errors):
