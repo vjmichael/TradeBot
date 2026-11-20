@@ -1,0 +1,37 @@
+[Unit]
+Description=Maj Vaj isolated local PAPER test-credential vault (staged)
+ConditionPathExists=/etc/maj-vaj/paper-vault-enabled
+
+[Service]
+Type=simple
+User=maj-vaj-vault
+Group=maj-vaj-vault
+SupplementaryGroups=maj-vaj-credential-operator
+WorkingDirectory=/opt/maj-vaj
+ExecStart=/opt/maj-vaj/venv/bin/python -I -B -c 'import sys;sys.path.insert(0,"/opt/maj-vaj");from paper_credential_vault import main;sys.exit(main())' serve
+LoadCredential=venue-vault-key:/etc/maj-vaj/credential-keys/venue-vault-key
+LoadCredential=provider-tag-key:/etc/maj-vaj/credential-keys/provider-tag-key
+StateDirectory=maj-vaj-paper-vault
+StateDirectoryMode=0700
+RuntimeDirectory=maj-vaj-paper-vault maj-vaj-paper-vault-status
+RuntimeDirectoryMode=0711
+UMask=0077
+UnsetEnvironment=TRADEBOT_VAULT_KEY TRADEBOT_ADMIN_TOKEN
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+InaccessiblePaths=-/var/lib/maj-vaj -/var/lib/maj-vaj-native -/var/lib/maj-vaj-native-signing -/var/lib/maj-vaj-reserve-approval -/var/lib/maj-vaj-recovery-human
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+LimitCORE=0
+StandardOutput=null
+StandardError=null
+TimeoutStopSec=5s
+Restart=no
