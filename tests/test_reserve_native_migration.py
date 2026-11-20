@@ -46,7 +46,7 @@ class NativeMigrationTests(unittest.TestCase):
         sql(self.export/'paper.sqlite','CREATE TABLE trades(id INTEGER);CREATE TABLE orders(id INTEGER);')
         sql(self.export/'desk.sqlite3',"CREATE TABLE fin_events(seq INTEGER PRIMARY KEY,kind TEXT,digest TEXT);CREATE TABLE fin_head(id INTEGER PRIMARY KEY,count INTEGER,digest TEXT,boot INTEGER);INSERT INTO fin_head VALUES(1,0,'"+'0'*64+"',1);CREATE TABLE desk(id INTEGER,paused INTEGER,human_pause INTEGER);INSERT INTO desk VALUES(1,1,1);")
         self.seed=os.urandom(32);self.pin=self.root/'relay.pub';self.pin.write_bytes(Ed25519PrivateKey.from_private_bytes(self.seed).public_key().public_bytes(Encoding.Raw,PublicFormat.Raw));self.pin.chmod(0o644)
-        for name in ('reserve_checkpoint.py','reserve_ipc.py','reserve_native_migration.py','reserve_native_handoff.py'):
+        for name in ('reserve_checkpoint.py','reserve_ipc.py','reserve_native_migration.py','reserve_native_handoff.py','reserve_snapshot.py'):
             shutil.copyfile(ROOT/name,self.root/name)
         shutil.copyfile(__file__,self.root/'fixture.py')
         self.prefix=(f'import sys;sys.path.insert(0,{str(self.root)!r});from fixture import *;'
@@ -66,6 +66,15 @@ class NativeMigrationTests(unittest.TestCase):
         with patch('reserve_native_migration.pristine_ledger',lambda db,scope:{'fixture_only':True}):
             return stage_pristine(self.export,self.root/'native-data',review or self.review(),native_uid=NATIVE,desk_uid=DESK,authority_uid=AUTH)
     def publish(self):
+        # The production projector requires all financial table/column names.
+        from reserve_snapshot import TABLES
+        with sqlite3.connect(self.export/'desk.sqlite3') as db:
+            db.execute('DROP TABLE IF EXISTS fin_events')
+            db.execute('ALTER TABLE desk ADD COLUMN virtual_cap_cents INTEGER DEFAULT 10000')
+            for name,(definition,_) in TABLES.items():
+                db.execute(f'CREATE TABLE IF NOT EXISTS {name}({definition})')
+            db.execute('CREATE TABLE secrets(slot TEXT,ciphertext BLOB)')
+            db.execute('INSERT INTO secrets VALUES(?,?)',('grok',b'synthetic-vault-canary'))
         with patch('reserve_native_handoff.state_identity',identity):
             return issue_reviewed(self.export,self.review()['desk_sha256'],self.inbox,'fixture',self.store,self.seed,native_uid=NATIVE,native_gid=NATIVE,clock=lambda:100)
     def open_code(self,workspace='fixture',at=100,body='print(db.execute("SELECT boot FROM fin_head").fetchone()[0])'):
@@ -85,6 +94,8 @@ class NativeMigrationTests(unittest.TestCase):
         self.assertFalse((self.root/'native-data').exists())
     def test_signed_snapshot_native_only_and_query_only(self):
         self.publish();self.assertEqual(self.run_as(NATIVE,self.open_code()),'1')
+        self.assertNotIn(b'synthetic-vault-canary',(self.inbox/'snapshot.bin').read_bytes())
+        self.refusal(NATIVE,self.open_code(body='db.execute("SELECT * FROM secrets")'))
         for uid in (DESK,AUTH):self.refusal(uid,'(r/"inbox"/"snapshot.bin").read_bytes()')
         self.refusal(NATIVE,'(r/"inbox"/"snapshot.bin").write_bytes(b"x")')
         self.refusal(NATIVE,self.open_code(body='db.execute("UPDATE fin_head SET boot=2")'))

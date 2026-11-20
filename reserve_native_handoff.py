@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 from reserve_checkpoint import require, verify_prefix, reserve_events
 from reserve_ipc import canonical, strict, scope, checkpoint, pinned_key, protected_dir
 from reserve_native_migration import check_sqlite, read_export, MAX_DB
+from reserve_snapshot import project, open_projected
 
 DOMAIN=b'maj-vaj:PAPER:reviewed-snapshot:v1\0'
 TTL=30
@@ -51,6 +52,10 @@ def issue_reviewed(export_dir, reviewed_sha, directory, workspace, store, seed, 
     require(hashlib.sha256(raw).hexdigest()==reviewed_sha,'snapshot_review_changed')
     with closing(check_sqlite(raw)) as db:
         db.execute('BEGIN');previous=store.read();identity=_identity(db,previous)
+        raw=project(db)
+    with closing(open_projected(raw)) as db:
+        db.execute('BEGIN')
+        require(_identity(db,previous)==identity,'snapshot_projection_identity_changed')
     issued=int(clock());body=_body(workspace,previous,identity,raw,issued,native_uid,native_gid)
     envelope=canonical({'body':body,'signature':Ed25519PrivateKey.from_private_bytes(seed).sign(DOMAIN+canonical(body)).hex()})
     require(len(envelope)<=8192,'snapshot_header_size')
@@ -89,7 +94,7 @@ def open_reviewed(directory, workspace, store, pin, *, native_uid, native_gid, d
     now=int(clock());issued=body['issued'];require(type(issued) is int and 0<=now-issued<=TTL,'snapshot_stale')
     require(body['workspace']==workspace and body['native_uid']==native_uid and body['native_gid']==native_gid and body['size']==len(raw) and body['sha256']==hashlib.sha256(raw).hexdigest(),'snapshot_scope_or_content_changed')
     previous=checkpoint(body['previous']);require(store.read()==previous,'snapshot_checkpoint_changed')
-    with closing(check_sqlite(raw)) as db:
+    with closing(open_projected(raw)) as db:
         db.execute('BEGIN');identity=_identity(db,previous)
         require(body==_body(workspace,previous,identity,raw,issued,native_uid,native_gid),'snapshot_scope_or_content_changed')
         yield db,previous
