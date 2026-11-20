@@ -44,6 +44,23 @@ class Tests(unittest.TestCase):
     def test_unknown_witness_fields_not_exposed(self):
         c=self.make(ready=lambda:{**W,'SECRET_CANARY':Witness('ready',100)})
         self.assertNotIn('SECRET_CANARY',self.fetch(c).text)
+    def test_nonblocking_demand_sampling_when_probe_hangs(self):
+        import threading, time
+        from health_cache import LocalHealthCache
+        started=threading.Event();release=threading.Event()
+        def slow():started.set();release.wait(1);return ACTIVE
+        cache=LocalHealthCache(slow,clock=lambda:100)
+        def source():cache.ensure_fresh();return cache.latest()
+        c=self.make(local=StatusSources(ACTIVE,W,'unknown',100))
+        app=FastAPI()
+        attach_connection_health(app,lambda:None,source,clock=lambda:100)
+        try:
+            t=time.monotonic()
+            first=TestClient(app).get('/api/connection-health')
+            self.assertLess(time.monotonic()-t,0.4)
+            self.assertTrue(started.wait(0.5))
+            self.assertEqual(first.json()['health']['internet'],'unknown')
+        finally:release.set()
     def test_no_privileged_operations(self):
         c=self.make();methods=[r.path for r in c.app.routes if r.path=='/api/connection-health'];self.assertEqual(methods,['/api/connection-health'])
         self.assertEqual(c.post('/api/connection-health',headers={'Authorization':'Bearer SYNTHETIC-SESSION'}).status_code,405)
