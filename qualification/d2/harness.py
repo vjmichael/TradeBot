@@ -48,7 +48,14 @@ def assert_active(user):
 def wait_window(name,timeout=70):
     return wait_cmd('DISPLAY=:0 XAUTHORITY=/run/lightdm/root/:0 xdotool search --onlyvisible --name '+shlex.quote(name)+' | head -1 | grep -E "^[0-9]+$"',timeout).splitlines()[-1]
 def greeter():
-    wait_cmd('pgrep -u lightdm -x lightdm-gtk-greeter >/dev/null && test -e /run/lightdm/root/:0',75)
+    # Linux comm is limited to 15 characters; use anchored argv and the same UID.
+    # A process match is only readiness, never a substitute for actual PAM/session assertions.
+    try:
+        wait_cmd("pgrep -u lightdm -f '^([^[:space:]]*/)?lightdm-gtk-greeter([[:space:]]|$)' >/dev/null && test -e /run/lightdm/root/:0",75)
+    except RuntimeError:
+        _, report=command("systemctl show lightdm -p ActiveState -p SubState -p Result; if test -e /run/lightdm/root/:0; then echo display_cookie_present; else echo display_cookie_missing; fi; if pgrep -u lightdm -f '^([^[:space:]]*/)?lightdm-gtk-greeter([[:space:]]|$)' >/dev/null; then echo greeter_process_present; else echo greeter_process_missing; fi",ok=False)
+        (out/'greeter-readiness.txt').write_text(report+'\n')
+        raise
     time.sleep(3)
 def login(user,password):
     greeter()
