@@ -1,3 +1,4 @@
+# Trusted credential_handoff.py fault site and exception class only; no raw messages.
 # Fixed-only Python exception class/source-line receipt; no raw error or credential output.
 # Diagnostic R3: wait for observed browser-owned external-app prompt before consent.
 name: R2B exact Chromium to native guard diagnostic (fixture instrumentation only)
