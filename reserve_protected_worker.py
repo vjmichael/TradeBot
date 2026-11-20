@@ -24,7 +24,12 @@ def main():
     except (ValueError,OSError):native_public=None
     if native_public==public:native_public=None
     client=RecoveryClient('/run/maj-vaj-reserve-authority',authority_uid=authority,desk_uid=desk,workspace='installed-paper')
-    result=schedule_once(desk_transaction(a.data),client,Mailbox('/var/lib/maj-vaj-reserve-human-outbox',authority,'human'),Mailbox('/var/lib/maj-vaj-reserve-native-outbox',native,'native'),public,native_public)
+    # Never fall back to desk-owned wallet secrets for adoption or cycles.
+    def verify_projection(db,now):
+        from reserve_native_wallet import installed_projection
+        project=installed_projection('/etc/maj-vaj/reserve-native.pub','/etc/maj-vaj/reserve-rebind.pub','/etc/maj-vaj/reserve-rebind','/etc/maj-vaj/reserve-checkpoint.pub','installed-paper',native_uid=native,desk_uid=desk,authority_uid=authority)
+        return project(db,now)
+    result=schedule_once(desk_transaction(a.data),client,Mailbox('/var/lib/maj-vaj-reserve-human-outbox',authority,'human'),Mailbox('/var/lib/maj-vaj-reserve-native-outbox',native,'native'),public,native_public,verify_projection=verify_projection)
     print(json.dumps(result,sort_keys=True))
 
 

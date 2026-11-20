@@ -6,6 +6,7 @@ This is a trusted local composition point, not a replacement wallet engine.
 """
 import os
 import json
+import hmac
 import stat
 import time
 from pathlib import Path
@@ -66,7 +67,11 @@ class NativeProducer:
                 verify(db,self.data,self.rebind_dir,self.rebind_pin,i,native_uid=self.uid,
                        desk_uid=self.desk_uid,authority_uid=self.authority_uid)
             return workspace_key(self.data,i)
-        projection=authenticated_projection(keys)
+        if self.rebind_dir is not None:
+            from reserve_native_wallet import projection as public_projection
+            projection=public_projection(lambda d,i:keys(i)[1],pinned_key(self.native_pin),self.workspace)
+        else:
+            projection=authenticated_projection(keys)
         verified=[]
         def verify(d,t):
             risk,digest=projection(d,t);verified.append((risk,digest))
@@ -102,3 +107,34 @@ class NativeProducer:
                 for (i,) in rows:leases.enter_context(custody(workspace(self.data,i)))
                 packet=self.propose(db,previous,instance,action,receipt)
         return packet
+
+    def observe_from_handoff(self, directory, store, relay_pin, native_gid, instance, driver_context):
+        """Obtain an actual native wallet under the migrated workspace lease.
+
+        driver_context is trusted worker composition: it must construct and
+        close its own native driver under this lease. Never an RPC callback.
+        """
+        from contextlib import nullcontext
+        from paper_custody import AuthenticatedNativeDriver, workspace_key, workspace, observation, authenticate
+        from paper_supervisor import custody
+        from reserve_native_handoff import open_reviewed
+        from reserve_native_rebind import verify
+        from reserve_native_wallet import _sign_observed
+        require(self.rebind_dir is not None,'native_rebind_required')
+        key=self._key()
+        require(len({pinned_key(p) for p in (relay_pin,self.native_pin,self.human_pin,self.rebind_pin)})==4,'native_observation_independent_pins')
+        with open_reviewed(directory,self.workspace,store,relay_pin,native_uid=self.uid,native_gid=native_gid,desk_uid=self.desk_uid,authority_uid=self.authority_uid,clock=self.clock) as (db,previous):
+            # Current migration gate supports one pristine funded workspace.
+            require([r[0] for r in db.execute('SELECT id FROM instances')]==[instance],'native_observation_scope')
+            work=workspace(self.data,instance)
+            with custody(work):
+                bound=verify(db,self.data,self.rebind_dir,self.rebind_pin,instance,native_uid=self.uid,desk_uid=self.desk_uid,authority_uid=self.authority_uid)
+                receipt_key,binding=workspace_key(self.data,instance)
+                require(bound['binding']==binding,'native_observation_binding')
+                with driver_context(work) as driver:
+                    require(isinstance(driver,AuthenticatedNativeDriver) and driver.instance==instance and driver.path==work/'paper.sqlite' and driver.binding==binding and hmac.compare_digest(driver.key,receipt_key),'native_observation_driver')
+                    packet=observation(lambda:nullcontext(db),driver,clock=self.clock)
+                    body=authenticate(receipt_key,'flat-wallet',packet)
+                    result=_sign_observed(key,self.workspace,body)
+            require(0<=int(self.clock())-body['at']<=30,'native_observation_expired')
+        return result

@@ -113,21 +113,30 @@ def issue(export_dir,data,directory,review,store,seed,*,native_uid,desk_uid,auth
     return body
 
 
-def verify(db,data,directory,pin,instance,*,native_uid,desk_uid,authority_uid):
-    """Native-owned caller holding the native lease and consistent ledger view."""
-    require(db.in_transaction and os.geteuid()==native_uid and len({native_uid,desk_uid,authority_uid})==3 and all(type(i) is int and i>0 for i in (native_uid,desk_uid,authority_uid)),'rebind_reader_identity')
+def verify_record(db,directory,pin,instance,*,native_uid,desk_uid,authority_uid):
+    """Verify public root-issued rebinding without accessing native private files."""
+    require(db.in_transaction and os.geteuid() in (native_uid,desk_uid,authority_uid) and len({native_uid,desk_uid,authority_uid})==3 and all(type(i) is int and i>0 for i in (native_uid,desk_uid,authority_uid)),'rebind_reader_identity')
     require(type(instance) is str and re.fullmatch('[0-9a-f]{32}',instance),'rebind_instance')
     packet=_record(directory,instance);require(set(packet)=={'body','signature'} and type(packet['signature']) is str and re.fullmatch('[0-9a-f]{128}',packet['signature']),'rebind_envelope')
     b=packet['body'];require(type(b) is dict and set(b)=={'v','scope','native_uid','desk_uid','authority_uid','prior','new','review','checkpoint'},'rebind_receipt')
     try:Ed25519PublicKey.from_public_bytes(pinned_key(pin)).verify(bytes.fromhex(packet['signature']),DOMAIN+canonical(b))
     except (InvalidSignature,ValueError) as exc:raise ValueError('rebind_signature') from exc
     require(b['v']==1 and (b['native_uid'],b['desk_uid'],b['authority_uid'])==(native_uid,desk_uid,authority_uid),'rebind_identity_changed')
-    expected=b['scope'];require(expected['instance']==instance and expected['mode']=='PAPER' and db.execute('SELECT pair,virtual_cents,mode FROM instances WHERE id=?',(instance,)).fetchone()==(expected['pair'],expected['principal_cents'],'PAPER'),'rebind_scope_changed')
+    expected=b['scope'];row=db.execute('SELECT pair,virtual_cents,mode FROM instances WHERE id=?',(instance,)).fetchone()
+    require(expected['instance']==instance and expected['mode']=='PAPER' and row is not None and tuple(row)==(expected['pair'],expected['principal_cents'],'PAPER'),'rebind_scope_changed')
     old=b['prior']['old_provision'];rows=db.execute("SELECT detail FROM gate_events WHERE intent_id=? AND action='workspace_provisioned'",(instance,)).fetchall()
     require(len(rows)==1 and json.loads(rows[0][0])==old,'rebind_original_receipt_changed')
     from financial_ledger import replay
     _,_,count,_=replay(db);n=b['prior']['ledger_count'];h=b['prior']['ledger_head']
-    require(type(n) is int and 0<n<=count and db.execute('SELECT digest FROM fin_events WHERE seq=?',(n,)).fetchone()==(h,),'rebind_original_prefix_missing')
+    row=db.execute('SELECT digest FROM fin_events WHERE seq=?',(n,)).fetchone()
+    require(type(n) is int and 0<n<=count and row is not None and tuple(row)==(h,),'rebind_original_prefix_missing')
     verify_prefix(db,checkpoint(b['checkpoint']))
-    with workspace(data,instance,native_uid) as (_,work):require(binding(data,work,expected,native_uid)==b['new'],'rebind_native_identity_changed')
+    return b
+
+
+def verify(db,data,directory,pin,instance,*,native_uid,desk_uid,authority_uid):
+    """Native-owned caller holding the native lease and consistent ledger view."""
+    require(os.geteuid()==native_uid,'rebind_reader_identity')
+    b=verify_record(db,directory,pin,instance,native_uid=native_uid,desk_uid=desk_uid,authority_uid=authority_uid)
+    with workspace(data,instance,native_uid) as (_,work):require(binding(data,work,b['scope'],native_uid)==b['new'],'rebind_native_identity_changed')
     return b['new']

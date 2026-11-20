@@ -58,9 +58,11 @@ def pristine_native(raw):
 def pristine_ledger(db, expected):
     """Actual production replay, no caller-supplied account totals."""
     from financial_ledger import replay, CENT
-    require(db.execute('SELECT paused,human_pause FROM desk WHERE id=1').fetchone()==(1,1),'migration_requires_human_pause')
+    row=db.execute('SELECT paused,human_pause FROM desk WHERE id=1').fetchone()
+    require(row is not None and tuple(row)==(1,1),'migration_requires_human_pause')
     instance=expected['instance']
-    require(db.execute('SELECT pair,virtual_cents,mode FROM instances WHERE id=?',(instance,)).fetchone()==(expected['pair'],expected['principal_cents'],'PAPER'),'migration_scope')
+    row=db.execute('SELECT pair,virtual_cents,mode FROM instances WHERE id=?',(instance,)).fetchone()
+    require(row is not None and tuple(row)==(expected['pair'],expected['principal_cents'],'PAPER'),'migration_scope')
     states,_,count,head=replay(db);s=states.get(instance)
     require(s is not None and s['pair']==expected['pair'].replace('/','-') and -s['capital']==expected['principal_cents']*CENT and s['active']==-s['capital'] and not s['protected'] and not s['pending'] and not s['lots'] and not s['sales'] and not s['correction_locked'] and len(s['history'])==1 and s['history'][0][0]=='fund' and s['reserve']['last_time']==0 and s['reserve']['active'] is None,'nonpristine_financial_history')
     require(not db.execute('SELECT 1 FROM fin_conflicts LIMIT 1').fetchone(),'migration_financial_conflict')

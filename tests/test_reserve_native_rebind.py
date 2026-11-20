@@ -43,7 +43,7 @@ class RebindTests(NativeMigrationTests):
         # Native reads a separate SQLite ledger fixture, not the root cold export.
         p=self.root/'native-data'/'test-desk.sqlite3'
         if not p.exists():shutil.copyfile(self.export/'desk.sqlite3',p);os.chown(p,NATIVE,NATIVE);p.chmod(0o600)
-        return FAKE+'from reserve_native_rebind import verify;c=sqlite3.connect(str(r/"native-data"/"test-desk.sqlite3"),isolation_level=None);c.execute("BEGIN");'+mutate+f'print(verify(c,r/"native-data",r/"records",r/"relay.pub",{INSTANCE!r},native_uid={NATIVE},desk_uid={DESK},authority_uid={AUTH})["binding"])'
+        return FAKE+'from reserve_native_rebind import verify;c=sqlite3.connect(str(r/"native-data"/"test-desk.sqlite3"),isolation_level=None);c.row_factory=sqlite3.Row;c.execute("BEGIN");'+mutate+f'print(verify(c,r/"native-data",r/"records",r/"relay.pub",{INSTANCE!r},native_uid={NATIVE},desk_uid={DESK},authority_uid={AUTH})["binding"])'
     def test_rebind_preserves_original_and_refuses_overwrite(self):
         before=self.review();body=self.sign();self.assertEqual(self.review(),before)
         self.assertEqual(body['prior'],PRIOR);self.assertEqual(body['new']['binding'],self.candidate['binding'])
@@ -51,6 +51,15 @@ class RebindTests(NativeMigrationTests):
         with self.assertRaises(FileExistsError):self.sign()
         for uid in (DESK,AUTH):self.refusal(uid,self.check_code())
         self.refusal(NATIVE,f'(r/"records"/{INSTANCE+".json"!r}).unlink()')
+    def test_public_binding_independent_of_native_private_files(self):
+        body=self.sign()
+        # Desk/authority get their own read-only ledger copy, never native keys.
+        for uid in (DESK,AUTH):
+            p=self.root/f'ledger-{uid}.sqlite3';shutil.copyfile(self.export/'desk.sqlite3',p);os.chown(p,uid,uid);p.chmod(0o400)
+            code=FAKE+f'from reserve_native_rebind import verify_record;c=sqlite3.connect((r/"ledger-{uid}.sqlite3").as_uri()+"?mode=ro",uri=True);c.row_factory=sqlite3.Row;c.execute("BEGIN");print(verify_record(c,r/"records",r/"relay.pub",{INSTANCE!r},native_uid={NATIVE},desk_uid={DESK},authority_uid={AUTH})["new"]["binding"])'
+            self.assertEqual(self.run_as(uid,code),body['new']['binding'])
+            self.refusal(uid,f'(r/"native-data"/"paper"/{INSTANCE!r}/"receipt.key").read_bytes()')
+
     def test_refuse_modified_ledger_and_binding(self):
         self.sign()
         self.refusal(NATIVE,self.check_code('c.execute("UPDATE gate_events SET detail=\'{}\'");'))

@@ -73,7 +73,7 @@ def derive_event(db, previous, instance, action, receipt, recorded_at, now, veri
     return result
 
 
-def commit_packet(transaction, client, packet, human_public, native_public, *, clock=time.time):
+def commit_packet(transaction, client, packet, human_public, native_public, *, clock=time.time, verify_projection=None):
     """Desk-only transaction entry shared by human delivery and scheduled ticks.
 
     The pinned native/human permit authenticates the independent authorization;
@@ -88,7 +88,10 @@ def commit_packet(transaction, client, packet, human_public, native_public, *, c
         e=packet['event']; recorded=e['body']['recorded_at']
         if e['kind']=='reserve_adopt':
             require(type(native_public) is bytes and len(native_public)==32 and native_public!=human_public,'independent_native_key_required')
-        require(e==derive_event(db,prev,e['instance'],e['kind'].removeprefix('reserve_'),e['id'],recorded,now,projection_values),
+        # Installed callers must supply the independent public-wallet verifier.
+        if client.workspace=='installed-paper' and e['kind'] in ('reserve_adopt','reserve_tick'):
+            require(verify_projection is not None,'installed_public_wallet_verification_required')
+        require(e==derive_event(db,prev,e['instance'],e['kind'].removeprefix('reserve_'),e['id'],recorded,now,verify_projection or projection_values),
                 'protected_event_context_changed')
         db.execute('INSERT INTO fin_events VALUES(?,?,?,?,?,?,?)',(e['seq'],e['id'],e['instance'],e['kind'],canon(e['body']),e['previous'],e['digest']))
         db.execute('UPDATE fin_head SET count=?,digest=? WHERE id=1',(nxt.seq,nxt.digest))

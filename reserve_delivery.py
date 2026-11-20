@@ -61,7 +61,7 @@ def open_human_review(root, review, previous, event, evidence, mailbox):
     return ExactReviewWindow(root,review,view,mailbox.publish)
 
 
-def human_revalidator(transaction, store, *, clock=time.time):
+def human_revalidator(transaction, store, *, clock=time.time, verify_projection=None):
     """Authority-local snapshot verification. Transaction must refer to an
     independently transferred current consistent snapshot; no desk RPC input.
     """
@@ -69,11 +69,11 @@ def human_revalidator(transaction, store, *, clock=time.time):
     def check(previous,event,evidence):
         with transaction() as db:
             if store.verify(db)!=previous:return False
-            return event==derive_event(db,previous,event['instance'],event['kind'].removeprefix('reserve_'),event['id'],event['body']['recorded_at'],int(clock()),projection_values)
+            return event==derive_event(db,previous,event['instance'],event['kind'].removeprefix('reserve_'),event['id'],event['body']['recorded_at'],int(clock()),verify_projection or projection_values)
     return check
 
 
-def schedule_once(transaction,client,human,native,human_public,native_public,*,clock=time.time):
+def schedule_once(transaction,client,human,native,human_public,native_public,*,clock=time.time,verify_projection=None):
     """Process at most one operation, prioritizing a pending human choice.
     A matching already committed receipt is nonmutating; malformed, stale, or
     conflicting human packets stop the cycle rather than falling through.
@@ -91,7 +91,7 @@ def schedule_once(transaction,client,human,native,human_public,native_public,*,c
                 row=db.execute('SELECT digest,kind FROM fin_events WHERE seq=?',(cp.seq,)).fetchone()
                 require(row is not None and row[0]==cp.digest and row[1]==packet['event']['kind'],'old_delivery_conflict')
                 continue
-        return commit_packet(transaction,client,packet,human_public,native_public,clock=clock)
+        return commit_packet(transaction,client,packet,human_public,native_public,clock=clock,verify_projection=verify_projection)
     # Even no work requires witness verification (no optimistic OFF).
     with transaction() as db:client.verify_transaction(db);replay(db)
     return {'status':'no_pending_delivery'}
