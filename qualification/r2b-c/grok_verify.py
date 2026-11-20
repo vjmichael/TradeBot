@@ -37,12 +37,13 @@ class Receipt:
     status: str
     generation: str
     model: str
+    endpoint_acl: str
     checked: int
     expires: int = 0
 
-    def current(self, generation, model, now, opted_in):
+    def current(self, generation, model, endpoint_acl, now, opted_in):
         return (opted_in is True and self.status == 'metadata_verified' and self.generation == generation
-                and self.model == model and type(now) is int and self.checked <= now < self.expires)
+                and self.model == model and self.endpoint_acl == endpoint_acl and type(now) is int and self.checked <= now < self.expires)
 
 
 def inspect(key, generation, model, endpoint_acl, now, *, opted_in=False, approved=False, transport=None):
@@ -54,7 +55,7 @@ def inspect(key, generation, model, endpoint_acl, now, *, opted_in=False, approv
             or type(endpoint_acl) is not str or not re.fullmatch(r'api-key:endpoint:[A-Za-z0-9_.-]{1,96}', endpoint_acl)
             or type(now) is not int or not 0 < now < 2**63-TTL):
         raise ValueError('invalid context')
-    def out(status, expiry=0): return Receipt(status,generation,model,now,expiry)
+    def out(status, expiry=0): return Receipt(status,generation,model,endpoint_acl,now,expiry)
     if opted_in is not True: return out('disabled')
     if approved is not True: return out('confirmation_required')
     if type(key) is not str or not re.fullmatch(r'xai-[A-Za-z0-9_-]{16,512}',key): return out('invalid_key_format')
