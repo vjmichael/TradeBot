@@ -1,0 +1,67 @@
+name: R2B exact Chromium to native guard diagnostic (fixture instrumentation only)
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2a-r1-d1]
+    paths: ['.github/workflows/r2b-native-dispatch-diagnostic.yml']
+permissions:
+  contents: read
+jobs:
+  r2b-native-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Exact source locked R2B restore and pinned dashboard
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r2/restore-r2.sh "$RUNNER_TEMP/r2b-installed" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-installed" hash-object dashboard/app.js)" = 1f001a6c1c567237b0bb79683ab4cfb5af603de3
+          cd "$RUNNER_TEMP/r2b-installed/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Qualify reviewed legacy migration against exact original vault
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-installed/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-installed:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/migration"
+          python -m unittest -v test_reviewed_migration 2>&1 | tee receipt/migration-tests.txt
+      - name: Install native VM prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build genuine Debian 13 VM with isolated vault, Chromium and LightDM
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-installed" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r3/native-diagnostic" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Execute native graphical handoff and independent operator enrollment
+        run: |
+          set -euo pipefail
+          set +e
+          /usr/bin/python3 qualification/r2b-integrate-02-r2-r3/native-diagnostic/harness.py "$RUNNER_TEMP/r2b-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/native.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if test "$rc" -eq 0; then
+            echo "DIAGNOSTIC_REACHED_NATIVE_JOURNEY (not unchanged-source acceptance)"
+          else
+            test -f receipt/r2b-dispatch-invoked.txt
+            test -f receipt/r2b-dispatch-guard.txt
+            echo "DIAGNOSTIC_CAPTURED_NATIVE_REFUSAL (not acceptance)"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-native-dispatch-diagnostic
+          path: receipt/
+          retention-days: 3
