@@ -14,6 +14,7 @@ class LocalHealthCache:
         self._lock=threading.Lock()
         self._sample=None
         self._sampling=False
+        self._requested_at=None
 
     def sample(self):
         """Call from the existing scheduler's worker, not a dashboard request."""
@@ -32,6 +33,34 @@ class LocalHealthCache:
             return False
         finally:
             with self._lock:self._sampling=False
+
+    def ensure_fresh(self, min_interval=15):
+        """Demand-triggered, single bounded worker; no periodic daemon.
+        Only the local authorized status route/supervisor may invoke it.
+        """
+        if type(min_interval) not in (int,float) or min_interval<1:
+            raise ValueError('invalid sampling budget')
+        with self._lock:
+            now=self._clock()
+            if self._sampling or (self._requested_at is not None and now-self._requested_at < min_interval):
+                return False
+            self._requested_at=now
+            # Claim pending before the worker is scheduled to reject races.
+            self._sampling=True
+        def worker():
+            try:
+                try:
+                    local=self._probe()
+                    if not hasattr(local,'services') or type(local.services) is not dict:
+                        raise ValueError('health probe unavailable')
+                    record=StatusSources(local,{},'unknown',self._clock())
+                except Exception:
+                    record=None
+                with self._lock:self._sample=record
+            finally:
+                with self._lock:self._sampling=False
+        threading.Thread(target=worker,daemon=True,name='maj-vaj-nonsecret-health').start()
+        return True
 
     def latest(self):
         with self._lock:return self._sample
