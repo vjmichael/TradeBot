@@ -117,9 +117,14 @@ try:
     # occupies x=52..340 y=359..407; pointer-click its center instead of
     # assuming Return dispatched an external protocol. This is a genuine
     # browser input event, not an invocation of xdg-open or the handler.
-    click(195,383);time.sleep(4);shot('07-after-real-link-activation')
-    # The only positive path is genuine browser -> desktop handler -> native
-    # confirmation. Never launch xdg-open or the helper directly in a test.
+    click(195,383);time.sleep(4);shot('07-browser-external-app-prompt')
+    # Physical Chromium 150 screenshot from the previous native receipt proves
+    # this is a separate browser-owned external-app permission prompt: the
+    # action button occupies x=495..810, y=162..204 at fixed 1024x768.
+    # Explicitly approve that browser prompt once, without checking the
+    # persistent "Always allow" box. Do NOT call xdg-open or the handler.
+    click(650,184);time.sleep(3);shot('07-after-browser-external-confirmation')
+    # Only the genuine Chromium scheme -> desktop handler may open native Tk.
     try:
         modal=wait_window('Maj Vaj.*Open account connections',30)
     except Exception:
