@@ -66,7 +66,7 @@ class AdversarialIntentTests(unittest.TestCase):
                 responses.append(b'')
         with intent_listener(self.runtime,self.uid) as listener:
             path=self.runtime/'maj-vaj-account-handoff-intent.sock'
-            for payload,expected in [(b'OPEN\\nEXTRA',False),(INTENT,True)]:
+            for payload,expected in [(b'OPEN\nEXTRA',False),(INTENT,True)]:
                 t=threading.Thread(target=sender,args=(path,payload))
                 t.start()
                 self.assertEqual(receive_intent(listener,self.uid),expected)
