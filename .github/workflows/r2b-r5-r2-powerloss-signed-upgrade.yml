@@ -43,7 +43,7 @@ jobs:
           test "$(git hash-object qualification/r2b-admission-r5-r2/upgrade_v2.py)" = 8a312df1eba70a5debd729d72b4cf6a4d7eb389c
           test "$(git hash-object qualification/r2b-admission-r5-r2/build_signed_fixture.py)" = 9e627f55dc8d2576ed0004302a3cf42f5ed39fc6
           test "$(git hash-object qualification/r2b-admission-r5-r2/test_upgrade_v2.py)" = 60c6d9d0528f802959d06b89901d239e3c605b39
-          test "$(git hash-object qualification/r2b-admission-r5-r2/native_power_and_upgrade.py)" = 2cbcb9d1ab1da3dca435b7e16f3e815e7fb31475
+          test "$(git hash-object qualification/r2b-admission-r5-r2/native_power_and_upgrade.py)" = ff0d579a2714b92fb6e670094c89a0746d47652c
           python -m py_compile qualification/r2b-admission-r5-r2/upgrade_v2.py qualification/r2b-admission-r5-r2/build_signed_fixture.py qualification/r2b-admission-r5-r2/test_upgrade_v2.py qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
           grep -F 'kill -KILL "$$"' qualification/r2b-admission-r5/install-offline.sh
           grep -Fx '    install -d -o root -g root -m 0700 "$root/.r5-stage"' qualification/r2b-admission-r5/install-offline.sh
@@ -60,6 +60,9 @@ jobs:
           grep -F 'SYSTEMD_PAGER=cat PAGER=cat systemctl --no-pager cat' qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
           grep -F "expected_genuine_sigkill_exit_137" qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
           grep -F "R5_R2_UNEXPECTED_UPGRADE_EXIT=" qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
+          grep -F 'sync -f /etc/maj-vaj/r5-r2-trust-root.pub' qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
+          grep -F 'sync -f /etc/maj-vaj/r5-r2-trust-root.sha256' qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
+          grep -F 'sync -f /etc/maj-vaj' qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
           grep -F "R5-PENDING-ROLLBACK-ONLY" qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
           grep -F "r2b-admission-r5/r5_transaction.py" qualification/r2b-admission-r5/install-offline.sh
           grep -F "transaction_cmd prepare" qualification/r2b-admission-r5/install-offline.sh
@@ -190,6 +193,8 @@ jobs:
           grep -Fx R5_R2_REINSTALL_AFTER_REPEATED_CUT_PASS receipt/r5-r2-rollback_repeat.txt
           grep -Fx R5_R2_TAMPERED_SIGNED_RELEASE_REFUSED_PASS receipt/r5-r2-signed_upgrade.txt
           grep -Fx R5_R2_TRUST_ROOT_TAMPER_REFUSED_PASS receipt/r5-r2-signed_upgrade.txt
+          grep -Fx R5_R2_INDEPENDENT_DURABLE_OFFLINE_TRUST_PROVISIONED_PASS receipt/r5-r2-signed_upgrade.txt
+          grep -Fx R5_R2_INDEPENDENT_DURABLE_OFFLINE_TRUST_PROVISIONED_PASS receipt/r5-r2-upgrade_power.txt
           grep -Fx R5_R2_AUTHENTICATED_CROSS_VERSION_LIFECYCLE_PASS receipt/r5-r2-signed_upgrade.txt
           grep -Fx R5_R2_THREE_HARD_POWER_CUTS_SIGNED_UPGRADE_RECOVERY_PASS receipt/r5-r2-upgrade_power.txt
           grep -Fx R5_R2_SIGNED_UPGRADE_REAPPLIED_AFTER_RECOVERY_PASS receipt/r5-r2-upgrade_power.txt
