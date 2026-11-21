@@ -1,0 +1,156 @@
+name: R2B R5 independently source-locked protected installer and installed lifecycle
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2b-admission-r5]
+    paths: ['.github/workflows/r2b-r5-installed-lifecycle.yml']
+permissions:
+  contents: read
+jobs:
+  installed-owner-end-to-end:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22.16.0'}
+      - name: Lock original source and independently qualify the guarded four-file owner overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          # Historical exact-source restore must use the frozen R3 snapshot:
+          # the live qualification ledger was legitimately updated AFTER the
+          # accepted R3 source build, changing docs patch contexts only.
+          git worktree add --detach "$RUNNER_TEMP/r3-frozen-restore" f4b513480f948c638f450d2aeccb2acdfe6201af
+          bash "$RUNNER_TEMP/r3-frozen-restore/qualification/r2b-integrate-02-r2-r3/restore-r3.sh" "$RUNNER_TEMP/r2b-r3" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
+          test "$(git hash-object qualification/r2b-admission-r2/patch_owner_vault.py)" = c647db518e922f352acc0ce19e22e4aa32608393
+          test "$(git hash-object qualification/r2b-admission-r2/native_owner_end_to_end_harness.py)" = df7cc45803fb3e37384129502e29f980b1ddacae
+          test "$(git hash-object qualification/r2b-admission-r4/native_adversarial_harness.py)" = ce57c20c23f9f4a6ab3cbe036885f261ac73d552
+          test "$(git hash-object qualification/r2b-admission-r4/test_owner_adversarial.py)" = eae211347664dde06720a49390e1deff562a4873
+          python -m py_compile qualification/r2b-admission-r4/native_adversarial_harness.py qualification/r2b-admission-r4/test_owner_adversarial.py
+          test "$(git hash-object qualification/r2b-admission-r5/install-offline.sh)" = 27b755a56bd391e3dc4b419787395fc807811ced
+          test "$(git hash-object qualification/r2b-admission-r5/native_installed_harness.py)" = 8a2900b20388da3099897e5aa30a4f2722747180
+          bash -n qualification/r2b-admission-r5/install-offline.sh
+          python -m py_compile qualification/r2b-admission-r5/native_installed_harness.py
+          grep -F "R5_INSTALLER_DISABLED_DEFAULT_NATIVE_PASS" qualification/r2b-admission-r5/native_installed_harness.py
+          grep -F "R5_INSTALLED_REENABLE_NO_REPLAY_PASS" qualification/r2b-admission-r5/native_installed_harness.py
+          grep -F "ConditionVirtualization=qemu" qualification/r2b-admission-r5/install-offline.sh
+          grep -F "R5_FIXED_NATIVE_SOURCE_LOCK_PASS" qualification/r2b-admission-r5/install-offline.sh
+          grep -F "SELECT state,count(*) FROM approvals GROUP BY state" qualification/r2b-admission-r4/native_adversarial_harness.py
+          grep -F "operator_not_in_native_seat" qualification/r2b-admission-r4/native_adversarial_harness.py
+          grep -F "sys.argv[3]=='reboot' else ['-no-reboot']" qualification/r2b-admission-r4/native_adversarial_harness.py
+          test "$(git hash-object qualification/r2b-admission-r2/owner_rpc_extension.py)" = 5aa2b11afd1f3108f6c7d16cb3b7639271371054
+          test "$(git hash-object qualification/r2b-admission-r2/owner_synthetic_bridge.py)" = eb22638d04f105bda522cbf0a143419407562b87
+          test "$(git hash-object qualification/r2b-admission-r2/test_owner_rpc_extension.py)" = a375b5410ea133ea6a9be431c2168d914827cae4
+          test "$(git hash-object qualification/r2b-admission-r2/agent_broker_channel.py)" = 5b04b1d8ec8db889f1f55628ec4d1a867db39b68
+          test "$(git hash-object qualification/r2b-admission-r2/broker_service_r2.py)" = a2537e0f1a2a2b9a9e61ee69c2898d943d82f94b
+          test "$(git hash-object qualification/r2b-admission-r2/synthetic_worker_service.py)" = 3f16e6519215f03af81a374f643303fa78e4a293
+          test "$(git hash-object qualification/r2b-admission-r2/synthetic_worker_protocol.py)" = a26e5651658bafbd0bf86dc1af3d83a1d1d7d217
+          test "$(git hash-object qualification/r2b-admission-r2/native_agent_protocol.py)" = 62bc716449395b8fbd3aeb933cf3cd37e5d8c257
+          test "$(git hash-object qualification/r2b-admission-r2/patch_credential_gui.py)" = 17b1315a903edb9b92d9c052c3988ed8984b13b2
+          test "$(git hash-object qualification/r2b-admission-r2/maj-vaj-r2b-approval.service)" = 379a0cd1f34795c3b1361d69a5ad63e3d3fb7fc2
+          test "$(git hash-object qualification/r2b-admission-r2/maj-vaj-r2b-synthetic-worker.service)" = 1f0414e72e6985623fec94892eb28db70e208be8
+          test "$(git hash-object qualification/r2b-admission-r1/owner_execution_bridge.py)" = 882875e35b046a13a94ffb7f24ca52c7d70c37d7
+          test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 39cd2c1b06823f025655b2191bff45988ef2c858
+          test "$(git hash-object qualification/r2b-admission/operator_session.py)" = b61a656740989cb6b284498503837d2252258fec
+          test "$(git hash-object qualification/r2b-admission/receipt_channel.py)" = c1550d83d299ae061e71e00e2e937139f6f84618
+          test "$(git hash-object qualification/r2b-closeout-custody/worker_receipt_verifier.py)" = 6d3dd869086febb21b2c1f8a50cd1fcc8d62e0dc
+          # Preflight the exact four-file patch on a disposable source COPY:
+          # the actual QEMU guest must start with the original installed vault
+          # before root safely creates the independent test-only signing key.
+          mkdir -p "$RUNNER_TEMP/patch-preflight/deploy"
+          for p in credential_graphical.py paper_credential_vault.py managed_rpc.py; do
+            cp "$RUNNER_TEMP/r2b-r3/$p" "$RUNNER_TEMP/patch-preflight/$p"
+          done
+          cp "$RUNNER_TEMP/r2b-r3/deploy/maj-vaj-paper-vault.service" "$RUNNER_TEMP/patch-preflight/deploy/"
+          python qualification/r2b-admission-r2/patch_credential_gui.py "$RUNNER_TEMP/patch-preflight/credential_graphical.py"
+          python qualification/r2b-admission-r2/patch_owner_vault.py "$RUNNER_TEMP/patch-preflight" | tee receipt/owner-overlay.txt
+          grep -F "sys.path.insert(0,'/opt/maj-vaj/r2b-admission-r1')" "$RUNNER_TEMP/patch-preflight/managed_rpc.py"
+          python -m compileall -q "$RUNNER_TEMP/patch-preflight"
+          # Original guest GUI receives additive review button, no authority.
+          python qualification/r2b-admission-r2/patch_credential_gui.py "$RUNNER_TEMP/r2b-r3/credential_graphical.py"
+          mkdir -p "$RUNNER_TEMP/r2b-r3/r2b-admission-r1" "$RUNNER_TEMP/r2b-r3/r2b-admission-r2"
+          cp qualification/r2b-admission-r1/{broker_service,owner_execution_bridge}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r1/"
+          cp qualification/r2b-admission/{approval_ledger,operator_session,broker_gateway,receipt_channel}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-closeout-custody/worker_receipt_verifier.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-admission-r2/{native_agent_protocol,agent_broker_channel,broker_service_r2,synthetic_worker_protocol,synthetic_worker_service,owner_synthetic_bridge,owner_rpc_extension,patch_owner_vault}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-admission-r2/{maj-vaj-r2b-approval.service,maj-vaj-r2b-synthetic-worker.service} "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          install -d -m 0755 "$RUNNER_TEMP/r2b-r3/r2b-admission-r5"
+          install -m 0755 qualification/r2b-admission-r5/install-offline.sh "$RUNNER_TEMP/r2b-r3/r2b-admission-r5/install-offline.sh"
+          cmp qualification/r2b-admission-r5/install-offline.sh "$RUNNER_TEMP/r2b-r3/r2b-admission-r5/install-offline.sh"
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          git rev-parse HEAD | tee receipt/acceptance-commit.txt
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Exact-source owner coordinator, worker, session, broker and previous vault tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/migration:$GITHUB_WORKSPACE/qualification/r2b-closeout-custody:$GITHUB_WORKSPACE/qualification/r2b-admission:$GITHUB_WORKSPACE/qualification/r2b-admission-r1:$GITHUB_WORKSPACE/qualification/r2b-admission-r2:$GITHUB_WORKSPACE/qualification/r2b-admission-r4"
+          python -m compileall -q qualification/r2b-admission-r2 qualification/r2b-admission-r1
+          python -m unittest discover -s qualification/r2b-admission-r2 -p 'test_*.py' -v 2>&1 | tee receipt/r2-all-source.txt
+          python -m unittest discover -s qualification/r2b-admission-r4 -p 'test_*.py' -v 2>&1 | tee receipt/r4-adversarial-source.txt
+          python -m unittest discover -s qualification/r2b-admission-r1 -p 'test_*.py' -v 2>&1 | tee receipt/r1-owner-bridge.txt
+          python -m unittest discover -s qualification/r2b-admission -p 'test_*.py' -v 2>&1 | tee receipt/previous-native-admission.txt
+          python -m unittest -v test_managed_paper_vault test_native_test_review test_reviewed_migration test_worker_receipt_verifier 2>&1 | tee receipt/original-vault-migration-receipt.txt
+      - name: Preserve original handoff and adversarial credential IPC source regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r3/tests:$GITHUB_WORKSPACE/qualification/r2a-native-negative:$GITHUB_WORKSPACE/qualification/r2a-native-r4"
+          python -m unittest discover -s "$RUNNER_TEMP/r2b-r3/tests" -p test_credential_handoff.py -v 2>&1 | tee receipt/original-handoff.txt
+          python -m unittest -v test_credential_intent test_handoff_refusals test_adversarial_intent 2>&1 | tee receipt/original-refusals.txt
+      - name: Install genuine Debian 13 QEMU prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build exact-source offline Debian with protected original LightDM and vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-r3" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/native" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Installed root-only R5 lifecycle and original QEMU operator recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Two independent sparse overlays of unchanged built Debian source.
+          for scenario in reboot lock; do
+            echo "R5_NATIVE_CASE_START=$scenario"
+            sandbox="$RUNNER_TEMP/r5-guest-$scenario"
+            mkdir -p "$sandbox" "receipt/r5-$scenario"
+            ln -s "$RUNNER_TEMP/r2b-vm/vmlinuz" "$sandbox/vmlinuz"
+            ln -s "$RUNNER_TEMP/r2b-vm/initrd.img" "$sandbox/initrd.img"
+            qemu-img create -q -f qcow2 -F raw -b "$RUNNER_TEMP/r2b-vm/guest.ext4" "$sandbox/guest.qcow2"
+            /usr/bin/python3 qualification/r2b-admission-r5/native_installed_harness.py "$sandbox" "$GITHUB_WORKSPACE/receipt/r5-$scenario" "$scenario" | tee "receipt/r5-$scenario.txt"
+            grep -Fx R5_INSTALLER_DISABLED_DEFAULT_NATIVE_PASS "receipt/r5-$scenario.txt"
+            grep -Fx R5_INSTALLER_ROOT_ACTIVATION_NATIVE_PASS "receipt/r5-$scenario.txt"
+            grep -Fx R2B_R2_END_TO_END_INSTALLED_OWNER_CUSTODY_PASS "receipt/r5-$scenario.txt"
+            if [[ "$scenario" == reboot ]]; then
+              for check in \
+                R2B_R2_INSTALLED_END_TO_END_SYNTHETIC_PASS \
+                R5_INSTALLED_DISABLED_CUSTODY_REFUSAL_PASS \
+                R5_INSTALLED_REENABLE_NO_REPLAY_PASS \
+                R4_INSTALLED_COLD_REBOOT_RECOVERY_PASS; do
+                  grep -Fx "$check" "receipt/r5-$scenario.txt"
+              done
+            else
+              grep -Fx R4_INSTALLED_SESSION_LOCK_REFUSAL_PASS "receipt/r5-$scenario.txt"
+            fi
+          done
+          echo R5_INSTALLED_PROTECTED_LIFECYCLE_ALL_PASS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-r5-installed-lifecycle-evidence
+          path: receipt/
+          retention-days: 5
