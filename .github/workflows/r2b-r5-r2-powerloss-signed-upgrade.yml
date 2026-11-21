@@ -33,7 +33,7 @@ jobs:
           test "$(git hash-object qualification/r2b-admission-r4/native_adversarial_harness.py)" = ce57c20c23f9f4a6ab3cbe036885f261ac73d552
           test "$(git hash-object qualification/r2b-admission-r4/test_owner_adversarial.py)" = eae211347664dde06720a49390e1deff562a4873
           python -m py_compile qualification/r2b-admission-r4/native_adversarial_harness.py qualification/r2b-admission-r4/test_owner_adversarial.py
-          test "$(git hash-object qualification/r2b-admission-r5/install-offline.sh)" = 9dca9e3d070bedb193649e1c35d5015d86cb004a
+          test "$(git hash-object qualification/r2b-admission-r5/install-offline.sh)" = 2f34e0113a9ad7e8f17079e1e8483f7bcac976f3
           test "$(git hash-object qualification/r2b-admission-r5/native_installed_harness.py)" = 8a2900b20388da3099897e5aa30a4f2722747180
           bash -n qualification/r2b-admission-r5/install-offline.sh
           test "$(git hash-object qualification/r2b-admission-r5-r1/r5_transaction.py)" = c2a1d89f6ae2ffd259ada7795bd6d236139d15e4
@@ -49,6 +49,10 @@ jobs:
           grep -Fx '    install -d -o root -g root -m 0700 "$root/.r5-stage"' qualification/r2b-admission-r5/install-offline.sh
           grep -F 'original_unit_source_changed' qualification/r2b-admission-r5/install-offline.sh
           grep -F 'sync -f "/etc/systemd/system/$vault"' qualification/r2b-admission-r5/install-offline.sh
+          grep -Fx '    sync -f "$seal"' qualification/r2b-admission-r5/install-offline.sh
+          grep -Fx '    sync -f "$config"' qualification/r2b-admission-r5/install-offline.sh
+          grep -Fx '    sync -f "$key"' qualification/r2b-admission-r5/install-offline.sh
+          grep -Fx '    check_seal' qualification/r2b-admission-r5/install-offline.sh
           grep -F 'R5-PREPARING-NO-MUTATIONS' qualification/r2b-admission-r5-r1/r5_transaction.py
           grep -F 'R5_R2_SIGNED_CROSS_VERSION_UPGRADE_PASS' qualification/r2b-admission-r5-r2/upgrade_v2.py
           grep -F 'MAJ-VAJ-R5-R2-OFFLINE-COMPATIBLE-RELEASE' qualification/r2b-admission-r5-r2/build_signed_fixture.py
