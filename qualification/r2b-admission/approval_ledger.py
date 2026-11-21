@@ -50,7 +50,8 @@ class Context:
     roles: tuple[str,...] = ()
 
     def validated(self):
-        if type(self) is not Context:
+        if (type(self) is not Context or type(self.operation) is not str
+                or type(self.role) is not str):
             raise Refused('context_refused')
         if self.operation == 'provider_test':
             if (self.role not in ROLES or type(self.generation) is not str
