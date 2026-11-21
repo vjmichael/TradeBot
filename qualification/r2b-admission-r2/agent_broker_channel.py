@@ -234,13 +234,17 @@ class AgentServer(socketserver.ThreadingUnixStreamServer):
             super().server_close()
             raise
 
-    def consume_guard(self,witness):
+    def consume_guard(self,request_id,witness):
+        """Require the exact request's live, unspent operator-session latch.
+
+        Multiple independently reviewed grants from the same session must
+        neither alias each other nor authorize a different request.
+        """
         with self.review_lock:
-            matching=[(rid,e) for rid,(w,e) in self.latches.items()
-                      if w==witness]
-            if len(matching)!=1:
+            latched=self.latches.get(request_id)
+            if latched is None or latched[0]!=witness:
                 return False
-            rid,events=matching[0]
+            _,events=latched
             try:
                 events.check()
                 return check_live_session(witness) is True

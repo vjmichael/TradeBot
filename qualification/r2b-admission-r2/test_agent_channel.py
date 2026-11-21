@@ -14,7 +14,8 @@ from unittest.mock import Mock,patch
 
 from approval_ledger import Ledger,Context,Refused,Witness
 from broker_gateway import BrokerGateway
-from agent_broker_channel import AgentHandler,next_unambiguous,attest_exact_gui,_one_line
+from agent_broker_channel import AgentHandler,AgentServer,next_unambiguous,attest_exact_gui,_one_line
+from broker_service_r2 import GuardedGateway
 
 W=Witness('c42',4312)
 CTX=Context('provider_test','kraken_read','a'*32,'b'*64)
@@ -167,5 +168,32 @@ class AgentNativeSource(unittest.TestCase):
         with patch('pathlib.Path.read_bytes',return_value=
                 b'873 (python3) S 833 833 833 0 -1 0 0 0 0 0 0 0 0'):
             self.assertEqual(_kernel_parent(873),833)
+
+    def test_distinct_one_use_requests_are_bound_to_exact_latches(self):
+        # Two genuine reviews in one active operator session are separate
+        # authorizations, not an ambiguous witness-based permission.
+        first,_,a=self.start()
+        second,_,b=self.start()
+        self.assertEqual(a,{'ok':True})
+        self.assertEqual(b,{'ok':True})
+        self.assertEqual(set(self.server.latches),{first,second})
+        guarded=GuardedGateway(self.ledger)
+        guarded._owner=lambda _:None
+        guarded.agent=self.server
+        self.server.consume_guard=lambda rid,w:AgentServer.consume_guard(self.server,rid,w)
+        self.server.clear_spent=lambda rid:AgentServer.clear_spent(self.server,rid)
+        with patch('agent_broker_channel.check_live_session',return_value=True):
+            self.assertFalse(self.server.consume_guard('0'*32,W))
+            self.assertFalse(self.server.consume_guard(first,Witness('other-session',4312)))
+            self.assertEqual(guarded.consume_from_owner(None,first,CTX),CTX)
+            self.assertEqual(self.ledger.state_for_test(first),'consumed')
+            self.assertNotIn(first,self.server.latches)
+            self.assertIn(second,self.server.latches)
+            with self.assertRaises(Refused):
+                guarded.consume_from_owner(None,first,CTX)
+            self.assertEqual(guarded.consume_from_owner(None,second,CTX),CTX)
+            self.assertEqual(self.ledger.state_for_test(second),'consumed')
+            self.assertFalse(self.server.latches)
+            self.assertTrue(all(event.closed for event in self.events))
 
 if __name__=='__main__':unittest.main()

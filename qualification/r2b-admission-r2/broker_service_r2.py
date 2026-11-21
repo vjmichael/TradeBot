@@ -33,7 +33,12 @@ class GuardedGateway(BrokerGateway):
     def consume_from_owner(self,connection,request_id,context):
         if self.agent is None:
             raise Refused('native_agent_unavailable')
-        result=super().consume_from_owner(connection,request_id,context)
+        # Owner authentication precedes the durable one-use transaction.
+        # Bind session-event custody to THIS approval ID, not simply to the
+        # operator witness, which can legitimately hold distinct grants.
+        self._owner(connection)
+        result=self.ledger.consume(request_id,context,
+            live_session=lambda witness:self.agent.consume_guard(request_id,witness))
         self.agent.clear_spent(request_id)
         return result
 
@@ -59,9 +64,8 @@ def run():
     gateway=GuardedGateway(ledger)
     with AgentServer(gateway) as agent:
         gateway.agent=agent
-        # Check the active session-event latch at consume. Event loss is
-        # fail-closed; no fallback to just matching a UID or a cookie.
-        gateway._live=agent.consume_guard
+        # A per-request live latch is checked during owner consumption.
+        # No witness-only fallback is installed.
         agent_thread=threading.Thread(target=agent.serve_forever,
                            kwargs={'poll_interval':.1},daemon=True)
         agent_thread.start()
