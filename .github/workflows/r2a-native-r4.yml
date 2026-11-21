@@ -1,0 +1,71 @@
+name: R2A R4 installed invalid intent stale cookie and adversarial IPC
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2a-native-r4]
+    paths: ['.github/workflows/r2a-native-r4.yml']
+permissions:
+  contents: read
+jobs:
+  installed-r4:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Restore and lock original R1 through R3 production and R4 tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
+          test "$(git hash-object qualification/r2a-native-r4/harness.py)" = 7451e502de346b503158b612f9c8943c0c44c2d3
+          test "$(git hash-object qualification/r2a-native-r4/test_adversarial_intent.py)" = 7b1a64e864a5c95e76bbfceba53262d9991a640a
+          test "$(git hash-object qualification/r2a-native-r3/harness.py)" = 78f2e644340649104ae7ea31fd9589541b659bdb
+          git rev-parse HEAD | tee receipt/acceptance-commit.txt
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Original handoff and real local AF_UNIX negative unit qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r3/tests:$GITHUB_WORKSPACE/qualification/r2a-native-negative:$GITHUB_WORKSPACE/qualification/r2a-native-r4"
+          python -m compileall -q "$RUNNER_TEMP/r2b-r3/credential_handoff.py" qualification/r2a-native-r4
+          python -m unittest discover -s "$RUNNER_TEMP/r2b-r3/tests" -p test_credential_handoff.py -v 2>&1 | tee receipt/original-handoff-tests.txt
+          python -m unittest -v test_credential_intent test_handoff_refusals test_adversarial_intent 2>&1 | tee receipt/r4-adversarial-tests.txt
+      - name: Install Debian QEMU native prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build genuine offline Debian 13 with unchanged installed services
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-r3" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/native" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Installed native IPC peer identity malformed frames and stale-session refusal
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 qualification/r2a-native-r4/harness.py "$RUNNER_TEMP/r2b-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/r4-native.txt
+          for marker in R4_INSTALLED_INVALID_URI_PASS R4_INSTALLED_BROWSER_BASELINE_PASS R4_INSTALLED_FOREIGN_PEER_PASS R4_INSTALLED_MALFORMED_IPC_PASS R4_INSTALLED_SAME_UID_REQUIRES_REVIEW_PASS R4_INSTALLED_RETIRED_IPC_PASS R4_INSTALLED_STALE_COOKIE_REFUSAL_PASS R4_INSTALLED_PRINCIPAL_ISOLATION_PASS R4_INSTALLED_OPERATOR_SEPARATION_PASS R4_NATIVE_ADVERSARIAL_PASS; do
+            grep -Fx "$marker" receipt/r4-native.txt
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2a-native-r4-adversarial-receipts
+          path: receipt/
+          retention-days: 5
