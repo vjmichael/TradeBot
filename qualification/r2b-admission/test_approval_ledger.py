@@ -164,7 +164,7 @@ class KernelSessionGuard(unittest.TestCase):
         lines=['State=active','Leader=1001','Environment=KEY=value']
         lines.extend(k+'='+v for k,v in required.items())
         with patch('operator_session.subprocess.run') as run:
-            run.return_value.stdout='\\n'.join(lines)+'\\n'
+            run.return_value.stdout='\n'.join(lines)+'\n'
             self.assertEqual(_login_properties(W.session),required)
             args=run.call_args.args[0]
             self.assertEqual(args[:3],['/usr/bin/loginctl','show-session',W.session])
@@ -172,13 +172,13 @@ class KernelSessionGuard(unittest.TestCase):
 
     def test_missing_or_duplicate_required_logind_properties_refused(self):
         from operator_session import _login_properties
-        full='\\n'.join((
+        full='\n'.join((
           'User='+str(W.uid),'Name=maj-vaj-credential-operator',
           'Seat=seat0','Service=lightdm','Type=x11','Class=user',
           'Active=yes','Remote=no','LockedHint=no'
-        ))+'\\n'
-        for bad in (full.replace('Seat=seat0\\n',''),
-                    full+'User='+str(W.uid)+'\\n'):
+        ))+'\n'
+        for bad in (full.replace('Seat=seat0\n',''),
+                    full+'User='+str(W.uid)+'\n'):
             with self.subTest(bad=bad),patch('operator_session.subprocess.run') as run:
                 run.return_value.stdout=bad
                 with self.assertRaises(Refused):_login_properties(W.session)
