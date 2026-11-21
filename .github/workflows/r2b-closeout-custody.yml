@@ -1,0 +1,85 @@
+name: R2B installed vault key custody and reviewed migration source qualification
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2b-closeout-custody]
+    paths: ['.github/workflows/r2b-closeout-custody.yml']
+permissions:
+  contents: read
+jobs:
+  custody-qualification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Restore and lock original production and the independent R2B qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
+          test "$(git hash-object qualification/r2b-closeout-custody/native_harness.py)" = 55fc2ff7e4ff9360bb8074c2f5385a4e53184b36
+          test "$(git hash-object qualification/r2b-closeout-custody/worker_receipt_verifier.py)" = 6d3dd869086febb21b2c1f8a50cd1fcc8d62e0dc
+          test "$(git hash-object qualification/r2b-closeout-custody/test_worker_receipt_verifier.py)" = 10056e511d899c3858dcabcf260165cfca79e4a4
+          test "$(git hash-object qualification/r2b-integrate-02-r2-r2/migration/reviewed_migration.py)" = 62ca8c18dfc9d26514fc608fb87ea9e5e30d2e53
+          test "$(git hash-object qualification/r2b-integrate-02-r2-r2/migration/test_reviewed_migration.py)" = 1de0ee605ed524814098735590a4a6ee80f4117a
+          git rev-parse HEAD | tee receipt/acceptance-commit.txt
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Run reviewed migration, managed vault, native review and worker receipt provenance tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/migration:$GITHUB_WORKSPACE/qualification/r2b-closeout-custody"
+          python -m compileall -q qualification/r2b-closeout-custody "$RUNNER_TEMP/r2b-r3"
+          python -m unittest -v test_managed_paper_vault test_native_test_review test_reviewed_migration test_worker_receipt_verifier 2>&1 | tee receipt/owner-migration-worker-unit.txt
+      - name: Independently qualify local Unix service witness with restricted OS peer
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo useradd --system --user-group --no-create-home oai
+          sudo env PYTHONPATH="$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/health" /usr/bin/python3 -m unittest discover -s qualification/r2b-integrate-02-r2-r2/health -p test_trusted_witness.py -v 2>&1 | tee receipt/readiness-witness-source.txt
+      - name: Requalify original native handoff source guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r3/tests:$GITHUB_WORKSPACE/qualification/r2a-native-negative:$GITHUB_WORKSPACE/qualification/r2a-native-r4"
+          python -m unittest discover -s "$RUNNER_TEMP/r2b-r3/tests" -p test_credential_handoff.py -v 2>&1 | tee receipt/original-handoff-tests.txt
+          python -m unittest -v test_credential_intent test_handoff_refusals test_adversarial_intent 2>&1 | tee receipt/original-negative-tests.txt
+      - name: Install genuine Debian QEMU tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build exact-source offline Debian 13 with protected vault and LightDM
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-r3" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/native" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Installed protected key custody loss replacement restoration and legacy startup refusal
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 qualification/r2b-closeout-custody/native_harness.py "$RUNNER_TEMP/r2b-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/native-custody.txt
+          for marker in R2B_INSTALLED_SYSTEMD_KEY_CUSTODY_PASS R2B_INSTALLED_SYNTHETIC_SAVE_PASS R2B_INSTALLED_UNAPPROVED_PROVIDER_REFUSAL_PASS R2B_INSTALLED_PERSISTENCE_PASS R2B_INSTALLED_MISSING_TAG_KEY_REFUSAL_PASS R2B_INSTALLED_WRONG_TAG_KEY_REFUSAL_PASS R2B_INSTALLED_WRONG_ENCRYPTION_KEY_REFUSAL_PASS R2B_INSTALLED_PAPER_AUTHORITY_REFUSAL_PASS R2B_INSTALLED_UNREVIEWED_LEGACY_REFUSAL_PASS R2B_NATIVE_KEY_CUSTODY_PASS; do
+            grep -Fx "$marker" receipt/native-custody.txt
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-closeout-custody-evidence
+          path: receipt/
+          retention-days: 5
