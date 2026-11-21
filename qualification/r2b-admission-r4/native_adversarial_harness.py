@@ -347,9 +347,11 @@ def negative_case(case,sid,window,before,approval,worker):
         # actual LightDM operator session leader; never invent one.
         seat_cmd=('p=$(loginctl show-session '+shlex.quote(sid)+
                   ' -p Leader --value); test -n "$p" && '+
-                  "tr '\\000' '\\n' </proc/$p/environ | "+
-                  "grep -E '^XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat[0-9]+
-        # inactive or already destroyed after real seat switching.
+                  "tr '\\000' '\\n' </proc/$p/environ | grep '^XDG_SEAT_PATH=' | head -1")
+        seat_line=command(seat_cmd)[1].splitlines()[-1]
+        assert re.fullmatch(r'XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat[0-9]+',seat_line),seat_line
+        command('env '+shlex.quote(seat_line)+' /usr/bin/dm-tool switch-to-greeter',timeout=20)
+        # Depending on LightDM version, the original operator SID is
         wait_cmd('! loginctl show-session '+shlex.quote(sid)+
                  ' -p Active --value >/dev/null 2>&1 || '+
                  'test "$(loginctl show-session '+shlex.quote(sid)+
