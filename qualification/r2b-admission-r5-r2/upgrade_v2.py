@@ -233,8 +233,7 @@ def verify():
     if digest(read(TARGET))!=obj["after"]:
         raise Refused("installed_upgrade_mutated")
     old,ident=backup_original()
-    if digest(old)!=obj["before"] or digest(ident)!=json.loads(ident.decode("ascii")).get("no-such-key","") and not ident:
-        # The installed identity's original digest is verified below.
+    if digest(old)!=obj["before"]:
         raise Refused("upgrade_backup_invalid")
     prior=json.loads(ident)
     if (type(prior) is not dict or prior.get("version")!=1
