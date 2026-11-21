@@ -1,6 +1,6 @@
 # TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2-ADMISSION-R1
 
-**State: installed broker and authoritative vault-bridge qualification candidate; full native one-use approval and protected provider execution still OPEN.**
+**State: SCOPED installed broker custody and owner execution source PASS; trusted native approval agent and fixed-provider execution remain OPEN.**
 
 Branch `qualification/tb-sec-key-01-r2b-admission-r1` forks accepted
 `qualification/tb-sec-key-01-r2b-admission` at
@@ -8,6 +8,72 @@ Branch `qualification/tb-sec-key-01-r2b-admission-r1` forks accepted
 Frozen D2, R2B, R3 vault, native LightDM and accepted R1–R4
 security source are unchanged. No mainline merge, real credentials,
 provider internet access, money, paid model call or LIVE trading.
+
+## Terminal R1 qualification evidence — 2026-11-20 local / 2026-11-21 UTC
+
+**[Successful GitHub Actions #44865671640](https://github.com/vjmichael/TradeBot/actions/runs/44865671640)**,
+job `136728657210`, exact accepted test SHA
+`dc71102a9521214dcaa03cc858ae9fe0504388ec`. The
+[nonsecret native receipt artifact #14691706891](https://github.com/vjmichael/TradeBot/actions/runs/44865671640/artifacts/14691706891)
+was downloaded and independently hashed, SHA-256
+`4aadf6f3e46cf71cd013f5ddef7c56ecea316d281338cd7e35e13477ee413192`,
+matching GitHub's archive digest. The artifact includes original
+source locks, zero-error `dpkg-audit.txt`, package inventory, all
+source-test transcripts, eight native test markers and genuine screenshot
+of the original, **unchanged** Account Connections operator GUI.
+
+| Same-source qualification | Result |
+|---|---|
+| New installed broker frame/real AF_UNIX and authoritative owner bridge SQLite tests | **22/22 PASS** |
+| Prior one-use approval/PAM/worker-receipt source tests | **51/51 PASS** |
+| Existing managed vault, reviewed migration, HMAC receipt source tests | **71/71 PASS** |
+| Original native handoff guards | **9/9 PASS** |
+| Original intent/refusal/adversarial AF_UNIX regressions | **21/21 PASS** |
+| **Total source suite** | **174/174 PASS** |
+| Disabled-by-default independent broker root enable marker | `R2B_R1_DISABLED_DEFAULT_PASS` |
+| Actual systemd broker UID, 0700/0600 state, socket group/DAC, PrivateNetwork/AF_UNIX | `R2B_R1_INSTALLED_PROTECTED_BROKER_PASS` |
+| Root, console, operator, dashboard, native non-owner principals refused | `R2B_R1_KERNEL_PRINCIPAL_ISOLATION_PASS` |
+| Inert prepared request cannot be forged into an approved worker/provider action | `R2B_R1_NO_FORGED_NATIVE_APPROVAL_PASS` |
+| Owner cancellation is one-use; duplicate/consume replay refused | `R2B_R1_CANCEL_REPLAY_REFUSAL_PASS` |
+| Actual service restart revokes pending request, private SQLite read-only confirmation | `R2B_R1_RESTART_REVOKES_PENDING_PASS` |
+| Genuine original operator LightDM Account Connections GUI still works | `R2B_R1_ORIGINAL_GUI_UNCHANGED_PASS` |
+| Full offline Debian 13 no-NIC installed broker acceptance | `R2B_R1_INSTALLED_NEGATIVE_BROKER_PASS` |
+
+All eight installed markers emitted by the genuine Debian 13 guest and
+independently checked at the same workflow SHA. The unchanged installed GUI
+still explicitly says PAPЕR qualification only, no connection test or trading;
+no positive approval agent, real worker or provider test is available.
+
+**Failed predecessor preserved:** [#44865248533](https://github.com/vjmichael/TradeBot/actions/runs/44865248533)
+passed **174/174** source tests and the first five installed native gates,
+but an independent diagnostic script imported `approval_ledger` without
+the authoritative `vault_owner_hooks` module path. The diagnostic was
+replaced with a *read-only SQLite* query of the dedicated approval UID's
+private ledger, preserving exact restart-revocation requirements without
+altering broker, vault, GUI, worker or production source. One subsequent,
+sequential run [#44865671640](https://github.com/vjmichael/TradeBot/actions/runs/44865671640)
+passed. No stacked CI, secret, provider networking, main merge, financial
+operation or LIVE permission.
+
+**Acceptance boundary:** the broker is truly installed, but deliberately
+**negative-only**. It will not admit positive native review until a trusted
+per-session operator GUI agent with an authentic unforgeable reply channel
+is built. The owner execution bridge is proven with synthetic approval
+and HMAC fixtures, but is not yet wired as an executable action in the
+installed managed vault service. No independently supervised worker or
+separate service-provisioned receipt signing key was installed in R1.
+The full `TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2-ADMISSION-R1`
+contract therefore remains **PARTIAL**, not releasable.
+
+**Next focused task:** `TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2-ADMISSION-R2`
+— implement the trusted native operator review agent and broker-owned
+session-bound reply path; independently prove actual yes/no/cancel,
+same-UID forgery refusal, revoke/seat/logout/restart/races on installed
+Debian, then wire exact one-use consumption into the authoritative
+vault bridge and a separate fixed-destination receipt-authenticated
+synthetic worker with independently provisioned signing key.
+Only after installed end-to-end PASS should sandbox provider
+permission tests or reviewed migration be considered.
 
 ## Installed independent protected broker
 
