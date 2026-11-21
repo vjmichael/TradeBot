@@ -129,6 +129,11 @@ class Server(socketserver.UnixStreamServer):
             raise Refused('approval_socket_preexisting')
         super().__init__(str(path),Handler)
         try:
+            import grp
+            shared=grp.getgrnam('maj-vaj-r2b-approval-rpc').gr_gid
+            if shared not in os.getgroups():
+                raise Refused('approval_socket_group_refused')
+            os.chown(path,-1,shared)
             os.chmod(path,0o660)
             st=path.lstat()
             if (not stat.S_ISSOCK(st.st_mode) or st.st_uid!=os.geteuid()
@@ -154,13 +159,14 @@ def main():
     os.umask(0o077)
     approval=pwd.getpwnam('maj-vaj-approval')
     if (os.getuid()!=approval.pw_uid or os.geteuid()!=approval.pw_uid
-            or os.getgid()!=approval.pw_gid and os.getgid()!=pwd.getpwnam('maj-vaj-approval').pw_gid):
+            or os.getgid()!=approval.pw_gid):
         raise SystemExit('approval_identity_refused')
     if ctypes.CDLL(None,use_errno=True).prctl(4,0,0,0,0)!=0:
         raise SystemExit('approval_memory_custody_unavailable')
     runtime=SOCKET.parent
     st=runtime.lstat()
-    if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid() or st.st_mode & 0o007:
+    if (not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid()
+            or stat.S_IMODE(st.st_mode)!=0o711):
         raise SystemExit('approval_runtime_refused')
     ledger=Ledger(STATE)
     # The installed service cannot show a genuine trusted operator Tk UI:
