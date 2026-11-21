@@ -74,19 +74,25 @@ def _login_properties(session):
     if type(session) is not str or SESSION_RE.fullmatch(session) is None:
         raise Refused('operator_pam_session_unavailable')
     try:
+        # Debian's loginctl need not support a comma-separated list in a
+        # single --property argument. Read the complete installed record,
+        # then require the EXACT fixed security-critical keys below.
         r=subprocess.run(
-            ['/usr/bin/loginctl','show-session',session,'--all',
-             '--property='+','.join(sorted(GROUPS))],
+            ['/usr/bin/loginctl','show-session',session,'--all'],
             check=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             timeout=3, text=True,env=BASE_ENV)
     except (OSError,subprocess.CalledProcessError,subprocess.TimeoutExpired):
         raise Refused('operator_pam_session_unavailable') from None
     props={}
     for line in r.stdout.splitlines():
-        if line.count('=')!=1:
-            raise Refused('operator_pam_session_unavailable')
+        # Other systemd property values can contain '='. Ignore unrelated
+        # properties, but reject duplicate/ambiguous required attestations.
+        if '=' not in line:
+            continue
         key,value=line.split('=',1)
-        if key in props or key not in GROUPS:
+        if key not in GROUPS:
+            continue
+        if key in props or '\x00' in value:
             raise Refused('operator_pam_session_unavailable')
         props[key]=value
     if set(props)!=GROUPS:
