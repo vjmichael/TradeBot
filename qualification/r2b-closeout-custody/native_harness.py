@@ -246,8 +246,12 @@ try:
     # erase or silently migrate the persisted encrypted vault.
     command('systemctl stop '+unit)
     command('mv '+keys+'/provider-tag-key '+keys+'/.r2b-staged-provider-tag-original')
-    rc,_=command('systemctl start '+unit,timeout=30,ok=False)
-    assert rc!=0,('missing_provider_tag_key_was_accepted',rc)
+    # Type=simple may report a successful process spawn just before it fails.
+    # Qualify terminal unit activity, not only systemctl start's return code.
+    command('systemctl start '+unit,timeout=30,ok=False)
+    time.sleep(3)
+    rc,_=command('systemctl is-active --quiet '+unit,ok=False)
+    assert rc!=0,('missing_provider_tag_key_was_accepted')
     rc,_=command('systemctl is-active --quiet '+unit,ok=False)
     assert rc!=0
     command('mv '+keys+'/.r2b-staged-provider-tag-original '+keys+'/provider-tag-key')
@@ -262,8 +266,12 @@ try:
     command('systemctl stop '+unit)
     command('mv '+keys+'/provider-tag-key '+keys+'/.r2b-staged-provider-tag-original')
     command("python3 -c "+shlex.quote("from pathlib import Path;import os;p=Path('"+keys+"/provider-tag-key');p.write_bytes(os.urandom(32));p.chmod(0o600)"))
-    rc,_=command('systemctl start '+unit,timeout=30,ok=False)
-    assert rc!=0,('mismatched_provider_tag_key_was_accepted',rc)
+    # Type=simple may report a successful process spawn just before it fails.
+    # Qualify terminal unit activity, not only systemctl start's return code.
+    command('systemctl start '+unit,timeout=30,ok=False)
+    time.sleep(3)
+    rc,_=command('systemctl is-active --quiet '+unit,ok=False)
+    assert rc!=0,('mismatched_provider_tag_key_was_accepted')
     command('systemctl stop '+unit,ok=False)
     command('rm -f '+keys+'/provider-tag-key')
     command('mv '+keys+'/.r2b-staged-provider-tag-original '+keys+'/provider-tag-key')
@@ -278,8 +286,12 @@ try:
     command('systemctl stop '+unit)
     command('mv '+keys+'/venue-vault-key '+keys+'/.r2b-staged-venue-original')
     command("/opt/maj-vaj/venv/bin/python -c "+shlex.quote("from pathlib import Path;from cryptography.fernet import Fernet;p=Path('"+keys+"/venue-vault-key');p.write_bytes(Fernet.generate_key());p.chmod(0o600)"))
-    rc,_=command('systemctl start '+unit,timeout=30,ok=False)
-    assert rc!=0,('mismatched_venue_encryption_key_was_accepted',rc)
+    # Type=simple may report a successful process spawn just before it fails.
+    # Qualify terminal unit activity, not only systemctl start's return code.
+    command('systemctl start '+unit,timeout=30,ok=False)
+    time.sleep(3)
+    rc,_=command('systemctl is-active --quiet '+unit,ok=False)
+    assert rc!=0,('mismatched_venue_encryption_key_was_accepted')
     command('systemctl stop '+unit,ok=False)
     command('rm -f '+keys+'/venue-vault-key')
     command('mv '+keys+'/.r2b-staged-venue-original '+keys+'/venue-vault-key')
