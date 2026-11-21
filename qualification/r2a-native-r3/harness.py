@@ -212,7 +212,7 @@ try:
     # seat registry, then supply its real seat path to dm-tool exactly as
     # prescribed for out-of-session invocation (not a mock switch).
     _,seats=command('/usr/bin/dm-tool list-seats',timeout=12)
-    assert re.search(r'\\bSeat0\\b',seats), 'installed_LightDM_seat0_missing'
+    assert re.search(r'\bSeat0\b',seats), 'installed_LightDM_seat0_missing'
     seat_path='/org/freedesktop/DisplayManager/Seat0'
     switch_env='XDG_SEAT_PATH='+shlex.quote(seat_path)+' DISPLAY=:0 XAUTHORITY=/home/maj-vaj-console/.Xauthority XDG_RUNTIME_DIR=/run/user/$(id -u maj-vaj-console)'
     command('runuser -u maj-vaj-console -- env '+switch_env+' /usr/bin/dm-tool switch-to-greeter',timeout=20)
