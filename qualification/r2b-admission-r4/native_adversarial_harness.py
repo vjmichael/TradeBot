@@ -345,12 +345,17 @@ def negative_case(case,sid,window,before,approval,worker):
         # Root serial console is not itself part of the graphical seat.
         # Acquire only the non-secret native seat object path from the
         # actual LightDM operator session leader; never invent one.
-        seat_cmd=('p=$(loginctl show-session '+shlex.quote(sid)+
-                  ' -p Leader --value); test -n "$p" && '+
-                  "tr '\\000' '\\n' </proc/$p/environ | grep '^XDG_SEAT_PATH=' | head -1")
-        seat_line=command(seat_cmd)[1].splitlines()[-1]
-        assert re.fullmatch(r'XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat[0-9]+',seat_line),seat_line
-        command('env '+shlex.quote(seat_line)+' /usr/bin/dm-tool switch-to-greeter',timeout=20)
+        # Query LightDM itself: the session leader may not export
+        # XDG_SEAT_PATH, and root's serial shell has no graphical seat.
+        # A single active LightDM seat discovered via its own API is
+        # required, and the user session is already verified on seat0.
+        seat_listing=command('/usr/bin/dm-tool list-seats')[1]
+        discovered=set(re.findall(r'/org/freedesktop/DisplayManager/Seat[0-9]+',seat_listing))
+        (out/'r4-native-lightdm-seats.txt').write_text(seat_listing+'\n')
+        assert len(discovered)==1, 'lightdm_seat_not_unique'
+        seat_path=discovered.pop()
+        command('env XDG_SEAT_PATH='+shlex.quote(seat_path)+
+                ' /usr/bin/dm-tool switch-to-greeter',timeout=20)
         # Depending on LightDM version, the operator SID is inactive or gone.
         wait_cmd('! loginctl show-session '+shlex.quote(sid)+
                  ' -p Active --value >/dev/null 2>&1 || '+
