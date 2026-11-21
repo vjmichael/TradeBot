@@ -185,7 +185,7 @@ try:
     # remain the default even though the operator has a .dmrc preference.
     # Choose the distinct installed Account connections session graphically.
     click(1122,12);time.sleep(.5);shot('09a-greeter-session-chooser')
-    key('Home');key('Return');time.sleep(.5);shot('09b-account-session-selected')
+    click(1156,61);time.sleep(.5);shot('09b-account-session-selected')
     # Fresh independent login, not credential impersonation or direct vault enrollment.
     operator_id=login('maj-vaj-credential-operator','d2-operator-fixture-916')
     assert operator_id!=console_id
