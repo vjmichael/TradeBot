@@ -240,12 +240,14 @@ module-path repair (`7f3d2f1`) is included in the passing source.
 This qualifies the isolated synthetic-denial WORKER only; it is not a
 real provider or authoritative vault-to-worker end-to-end receipt.
 
-The owner-only `FixedReadOnlyCoordinator` implementation and source
-tests remain staging, not proof of an installed vault handler or
-authorized owner → broker → worker complete system transaction.
-No real Kraken call or positive permissions authority is admitted.
+This paragraph describes the earlier isolated worker milestone:
+at that time the owner coordinator was source-only. The later accepted
+[#44870540390](https://github.com/vjmichael/TradeBot/actions/runs/44870540390)
+now qualifies the complete installed **synthetic-denial** owner →
+broker → worker flow. There is still no real Kraken call or
+positive permissions authority.
 
-## Source acceptance and remaining work
+## Historical source baseline and remaining work
 
 [GitHub Actions #44867768044](https://github.com/vjmichael/TradeBot/actions/runs/44867768044)
 **SUCCESS** at exact SHA
@@ -255,19 +257,22 @@ No real Kraken call or positive permissions authority is admitted.
 worker-verifier tests, **9/9** original handoff guards,
 and **21/21** adversarial/cancellation tests:
 **184/184 PASS** with the additive GUI patch and dashboard build.
-The revised direct-child attestor and separately signed synthetic
-worker must pass **new, same-source** acceptance before extension of
-the claim.
+That was an earlier source-only baseline. The corrected native
+GUI attestor passed [#44868873434](https://github.com/vjmichael/TradeBot/actions/runs/44868873434);
+the separately signed worker passed [#44869628432](https://github.com/vjmichael/TradeBot/actions/runs/44869628432);
+and the complete exact-source owner workflow passed
+[#44870540390](https://github.com/vjmichael/TradeBot/actions/runs/44870540390)
+with 205/205 source and 9/9 native markers.
 
-**Still OPEN:** independently verified GUI-session lock event refusal
-(including change during a dialog), installed authoritative vault-owner
-prepare/consume/reserve/finish interface, genuine encrypted generation
-and policy binding, independently qualified owner-to-worker receipt handoff,
-replay/crash and owner-worker restart
-cross-boundary qualification, positive non-destructive reviewed legacy
-migration, optional real-provider sandbox checks only after separate
-authorization, and all R2C/financial/LIVE gates. As X11 permits other authorized
-clients to synthesize UI input, pinned IPC identity alone cannot
-certify that a physical person clicked the confirmation. Dedicated
-session isolation and its limits require explicit security review;
-do not claim physical input provenance from a QEMU keyboard fixture.
+**Still OPEN after installed synthetic acceptance:** adversarial
+GUI-session lock/seat-switch *while the dialog is active*,
+rapid/logout/crash and worker unknown-result recovery at the final
+same-source owner SHA; same-session X11 input spoofing and process
+identity/PID-reuse risk; and positive reviewed legacy migration.
+The genuine encrypted-generation binding, one-use vault reservation
+and signed synthetic refusal now pass in the disposable no-NIC Debian
+guest and must not be listed as unfinished. X11 permits other
+display-authorized clients to synthesize UI input, so the kernel/PAM
+IPC proof cannot certify that a physical person clicked the
+confirmation. Separately authorized real-provider sandbox testing,
+R2C recovery/rotation and all financial/LIVE gates remain open.
