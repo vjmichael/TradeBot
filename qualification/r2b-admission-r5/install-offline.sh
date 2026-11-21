@@ -95,7 +95,14 @@ rollback_files() {
     [[ -f "$marker" && ! -L "$marker" && "$(stat -c '%u:%a:%h' "$marker")" == '0:644:1' ]] || die marker_custody_refused
     rm -f -- "$marker"
   fi
-  systemctl stop "$broker" "$worker" "$vault"
+  # A killed installer may not yet have installed the broker/worker
+  # systemd units. "not loaded" is only acceptable when independently
+  # verified inactive. Never ignore a genuinely running protected worker.
+  systemctl stop "$broker" "$worker" >/dev/null 2>&1 || :
+  ! systemctl is-active --quiet "$broker" || die broker_still_active
+  ! systemctl is-active --quiet "$worker" || die worker_still_active
+  systemctl stop "$vault"
+  ! systemctl is-active --quiet "$vault" || die vault_still_active
   check_bundle
   no_saved_credentials
   transaction_cmd restore
