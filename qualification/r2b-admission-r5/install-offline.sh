@@ -226,6 +226,19 @@ case "$action" in
     [[ ! -e "$key" && ! -L "$key" ]] || die signing_key_preexisting
     [[ -f "$root/paper_credential_vault.py" && -f "$root/managed_rpc.py" ]] || die original_vault_missing
     [[ -f "$root/credential_graphical.py" && ! -L "$root/credential_graphical.py" ]] || die native_gui_missing
+    # A hard QEMU power cut exposed a zero-byte, effectively masked
+    # pre-existing original vault unit: guest setup had not durably
+    # persisted its unit file. Never silently unmask or trust new bytes.
+    # Require exact accepted original unit SHA-256 + protected byte-for-byte
+    # install identity, then fsync file and parent BEFORE backup preparation.
+    [[ -f "$root/deploy/$vault" && ! -L "$root/deploy/$vault" ]] || die original_unit_source_missing
+    [[ -f "/etc/systemd/system/$vault" && ! -L "/etc/systemd/system/$vault" ]] || die original_unit_invalid
+    [[ "$(stat -c '%u:%a:%h' "/etc/systemd/system/$vault")" == '0:644:1' ]] || die original_unit_custody_refused
+    [[ "$(sha256sum "$root/deploy/$vault" | cut -d' ' -f1)" == 'e6b284fa04f289a459960ea37347353bfa6300702a146b8e11dce9b0d60cd6e6' ]] || die original_unit_source_changed
+    cmp -s "$root/deploy/$vault" "/etc/systemd/system/$vault" || die original_unit_install_changed
+    sync -f "$root/deploy/$vault"
+    sync -f "/etc/systemd/system/$vault"
+    sync -f "/etc/systemd/system"
     [[ ! -e "$root/.r5-stage" && ! -L "$root/.r5-stage" ]] || die stale_stage
     # Creating the nested path alone lets install(1) create the parent
     # with default 0755; rollback properly refuses that. Secure the parent
