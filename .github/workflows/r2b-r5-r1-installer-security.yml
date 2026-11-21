@@ -33,7 +33,7 @@ jobs:
           test "$(git hash-object qualification/r2b-admission-r4/native_adversarial_harness.py)" = ce57c20c23f9f4a6ab3cbe036885f261ac73d552
           test "$(git hash-object qualification/r2b-admission-r4/test_owner_adversarial.py)" = eae211347664dde06720a49390e1deff562a4873
           python -m py_compile qualification/r2b-admission-r4/native_adversarial_harness.py qualification/r2b-admission-r4/test_owner_adversarial.py
-          test "$(git hash-object qualification/r2b-admission-r5/install-offline.sh)" = 913f428db32bcb4dc934165cc14c2deaef491aae
+          test "$(git hash-object qualification/r2b-admission-r5/install-offline.sh)" = a3036873e64fb62a27861f403eefbab07476e7fb
           test "$(git hash-object qualification/r2b-admission-r5/native_installed_harness.py)" = 8a2900b20388da3099897e5aa30a4f2722747180
           bash -n qualification/r2b-admission-r5/install-offline.sh
           test "$(git hash-object qualification/r2b-admission-r5-r1/r5_transaction.py)" = f45a91025a156bd6923725648fd7316606f2b76b
@@ -43,6 +43,8 @@ jobs:
           grep -F "r2b-admission-r5/r5_transaction.py" qualification/r2b-admission-r5/install-offline.sh
           grep -F "transaction_cmd prepare" qualification/r2b-admission-r5/install-offline.sh
           grep -F "transaction_cmd restore" qualification/r2b-admission-r5/install-offline.sh
+          grep -F 'broker_still_active' qualification/r2b-admission-r5/install-offline.sh
+          grep -F 'worker_still_active' qualification/r2b-admission-r5/install-offline.sh
           grep -F "R5_R1_SAME_SOURCE_UPGRADE_PASS" qualification/r2b-admission-r5/install-offline.sh
           python -m py_compile qualification/r2b-admission-r5/native_installed_harness.py
           grep -F "R5_INSTALLER_DISABLED_DEFAULT_NATIVE_PASS" qualification/r2b-admission-r5/native_installed_harness.py
