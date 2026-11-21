@@ -1,0 +1,37 @@
+name: R2B R2 exact-source graphical and owner interface inspection
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2b-admission-r2]
+    paths: ['.github/workflows/r2b-r2-inspect.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, persist-credentials: false}
+      - name: Recover frozen R1 production interfaces and capture source-only evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/source" | tee receipt/restore.txt
+          test "$(git -C "$RUNNER_TEMP/source" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          cd "$RUNNER_TEMP/source"
+          for file in scripts/review_session_wrapper.sh scripts/provision_credential_desktop.sh scripts/credential_operator_session.sh credential_graphical.py native_test_review.py scripts/account_handoff_wrapper.sh scripts/provision_account_handoff.sh deploy/maj-vaj-paper-vault.service managed_paper_vault.py vault_owner_hooks.py paper_credential_vault.py; do
+            if test -f "$file"; then
+              mkdir -p "$GITHUB_WORKSPACE/receipt/$(dirname "$file")"
+              cp "$file" "$GITHUB_WORKSPACE/receipt/$file"
+              sha256sum "$file" | tee -a "$GITHUB_WORKSPACE/receipt/file-digests.txt"
+            fi
+          done
+          find scripts deploy -maxdepth 2 -type f -printf '%p\n' | sort > "$GITHUB_WORKSPACE/receipt/installed-entrypoints.txt"
+          git rev-parse HEAD > "$GITHUB_WORKSPACE/receipt/base-commit.txt"
+          git write-tree > "$GITHUB_WORKSPACE/receipt/frozen-tree.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r2b-r2-original-source-interfaces
+          path: receipt/
+          retention-days: 2
