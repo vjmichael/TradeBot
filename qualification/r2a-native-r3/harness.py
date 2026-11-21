@@ -207,7 +207,14 @@ try:
     # confirmation is open, using LightDM's own switching command. No
     # helper, URI or vault mutation is permitted on the positive path.
     switch_id,switch_browser,switch_modal=console_modal('03-switch')
-    switch_env='DISPLAY=:0 XAUTHORITY=/home/maj-vaj-console/.Xauthority XDG_RUNTIME_DIR=/run/user/$(id -u maj-vaj-console)'
+    # The fixture serial shell is not a LightDM session and does not
+    # inherit XDG_SEAT_PATH. Query the installed display manager's own
+    # seat registry, then supply its real seat path to dm-tool exactly as
+    # prescribed for out-of-session invocation (not a mock switch).
+    _,seats=command('/usr/bin/dm-tool list-seats',timeout=12)
+    assert re.search(r'\\bSeat0\\b',seats), 'installed_LightDM_seat0_missing'
+    seat_path='/org/freedesktop/DisplayManager/Seat0'
+    switch_env='XDG_SEAT_PATH='+shlex.quote(seat_path)+' DISPLAY=:0 XAUTHORITY=/home/maj-vaj-console/.Xauthority XDG_RUNTIME_DIR=/run/user/$(id -u maj-vaj-console)'
     command('runuser -u maj-vaj-console -- env '+switch_env+' /usr/bin/dm-tool switch-to-greeter',timeout=20)
     greeter()
     assert not session('maj-vaj-credential-operator')
