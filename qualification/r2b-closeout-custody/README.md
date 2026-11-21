@@ -1,6 +1,104 @@
 # TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2 — custody, migration and receipt-provenance continuation
 
-**STATUS: QUALIFICATION CANDIDATE. Full R2B closeout remains OPEN until true installed PAM-native one-use review admission and protected provider worker are accepted.**
+**STATUS: SCOPED INSTALLED VAULT-CUSTODY / MIGRATION-REFUSAL PASS. Full R2B provider-admission and migration-review closeout remains OPEN.**
+
+
+## Terminal same-SHA qualification result
+
+**[GitHub Actions run #44858741408](https://github.com/vjmichael/TradeBot/actions/runs/44858741408) — SUCCESS**, job `136704574576`, exact tested commit
+`cdf2bec8c1fb49ac8edb0b679cb281e67883de5a`. Downloaded
+[receipt artifact #14687934914](https://github.com/vjmichael/TradeBot/actions/runs/44858741408/artifacts/14687934914)
+was independently verified against GitHub's SHA-256 digest
+`bda02512fd67759dbb1f7e7f730e7a7d90798b7725743abb9382b28b671574f4`.
+The archive contains source/tree locks, package and dpkg audit, original guard
+and new source test transcripts, ten native markers and actual protected
+graphical operator screenshots. The `dpkg-audit.txt` receipt is empty.
+
+The source reconstruction retained frozen D2 tree
+`a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b`,
+R2B overlay `250310b3409dd4c0feffa33eba1fe74d8b4ca54a`,
+R2 repaired tree `12a3c46401d96d616de4f88fa8a42588275d22ae`,
+and R3 relay tree `89946baeef719d7369887cc7d89a8a4230c7180e`.
+Existing production handoff blob `269bdc0b19d8a189496c7ca3b9369c158f85b0f6`
+remains unchanged. Independently locked source inputs:
+`native_harness.py` `ef29f3ffc11fdda7dac039bfc22aed86eed6ba97`;
+`worker_receipt_verifier.py` `6d3dd869086febb21b2c1f8a50cd1fcc8d62e0dc`;
+`test_worker_receipt_verifier.py` `10056e511d899c3858dcabcf260165cfca79e4a4`;
+original reviewed migration module
+`62ca8c18dfc9d26514fc608fb87ea9e5e30d2e53`.
+No positive provider RPC was added.
+
+| Verification | Accepted receipt |
+|---|---|
+| Reconstructed managed vault / native review / reviewed migration / HMAC worker verifier | **71/71 source tests PASS** |
+| OS-local, peer-validated bounded readiness witness | **16/16 source tests PASS** |
+| Original native handoff security guards | **9/9 source tests PASS** |
+| Intent, cancellation, revocation and AF_UNIX adversarial source regressions | **21/21 source tests PASS** |
+| **Total independent source checks** | **117/117 PASS** |
+| Genuine Debian 13 offline QEMU, root-protected separate systemd keys and service boundary | `R2B_INSTALLED_SYSTEMD_KEY_CUSTODY_PASS` |
+| Fresh PAM credential-operator Tk graphical synthetic paired Save | `R2B_INSTALLED_SYNTHETIC_SAVE_PASS` |
+| No unreviewed provider/migration/receipt RPC admitted | `R2B_INSTALLED_UNAPPROVED_PROVIDER_REFUSAL_PASS` |
+| Protected vault service restart retains original sealed pair | `R2B_INSTALLED_PERSISTENCE_PASS` |
+| Missing provider-tag key refused, original key restores | `R2B_INSTALLED_MISSING_TAG_KEY_REFUSAL_PASS` |
+| Different random provider tag key refused, original key restores | `R2B_INSTALLED_WRONG_TAG_KEY_REFUSAL_PASS` |
+| Different random Fernet venue key refused, original key restores | `R2B_INSTALLED_WRONG_ENCRYPTION_KEY_REFUSAL_PASS` |
+| PAPER API stays verification-disabled after restart and graphical exit | `R2B_INSTALLED_PAPER_AUTHORITY_REFUSAL_PASS` |
+| Artificial populated legacy state refuses unreviewed startup, ciphertext rows survive | `R2B_INSTALLED_UNREVIEWED_LEGACY_REFUSAL_PASS` |
+| Consolidated installed fixture | `R2B_NATIVE_KEY_CUSTODY_PASS` |
+
+All ten native markers were emitted by the actual offline Debian guest and
+checked again in the workflow. The tested source never exported credential
+plaintext, submitted an external provider test or enabled financial authority.
+The synthetic legacy-state conversion was destructive only to the *ephemeral
+test VM's* metadata, not any owned or production database.
+
+### Receipt-grounded failed attempts
+
+- [Run #44857991016](https://github.com/vjmichael/TradeBot/actions/runs/44857991016) passed source tests and VM boot, but assumed one textual
+  representation of `systemctl show LoadCredential` that Debian 13 did
+  not provide. This was a fixture assertion, not a production vault defect.
+- [Run #44858273027](https://github.com/vjmichael/TradeBot/actions/runs/44858273027) passed source tests and VM boot, but `systemctl cat` entered
+  its pager under the serial harness. It timed out before synthetic save.
+- [Run #44858741408](https://github.com/vjmichael/TradeBot/actions/runs/44858741408) verified the exact deployed `LoadCredential` unit lines
+  and live systemd credential mount using a **noninteractive** check, then
+  completed all native, source and artifact checks. The only changes were
+  to the independent acceptance harness. These three runs were sequential;
+  no CI was stacked.
+
+### Mandatory unfinished release work
+
+**Native one-use provider-test authority is not implemented or accepted.**
+The existing operator graphical review produces local UI intent only, not a
+server-verifiable one-use admission. The provider test socket must remain
+closed. Required next work: authenticate the dedicated operator's real
+PAM/logind session with independent broker and kernel peer identity, bind
+role/generation/policy and immutable preview, durably consume a single
+explicit approval before adapter execution, and refuse replay/cancel,
+seat switch, logout, restart and stale role. Do not treat a browser token
+or a caller-supplied `reviewed=True` as valid.
+
+**Positive reviewed migration remains uninstalled.** The 15 source-level
+migration tests inject a synthetic `consume` callback. Their pass proves
+transaction/inventory behavior, not real operator approval. Populated
+legacy stores continue to refuse unattended activation until the same
+installed one-use authority explicitly binds the original ciphertext
+inventory and the actual owner vault executes the migration under
+`BEGIN IMMEDIATE` without rewriting ciphertext.
+
+**Worker receipt provenance remains a source-verified building block.**
+The receive-only HMAC verifier rejects tampering, unknown workers,
+misbound attempt/generation/nonce/policy and stale results; tests use
+synthetic signing keys. A truly independent installed fixed-destination
+provider worker with root-provisioned *separate* receipt key, verified
+`SO_PEERCRED` and authenticated fixed result transport is not yet present.
+Provider permission verification and R2C rollback/nonce-safe recovery
+remain separate release gates. No work here authorizes Kraken/Telegram/Grok
+requests, funds, orders, paid model calls or LIVE trading.
+
+The next task is `TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2-ADMISSION`:
+implement/qualify the missing native one-use approval and protected
+worker receipt custody, then positively qualify reviewed migration and
+fixed-provider sandbox testing without weakening financial protections.
 
 ## Preserved production source and branch policy
 
