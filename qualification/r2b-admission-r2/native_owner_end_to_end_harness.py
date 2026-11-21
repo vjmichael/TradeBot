@@ -356,7 +356,7 @@ try:
     # The GUI must return to the original window after owner consume,
     # OwnerHooks.begin, a distinct kernel-UID worker refusal and finish.
     wait_cmd('runuser -u maj-vaj-approval -- /usr/bin/python3 -c '+
-        shlex.quote("import sqlite3;s=sqlite3.connect('/var/lib/maj-vaj-r2b-approval/ledger.sqlite3');assert s.execute(\\\"SELECT count(*) FROM approvals WHERE state='consumed'\\\").fetchone()[0]==1"),45)
+        shlex.quote("import sqlite3;s=sqlite3.connect('/var/lib/maj-vaj-r2b-approval/ledger.sqlite3');assert s.execute('SELECT count(*) FROM approvals WHERE state=?',('consumed',)).fetchone()[0]==1"),45)
     assert approval_state_count('consumed')==1
     assert metadata_tag()!=before,'authoritative_owner_metadata_unchanged'
     after=read_status()
