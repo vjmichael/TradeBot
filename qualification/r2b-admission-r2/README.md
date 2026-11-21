@@ -102,15 +102,24 @@ broker-API direct approval, simulated PAM login or protective-session
 bypass was substituted. This proves the original QEMU GUI event path
 only, not physical keyboard provenance on a hostile X11 session.
 
-The independent synthetic no-network worker qualification has its own
-[original native run #44869299133](https://github.com/vjmichael/TradeBot/actions/runs/44869299133)
-at exact SHA `46cee56bf2225337cf8a77904886a026eccb1926`.
-This run covers actual distinct systemd UID, AF_UNIX peer checking,
-LoadCredential custody, HMAC signed `provider_refused`, wrong-UID
-refusal, missing-key restart/recovery and disabled-by-default gating.
-Its outcome remains **OPEN** until terminal evidence is inspected.
-The isolated worker's explicit root-owned Python import-path fix
-(`7f3d2f1`) is included in that worker run.
+The first independent synthetic worker native run
+[#44869299133](https://github.com/vjmichael/TradeBot/actions/runs/44869299133)
+FAILED during installed service startup after its disabled-by-default
+negative gate passed. Inspection found that `operator_session.py` needed
+the exact source-locked `approval_ledger.py` dependency in the worker
+package. No weakened sandbox or direct positive-result injection was used.
+
+The corrected independent Debian 13 QEMU run
+[#44869628432](https://github.com/vjmichael/TradeBot/actions/runs/44869628432)
+**SUCCESS** at exact SHA `de7748c7cfa7ae76515256e567434b0a6ad37b7c`:
+**7/7 native worker markers passed**. These cover disabled-by-default,
+dedicated protected UID and systemd LoadCredential, true vault
+SO_PEERCRED, negative-only domain-separated HMAC receipt,
+wrong-principal refusal, missing-key restart/recovery and terminal
+installed worker acceptance. The earlier explicit fixed Python
+module-path repair (`7f3d2f1`) is included in the passing source.
+This qualifies the isolated synthetic-denial WORKER only; it is not a
+real provider or authoritative vault-to-worker end-to-end receipt.
 
 The owner-only `FixedReadOnlyCoordinator` implementation and source
 tests remain staging, not proof of an installed vault handler or
@@ -134,8 +143,8 @@ the claim.
 **Still OPEN:** independently verified GUI-session lock event refusal
 (including change during a dialog), installed authoritative vault-owner
 prepare/consume/reserve/finish interface, genuine encrypted generation
-and policy binding, independent installed synthetic worker acceptance
-until the native receipt passes, replay/crash and owner-worker restart
+and policy binding, independently qualified owner-to-worker receipt handoff,
+replay/crash and owner-worker restart
 cross-boundary qualification, positive non-destructive reviewed legacy
 migration, optional real-provider sandbox checks only after separate
 authorization, and all R2C/financial/LIVE gates. As X11 permits other authorized
