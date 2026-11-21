@@ -1,0 +1,76 @@
+name: R2B native operator PAM and kernel peer attestation
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2b-admission]
+    paths: ['.github/workflows/r2b-native-attestation.yml']
+permissions:
+  contents: read
+jobs:
+  installed-operator-peer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Restore frozen production and copy exact test-only native probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 39cd2c1b06823f025655b2191bff45988ef2c858
+          test "$(git hash-object qualification/r2b-admission/operator_session.py)" = a25c9c3f1f12ccf40367b8bff5b5fe29fd60a8ba
+          test "$(git hash-object qualification/r2b-admission/native_probe_server.py)" = cb276a84eb0885e9efdb0a63cfa71ae05cf05652
+          test "$(git hash-object qualification/r2b-admission/native_probe_client.py)" = 7b5d11ce1480338cb59c3f24c5de460572acbd99
+          test "$(git hash-object qualification/r2b-admission/native_attestation_harness.py)" = 1542171880731d1b0a57323df692cdec80212fbb
+          mkdir "$RUNNER_TEMP/r2b-r3/r2b-admission"
+          cp qualification/r2b-admission/{approval_ledger,operator_session,native_probe_server,native_probe_client}.py "$RUNNER_TEMP/r2b-r3/r2b-admission/"
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          git rev-parse HEAD | tee receipt/acceptance-commit.txt
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Qualify no bypass in new OS identity modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-admission"
+          python -m compileall -q qualification/r2b-admission
+          python -m unittest discover -s qualification/r2b-admission -p 'test_*.py' -v 2>&1 | tee receipt/admission-source.txt
+      - name: Install genuine Debian QEMU prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build unchanged offline Debian 13 with real LightDM PAM desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-r3" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/native" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Real operator graphical logind and accepted SO_PEERCRED attestation revocation
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 qualification/r2b-admission/native_attestation_harness.py "$RUNNER_TEMP/r2b-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/native-operator-session.txt
+          for marker in R2B_NATIVE_ROOT_PEER_REFUSAL_PASS R2B_NATIVE_OPERATOR_PEER_ATTESTATION_PASS R2B_NATIVE_OPERATOR_REVOKE_PASS R2B_NATIVE_PAM_ATTESTATION_PASS; do
+            grep -Fx "$marker" receipt/native-operator-session.txt
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-native-operator-peer-attestation
+          path: receipt/
+          retention-days: 5
