@@ -27,7 +27,7 @@ jobs:
           mkdir -p receipt
           bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/source-tree.txt
           test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
-          test "$(git hash-object qualification/r2a-native-r3/harness.py)" = 2a4df72a97b9cbc85fb93875715862dd579decc8
+          test "$(git hash-object qualification/r2a-native-r3/harness.py)" = 78f2e644340649104ae7ea31fd9589541b659bdb
           test "$(git hash-object qualification/r2a-native-negative/test_handoff_refusals.py)" = d2fc1b43c6db299947f2aac999c86d6e230fd566
           git rev-parse HEAD | tee receipt/acceptance-commit.txt
           cd "$RUNNER_TEMP/r2b-r3/dashboard"
