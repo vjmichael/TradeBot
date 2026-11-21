@@ -227,7 +227,11 @@ case "$action" in
     [[ -f "$root/paper_credential_vault.py" && -f "$root/managed_rpc.py" ]] || die original_vault_missing
     [[ -f "$root/credential_graphical.py" && ! -L "$root/credential_graphical.py" ]] || die native_gui_missing
     [[ ! -e "$root/.r5-stage" && ! -L "$root/.r5-stage" ]] || die stale_stage
-    install -d -m 0700 "$root/.r5-stage/deploy"
+    # Creating the nested path alone lets install(1) create the parent
+    # with default 0755; rollback properly refuses that. Secure the parent
+    # separately *before* materializing any staged copy.
+    install -d -o root -g root -m 0700 "$root/.r5-stage"
+    install -d -o root -g root -m 0700 "$root/.r5-stage/deploy"
     trap 'rm -rf -- "$root/.r5-stage"' EXIT
     for p in paper_credential_vault.py managed_rpc.py credential_graphical.py; do
       install -m 0644 "$root/$p" "$root/.r5-stage/$p"
