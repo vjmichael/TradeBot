@@ -7,7 +7,9 @@ name: R2B installed operator session chooser and enrollment acceptance
 on:
   push:
     branches: [qualification/tb-sec-key-01-r2a-r1-d1]
-    paths: ['.github/workflows/r2b-operator-session-choice.yml']
+    paths:
+      - '.github/workflows/r2b-operator-session-choice.yml'
+      - 'qualification/r2b-integrate-02-r2-r3/operator-session-choice/harness.py'
 permissions:
   contents: read
 jobs:
