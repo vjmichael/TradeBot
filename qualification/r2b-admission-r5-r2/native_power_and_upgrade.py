@@ -432,7 +432,7 @@ try:
             "ls -ld /etc/systemd/system/"+vault+" /run/systemd/system/"+vault+
             " /lib/systemd/system/"+vault+" /usr/lib/systemd/system/"+vault+" 2>&1; "+
             "readlink /etc/systemd/system/"+vault+" 2>&1; "+
-            "systemctl cat "+vault+" 2>&1")
+            "timeout 6s env SYSTEMD_PAGER=cat PAGER=cat systemctl --no-pager cat "+vault+" 2>&1")
         _,state=cmd(status_command,ok=False)
         (out/'r5-r2-original-vault-post-power-unit.txt').write_text(state+'\n')
         print('R5_R2_ORIGINAL_VAULT_POST_POWER_UNIT='+state.replace('\n','|')[:950],flush=True)
