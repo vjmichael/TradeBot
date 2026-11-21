@@ -27,10 +27,10 @@ jobs:
           mkdir -p receipt
           bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/restored-trees.txt
           test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
-          test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 242508263572dd518e915a1fc23a1b3f88f20b46
+          test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 735aec0e4bea5c0a27bf0d7759c392c32e849f0b
           test "$(git hash-object qualification/r2b-admission/operator_session.py)" = a25c9c3f1f12ccf40367b8bff5b5fe29fd60a8ba
           test "$(git hash-object qualification/r2b-admission/receipt_channel.py)" = c1550d83d299ae061e71e00e2e937139f6f84618
-          test "$(git hash-object qualification/r2b-admission/test_approval_ledger.py)" = 44263b90b4ef8b55b6609013a71248bed834d107
+          test "$(git hash-object qualification/r2b-admission/test_approval_ledger.py)" = 72be4292615d737c1d48b5c5bb85bd2b0cbce4ba
           test "$(git hash-object qualification/r2b-admission/test_receipt_channel.py)" = 962fd0001777a12ba9fc106e3b72e8eb4ae4a6f6
           git rev-parse HEAD | tee receipt/acceptance-head.txt
           cd "$RUNNER_TEMP/r2b-r3/dashboard"
