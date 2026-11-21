@@ -324,20 +324,36 @@ def negative_case(case,sid,window,before,approval,worker):
     if case=='lock':
         command('loginctl lock-session '+shlex.quote(sid))
         time.sleep(2)
-        command('loginctl unlock-session '+shlex.quote(sid))
-        native_yes(dialog)
-        time.sleep(3)
+        # LightDM may terminate the operator session on lock, instead
+        # of preserving a resumable session. Both are irreversible
+        # interruption outcomes; NEVER assert an unlock of a dead SID.
+        exited=command('loginctl show-session '+shlex.quote(sid)+
+                       ' -p Id --value >/dev/null 2>&1',ok=False)[0]!=0
+        if not exited:
+            command('loginctl unlock-session '+shlex.quote(sid))
+            native_yes(dialog)
+            time.sleep(3)
         assert approval_state_count('consumed')==0
-        assert approval_state_count('approved')==0
         assert metadata_tag()==before
         command('systemctl restart '+approval)
-        assert approval_state_count('consumed')==0
+        state=counts()
+        (out/'r4-lock-terminal-state.txt').write_text(str(state)+'\n')
+        assert state['pending']==state['approved']==state['consumed']==0,state
+        assert state['revoked']+state['cancelled']>=1,state
         print('R4_INSTALLED_SESSION_LOCK_REFUSAL_PASS',flush=True)
     elif case=='switch':
         command('dm-tool switch-to-greeter',timeout=20)
-        wait_cmd('test "$(loginctl show-session '+shlex.quote(sid)+' -p Active --value)" = no',50)
+        # Depending on LightDM version, the original operator SID is
+        # inactive or already destroyed after real seat switching.
+        wait_cmd('! loginctl show-session '+shlex.quote(sid)+
+                 ' -p Active --value >/dev/null 2>&1 || '+
+                 'test "$(loginctl show-session '+shlex.quote(sid)+
+                 ' -p Active --value)" = no',50)
         command('systemctl restart '+approval)
-        assert approval_state_count('consumed')==0
+        state=counts()
+        (out/'r4-switch-terminal-state.txt').write_text(str(state)+'\n')
+        assert state['pending']==state['approved']==state['consumed']==0,state
+        assert state['revoked']+state['cancelled']>=1,state
         assert metadata_tag()==before
         print('R4_INSTALLED_SEAT_SWITCH_REFUSAL_PASS',flush=True)
     elif case=='generation':
