@@ -33,7 +33,7 @@ jobs:
           test "$(git hash-object qualification/r2b-admission-r4/native_adversarial_harness.py)" = ce57c20c23f9f4a6ab3cbe036885f261ac73d552
           test "$(git hash-object qualification/r2b-admission-r4/test_owner_adversarial.py)" = eae211347664dde06720a49390e1deff562a4873
           python -m py_compile qualification/r2b-admission-r4/native_adversarial_harness.py qualification/r2b-admission-r4/test_owner_adversarial.py
-          test "$(git hash-object qualification/r2b-admission-r5/install-offline.sh)" = 27b755a56bd391e3dc4b419787395fc807811ced
+          test "$(git hash-object qualification/r2b-admission-r5/install-offline.sh)" = 44e5eb26f293b346d44f49a4146c571b9b0915df
           test "$(git hash-object qualification/r2b-admission-r5/native_installed_harness.py)" = 8a2900b20388da3099897e5aa30a4f2722747180
           bash -n qualification/r2b-admission-r5/install-offline.sh
           python -m py_compile qualification/r2b-admission-r5/native_installed_harness.py
@@ -41,6 +41,9 @@ jobs:
           grep -F "R5_INSTALLED_REENABLE_NO_REPLAY_PASS" qualification/r2b-admission-r5/native_installed_harness.py
           grep -F "ConditionVirtualization=qemu" qualification/r2b-admission-r5/install-offline.sh
           grep -F "R5_FIXED_NATIVE_SOURCE_LOCK_PASS" qualification/r2b-admission-r5/install-offline.sh
+          grep -F 'wait_socket "$vault" /run/maj-vaj-paper-vault-status/status.sock' qualification/r2b-admission-r5/install-offline.sh
+          grep -F 'wait_socket "$broker" /run/maj-vaj-r2b-approval/agent.sock' qualification/r2b-admission-r5/install-offline.sh
+          grep -F 'wait_socket "$worker" /run/maj-vaj-r2b-synthetic-worker/result.sock' qualification/r2b-admission-r5/install-offline.sh
           grep -F "SELECT state,count(*) FROM approvals GROUP BY state" qualification/r2b-admission-r4/native_adversarial_harness.py
           grep -F "operator_not_in_native_seat" qualification/r2b-admission-r4/native_adversarial_harness.py
           grep -F "sys.argv[3]=='reboot' else ['-no-reboot']" qualification/r2b-admission-r4/native_adversarial_harness.py
