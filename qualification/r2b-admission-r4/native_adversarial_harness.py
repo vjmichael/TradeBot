@@ -356,7 +356,13 @@ def negative_case(case,sid,window,before,approval,worker):
         print('R4_INSTALLED_GENERATION_RACE_REFUSAL_PASS',flush=True)
     elif case=='broker_crash':
         command('systemctl restart '+approval)
-        assert approval_state_count('revoked')>=1
+        # Native transport loss may cancel the request before the
+        # restarted ledger revokes surviving pending rows. Both terminal
+        # states are valid; pending/approved/consumed are never accepted.
+        state=counts()
+        (out/'r4-broker-restart-state.txt').write_text(str(state)+'\n')
+        assert state['revoked']+state['cancelled']>=1,state
+        assert state['pending']==state['approved']==state['consumed']==0,state
         native_yes(dialog)
         time.sleep(2)
         assert approval_state_count('consumed')==0
