@@ -190,15 +190,13 @@ try:
     shot('09-cancel-keeps-browser-session')
     print('PASS installed Tk cancellation retains original PAM session, no independent login and no credentials',flush=True)
     print('R2A_NATIVE_NEGATIVE_CANCEL_PASS',flush=True)
-    # Reauthenticate in the still-running browser: activating the account
-    # link signs out the dashboard even if the *native* session prompt is
-    # cancelled. The second request must originate from an actual browser
-    # click and ordinary one-time external-protocol consent, never direct
-    # helper or serial invocation.
+    # Actual prior screenshot 09 proves Settings remains signed in after
+    # native cancel, with Account connections expanded and its secure link
+    # visible at x=52..340, y=359..407. Re-entering the Settings workflow
+    # toggled the panel *closed* and caused failed run 44851985905.
+    # Use the existing genuine browser link; no direct helper, xdg-open,
+    # privileged action, or UI authentication bypass.
     x('windowfocus ' + win)
-    find('Admin access token');key('Tab');type_text('synthetic-r2ar1-browser-bearer-'*2);key('Return');time.sleep(2)
-    find('Settings');key('Return');time.sleep(1)
-    find('Manage account connections');key('Return');time.sleep(1)
     find('Open secure account sign-in');key('Tab');time.sleep(.5)
     shot('10-second-browser-link')
     click(195,383)
