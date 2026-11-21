@@ -71,7 +71,9 @@ def patch(directory):
         "from managed_paper_vault import ManagedPaperVault, Refused\n",
         "from managed_paper_vault import ManagedPaperVault, Refused\n"
         "import os,sys,stat\n"
+        "# Fixed root-owned qualification modules, never caller paths.\n"
         "sys.path.insert(0,'/opt/maj-vaj/r2b-admission-r2')\n"
+        "sys.path.insert(0,'/opt/maj-vaj/r2b-admission-r1')\n"
         "from owner_rpc_extension import FixedReadOnlyCoordinator\n",
         'fixed_owner_coordinator_import')
     managed=replace_exact(managed,
