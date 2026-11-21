@@ -268,7 +268,7 @@ PY
       if [[ "$p" == paper_credential_vault.py && -f "$fixture_abort" && ! -L "$fixture_abort" &&
           "$(stat -c '%u:%a:%h' "$fixture_abort")" == '0:600:1' ]]; then
         # Privileged QEMU-only deterministic SIGKILL test. Journal persists.
-        kill -KILL "$"
+        kill -KILL "$$"
       fi
     done
     install -o root -g root -m 0644 "$root/.r5-stage/deploy/$vault" "$root/deploy/$vault"
