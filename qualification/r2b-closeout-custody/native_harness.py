@@ -211,8 +211,15 @@ try:
         for outsider in ('maj-vaj-console','maj-vaj-credential-operator','maj-vaj','maj-vaj-native'):
             rc,_=command('runuser -u '+outsider+' -- /usr/bin/test ! -r '+keys+'/'+name,ok=False)
             assert rc==0,('unauthorized_key_read',name,outsider)
-    _,u=command('systemctl show -p LoadCredential --value '+unit)
-    assert 'venue-vault-key:' in u and 'provider-tag-key:' in u
+    # On Debian/systemd 257, systemctl show formats LoadCredential as
+    # structured properties, not necessarily colon-delimited entries.
+    # Verify *installed unit* directives exactly and the live, private
+    # systemd credential files; never print or read their secret values.
+    _,u=command('systemctl cat '+unit)
+    assert 'LoadCredential=venue-vault-key:'+keys+'/venue-vault-key' in u
+    assert 'LoadCredential=provider-tag-key:'+keys+'/provider-tag-key' in u
+    for name in ('venue-vault-key','provider-tag-key'):
+        command('test -f /run/credentials/'+unit+'/'+name)
     _,isolation=command('systemctl show -p PrivateNetwork -p RestrictAddressFamilies -p User --value '+unit)
     assert 'maj-vaj-vault' in isolation and 'yes' in isolation and 'AF_UNIX' in isolation
     print('R2B_INSTALLED_SYSTEMD_KEY_CUSTODY_PASS',flush=True)
