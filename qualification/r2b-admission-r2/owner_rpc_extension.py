@@ -12,6 +12,7 @@ from __future__ import annotations
 import threading
 import time
 from approval_ledger import Context,Refused
+from vault_owner_hooks import Refused as VaultRefused
 from managed_paper_vault import ManagedPaperVault,_require_owner
 from owner_synthetic_bridge import broker_request,reserve_after_approval,finish_fixed_synthetic
 
@@ -61,7 +62,7 @@ class FixedReadOnlyCoordinator:
                 return {'ok':False,'reason':'review_unavailable'}
             try:
                 broker_request('cancel',prior[0],prior[1])
-            except (Refused,OSError):
+            except (VaultRefused,OSError):
                 pass
             # An uncertain cancellation is still not reusable by the
             # owner service, even if the broker did not receive it.
