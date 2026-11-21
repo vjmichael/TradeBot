@@ -9,7 +9,7 @@ qmp=str(vm/'qmp.sock')
 accel=['-accel','tcg','-cpu','max'] # exact disposable QEMU fixture, not host virtualization
 disk=vm/'guest.qcow2'
 assert disk.is_file(), 'r4_read_write_guest_overlay_required'
-args=accel+['-m','4096','-smp','4','-drive',f'file={disk},format=qcow2,if=virtio','-kernel',str(vm/'vmlinuz'),'-initrd',str(vm/'initrd.img'),'-append','root=/dev/vda rw console=ttyS0 loglevel=3','-nic','none','-display','none','-vga','std','-qmp',f'unix:{qmp},server=on,wait=off','-serial','stdio','-no-reboot']
+args=accel+['-m','4096','-smp','4','-drive',f'file={disk},format=qcow2,if=virtio','-kernel',str(vm/'vmlinuz'),'-initrd',str(vm/'initrd.img'),'-append','root=/dev/vda rw console=ttyS0 loglevel=3','-nic','none','-display','none','-vga','std','-qmp',f'unix:{qmp},server=on,wait=off','-serial','stdio']+([] if len(sys.argv)==4 and sys.argv[3]=='reboot' else ['-no-reboot'])
 s=pexpect.spawn('qemu-system-x86_64',args,encoding='utf-8',timeout=180,maxread=8192)
 def command(c,timeout=90,ok=True):
     s.sendline("stty -echo; "+c+"; rc=$?; printf '\\nD2_%s=%s\\n' END \"$rc\"")
@@ -356,7 +356,7 @@ def negative_case(case,sid,window,before,approval,worker):
         discovered=re.findall(r'^Seat([0-9]+)$',seat_listing,re.MULTILINE)
         assert discovered==['0'], 'lightdm_seat_not_unique'
         assert '  CanSwitch=true\n' in seat_listing, 'native_seat_switch_disabled'
-        assert "    UserName='maj-vaj-credential-operator'\n" in seat_listing, 'operator_not_in_native_seat'
+        assert seat_listing.splitlines().count("    UserName='maj-vaj-credential-operator'")==1, 'operator_not_in_native_seat'
         seat_path='/org/freedesktop/DisplayManager/Seat'+discovered[0]
         command('env XDG_SEAT_PATH='+shlex.quote(seat_path)+
                 ' /usr/bin/dm-tool switch-to-greeter',timeout=20)
