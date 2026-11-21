@@ -46,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
-          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-admission"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-closeout-custody:$GITHUB_WORKSPACE/qualification/r2b-admission"
           python -m compileall -q qualification/r2b-admission
           python -m unittest discover -s qualification/r2b-admission -p 'test_*.py' -v 2>&1 | tee receipt/admission-source.txt
       - name: Install genuine Debian QEMU prerequisites
