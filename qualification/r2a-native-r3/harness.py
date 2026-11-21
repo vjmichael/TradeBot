@@ -179,9 +179,9 @@ def restart_vault():
     wait_cmd('test -S /run/maj-vaj-paper-vault-status/status.sock',40)
 
 try:
-    s.expect('login:',timeout=240);s.sendline('root');s.expect('Password:');s.sendline('d2-serial-fixture-714');s.expect(r'root@[^\\r\\n]+#',timeout=80)
+    s.expect('login:',timeout=240);s.sendline('root');s.expect('Password:');s.sendline('d2-serial-fixture-714');s.expect(r'root@[^\r\n]+#',timeout=80)
     s.sendline("stty -echo; unset PROMPT_COMMAND; PS1=''; bind 'set enable-bracketed-paste off'; printf '\\nD2_%s\\n' READY")
-    s.expect(r'D2_READY\\r*\\n')
+    s.expect(r'D2_READY\r*\n')
     command('bash /root/d2-setup.sh',timeout=160)
     print('PASS installed Debian guest preflight, offline vault and real LightDM',flush=True)
     ensure_empty()
