@@ -22,7 +22,9 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=yes
-ProtectProc=invisible
+# No ProtectProc=invisible here: verifying kernel PPID of the genuine
+# PR_SET_DUMPABLE=0 operator GUI requires reading cross-UID /proc/pid/stat.
+# All vault secrets remain unavailable, home protected and network disabled.
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
