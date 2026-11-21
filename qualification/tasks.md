@@ -840,3 +840,28 @@ Original D2 production `a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b`, R2B overlay `
 The same-UID fixed IPC request is intentionally reusable as a **non-authorizing UI intent**; R4 validates mandatory independent native confirmation, not cryptographic anti-replay of that UI signal. Neither a forged request nor a stale cookie grants credential enrollment or trading authority. No production source changes, real credentials, provider calls, trades, financial data mutations, automatic LIVE enablement, main merge or stacked CI.
 
 **R4 CLOSED as a scoped installed negative-security task. R1–R4 native handoff security qualification is complete within its stated threat model.** The wider R2A product/release contract, R2B protected one-use operator admission and provider receipt custody, reviewed legacy migration, independently witnessed service readiness, R2C KEK/rollback/nonce-safe recovery and consolidated PAPER/financial release Gate remain **OPEN**. Recommended next independent work: **`TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2` closeout** — finish installed vault/migration custody, one-use authenticated provider test approval and verified receipt provenance before enabling any provider testing.
+
+### TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2 — terminal custody and migration-refusal qualification (2026-11-20)
+
+**SCOPED INSTALLED CUSTODY PASS; POSITIVE NATIVE REVIEW/PROVIDER CLOSEOUT STILL OPEN.** Successful [GitHub Actions #44858741408](https://github.com/vjmichael/TradeBot/actions/runs/44858741408), job `136704574576`, exact tested SHA `cdf2bec8c1fb49ac8edb0b679cb281e67883de5a`. Artifact [#14687934914](https://github.com/vjmichael/TradeBot/actions/runs/44858741408/artifacts/14687934914) downloaded and verified SHA-256 `bda02512fd67759dbb1f7e7f730e7a7d90798b7725743abb9382b28b671574f4`. [Full R2B protected-custody contract, qualification matrix and outstanding gates](r2b-closeout-custody/README.md).
+
+Frozen D2 `a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b`, R2B overlay `250310b3409dd4c0feffa33eba1fe74d8b4ca54a`, R2 repaired `12a3c46401d96d616de4f88fa8a42588275d22ae` and R3 production relay `89946baeef719d7369887cc7d89a8a4230c7180e` restored unchanged. Native handoff blob `269bdc0b19d8a189496c7ca3b9369c158f85b0f6` preserved. Newly staged native custody harness blob `ef29f3ffc11fdda7dac039bfc22aed86eed6ba97`; receive-only HMAC worker receipt verifier blob `6d3dd869086febb21b2c1f8a50cd1fcc8d62e0dc`; synthetic adversarial receipt tests blob `10056e511d899c3858dcabcf260165cfca79e4a4`. Source tests: managed-vault/native-review/migration/receipt **71/71 PASS**, OS peer witness **16/16 PASS**, original handoff **9/9 PASS**, fixed-intent/refusal/adversarial **21/21 PASS**; **117/117 combined**. Dashboard npm build PASS, installed Debian 13 QEMU with no guest NIC and systemd private credentials completed all **10/10** native markers.
+
+| Installed vault custody/migration condition | Recorded result |
+|---|---|
+| Dedicated vault UID, systemd `LoadCredential` venue and independent tag keys, 0700/0600 and Unix-only/no network custody | **PASS** |
+| Actual fresh PAM operator Tk synthetic paired Kraken read-only Save | **PASS** |
+| Disabled migration/approval/provider/receipt operations refused through current operator RPC | **PASS** |
+| Restart retains `stored_unverified` protected pair | **PASS** |
+| Missing provider tag key refuses startup; restored original recovers | **PASS** |
+| Changed provider tag key refuses existing binding; original recovers | **PASS** |
+| Changed Fernet venue key refuses decrypt/adoption; original recovers | **PASS** |
+| PAPER API continues refusing `connections_verified` and `deployment_ready` | **PASS** |
+| Fixture-only populated legacy ciphertext with owner metadata removed refuses unattended startup; rows preserved | **PASS** |
+| Full installed `R2B_NATIVE_KEY_CUSTODY_PASS` marker | **PASS** |
+
+Historical runs [44857991016](https://github.com/vjmichael/TradeBot/actions/runs/44857991016) and [44858273027](https://github.com/vjmichael/TradeBot/actions/runs/44858273027) failed at fixture-only systemd textual formatting and pager/serial interaction *before* synthetic credential save; the final noninteractive installed-unit assertion qualified unchanged-source receipt. Only independent qualification harness and documentation were revised, not production source, official baseline, actual credentials or financial authority. CI sequential, no overlap or main merge.
+
+**R2B-INTEGRATE-02-R2-R2 remains PARTIAL.** Positive reviewed migration is a **15-case source-tested candidate only** using a simulated approval callback, not an installed protected action. One-use PAM-native operator admission, durable approval consumption, protected separate fixed-destination provider worker and kernel-peer/HMAC receipt provenance are still not integrated or installed-accepted. New HMAC verifier proves exact source-level role/attempt/generation/policy/nonce binding, **not** actual adapter identity or real provider permissions; no test-provider network enabled. R2C key/recovery and consolidated PAPER/financial gates remain OPEN; no trading, real secrets, external calls or LIVE activation.
+
+**Next engineering task:** `TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2-ADMISSION` — build a protected native one-use operator review broker, bind actual PAM/logind/seat and kernel peer, consume role/generation/policy/inventory approval exactly once before a durable owner attempt, authenticate fixed worker receipt custody, then positively qualify reviewed migration and sandbox provider-check sequences with genuine installed evidence. Do not replace real OS proof with an injected `consume=True`, a browser token, an HMAC-only client fixture or a simulated HTTP response.
