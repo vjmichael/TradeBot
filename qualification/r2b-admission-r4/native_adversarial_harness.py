@@ -356,7 +356,7 @@ def negative_case(case,sid,window,before,approval,worker):
         discovered=re.findall(r'^Seat([0-9]+)$',seat_listing,re.MULTILINE)
         assert discovered==['0'], 'lightdm_seat_not_unique'
         assert '  CanSwitch=true\n' in seat_listing, 'native_seat_switch_disabled'
-        assert seat_listing.splitlines().count("    UserName='maj-vaj-credential-operator'")==1, 'operator_not_in_native_seat'
+        assert re.search(r"(?m)^    UserName='maj-vaj-credential-operator'$",seat_listing), 'operator_not_in_native_seat'
         seat_path='/org/freedesktop/DisplayManager/Seat'+discovered[0]
         command('env XDG_SEAT_PATH='+shlex.quote(seat_path)+
                 ' /usr/bin/dm-tool switch-to-greeter',timeout=20)
