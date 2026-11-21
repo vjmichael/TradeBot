@@ -29,8 +29,9 @@ jobs:
           test "$(git hash-object qualification/r2b-admission-r2/native_synthetic_worker_harness.py)" = 994e328700034616c1d72e8ba27cea3dbc06dd74
           test "$(git hash-object qualification/r2b-admission-r2/test_synthetic_worker.py)" = 43edf4a9a2990cc6efd70a586ccf174403520ec4
           test "$(git hash-object qualification/r2b-admission/operator_session.py)" = b61a656740989cb6b284498503837d2252258fec
+          test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 39cd2c1b06823f025655b2191bff45988ef2c858
           mkdir -p "$RUNNER_TEMP/r2b-r3/r2b-admission-r2"
-          cp qualification/r2b-admission/operator_session.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-admission/{operator_session,approval_ledger}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
           cp qualification/r2b-admission-r2/{synthetic_worker_protocol,synthetic_worker_service}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
           cp qualification/r2b-admission-r2/maj-vaj-r2b-synthetic-worker.service "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
           git rev-parse HEAD | tee receipt/exact-sha.txt
