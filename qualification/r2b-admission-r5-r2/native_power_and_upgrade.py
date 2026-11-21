@@ -423,7 +423,17 @@ def trust():
     seal='/opt/maj-vaj/r5-r2-offline-trust/trusted.pub.sha256'
     cmd('install -o root -g root -m 0600 '+pub+' /etc/maj-vaj/r5-r2-trust-root.pub')
     cmd('install -o root -g root -m 0600 '+seal+' /etc/maj-vaj/r5-r2-trust-root.sha256')
-    print('R5_R2_INDEPENDENT_OFFLINE_TRUST_PROVISIONED_PASS',flush=True)
+    # A signed release cannot recover from hard power loss if a freshly
+    # enrolled trust anchor is only in the guest page cache. Root-owned
+    # provisioning must durably persist both files AND directory metadata.
+    # Do not relax Ed25519 or SHA-256 commitment verification on restart.
+    cmd('cmp -s '+pub+' /etc/maj-vaj/r5-r2-trust-root.pub')
+    cmd('cmp -s '+seal+' /etc/maj-vaj/r5-r2-trust-root.sha256')
+    cmd('test "$(wc -c </etc/maj-vaj/r5-r2-trust-root.pub)" -eq 32')
+    cmd('sync -f /etc/maj-vaj/r5-r2-trust-root.pub')
+    cmd('sync -f /etc/maj-vaj/r5-r2-trust-root.sha256')
+    cmd('sync -f /etc/maj-vaj')
+    print('R5_R2_INDEPENDENT_DURABLE_OFFLINE_TRUST_PROVISIONED_PASS',flush=True)
 
 try:
     signin()
