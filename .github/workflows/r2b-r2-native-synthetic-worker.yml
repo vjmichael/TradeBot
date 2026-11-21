@@ -1,0 +1,72 @@
+name: R2B R2 installed isolated synthetic denial worker and HMAC custody
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2b-admission-r2]
+    paths: ['.github/workflows/r2b-r2-native-synthetic-worker.yml']
+permissions:
+  contents: read
+jobs:
+  isolated-worker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22.16.0'}
+      - name: Source-lock restored installed worker and offline-only protocol
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/production-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          test "$(git hash-object qualification/r2b-admission-r2/synthetic_worker_protocol.py)" = a26e5651658bafbd0bf86dc1af3d83a1d1d7d217
+          test "$(git hash-object qualification/r2b-admission-r2/synthetic_worker_service.py)" = 3f16e6519215f03af81a374f643303fa78e4a293
+          test "$(git hash-object qualification/r2b-admission-r2/maj-vaj-r2b-synthetic-worker.service)" = 1f0414e72e6985623fec94892eb28db70e208be8
+          test "$(git hash-object qualification/r2b-admission-r2/native_synthetic_worker_harness.py)" = 994e328700034616c1d72e8ba27cea3dbc06dd74
+          test "$(git hash-object qualification/r2b-admission-r2/test_synthetic_worker.py)" = 43edf4a9a2990cc6efd70a586ccf174403520ec4
+          test "$(git hash-object qualification/r2b-admission/operator_session.py)" = b61a656740989cb6b284498503837d2252258fec
+          mkdir -p "$RUNNER_TEMP/r2b-r3/r2b-admission-r2"
+          cp qualification/r2b-admission/operator_session.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-admission-r2/{synthetic_worker_protocol,synthetic_worker_service}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-admission-r2/maj-vaj-r2b-synthetic-worker.service "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          git rev-parse HEAD | tee receipt/exact-sha.txt
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Offline synthetic signed-denial and forged-receipt source qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-admission:$GITHUB_WORKSPACE/qualification/r2b-admission-r2"
+          python -m compileall -q qualification/r2b-admission-r2
+          python -m unittest discover -s qualification/r2b-admission-r2 -p test_synthetic_worker.py -v 2>&1 | tee receipt/worker-source.txt
+      - name: Install disposable real Debian 13 QEMU prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build unchanged-source installed Debian desktop and synthetic worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-r3" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/native" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Real systemd worker principal, custody, HMAC, denial, key loss and recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 qualification/r2b-admission-r2/native_synthetic_worker_harness.py "$RUNNER_TEMP/r2b-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/worker-native.txt
+          for marker in R2B_R2_SYNTHETIC_DISABLED_DEFAULT_PASS R2B_R2_SYNTHETIC_SYSTEMD_KEY_CUSTODY_PASS R2B_R2_SYNTHETIC_VAULT_PEER_RESPONSE_PASS R2B_R2_SYNTHETIC_HMAC_PROVENANCE_PASS R2B_R2_SYNTHETIC_WRONG_PRINCIPAL_REFUSAL_PASS R2B_R2_SYNTHETIC_KEY_LOSS_RECOVERY_PASS R2B_R2_INSTALLED_SYNTHETIC_WORKER_PASS; do
+            grep -Fx "$marker" receipt/worker-native.txt
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-r2-installed-synthetic-worker-receipts
+          path: receipt/
+          retention-days: 5
