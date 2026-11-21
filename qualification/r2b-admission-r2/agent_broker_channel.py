@@ -74,26 +74,46 @@ def _session_leader(session):
         raise Refused('native_session_leader_refused') from None
 
 
-def attest_exact_gui(conn):
-    """Kernel PID must be this LightDM session leader, not just same UID.
+def _kernel_parent(pid):
+    """Read PPID from kernel proc stat; never trust a caller-supplied field.
 
-    The installed fixed session wrapper EXECs credential_graphical's main
-    process. A second same-UID process in the session is not accepted.
-    A command-line string alone would NOT constitute authority.
+    The protected operator GUI disables ptrace/dumping, so reading its
+    cmdline/executable across UIDs is intentionally unavailable. The
+    trusted fixed LightDM wrapper, real session, exact direct-child
+    relationship and kernel SO_PEERCRED are the required proof.
+    """
+    if type(pid) is not int or pid<=1:
+        raise Refused('native_parent_unavailable')
+    try:
+        raw=(Path('/proc')/str(pid)/'stat').read_bytes()
+        tail=raw.rsplit(b') ',1)
+        if len(tail)!=2:
+            raise Refused('native_parent_unavailable')
+        fields=tail[1].split()
+        if len(fields)<2 or not fields[1].isdigit():
+            raise Refused('native_parent_unavailable')
+        parent=int(fields[1])
+        if parent<=1:
+            raise Refused('native_parent_unavailable')
+        return parent
+    except (OSError,ValueError):
+        raise Refused('native_parent_unavailable') from None
+
+
+def attest_exact_gui(conn):
+    """The socket peer MUST be the direct child of LightDM session leader.
+
+    Genuine original Debian LightDM owns the session leader wrapper,
+    which forks the root-installed fixed credential Python UI child.
+    Another operator UID process launched outside this PAM session has
+    no matching sd_pid_get_session; another process forked by the UI has
+    a different PPID. No client JSON token, PPID or session ID is used.
     """
     w=attest_operator_peer(conn)
     peer=peer_from_socket(conn)
-    if peer.pid!=_session_leader(w.session):
-        raise Refused('not_native_session_leader')
-    try:
-        cmd=(Path('/proc')/str(peer.pid)/'cmdline').read_bytes()
-    except OSError:
-        raise Refused('native_session_process_unavailable') from None
-    if (len(cmd)>4096 or cmd.count(COMMAND_FRAGMENT)!=1 or
-            not cmd.startswith(b'/opt/maj-vaj/venv/bin/python\x00')):
-        raise Refused('unexpected_native_process')
+    if _kernel_parent(peer.pid)!=_session_leader(w.session):
+        raise Refused('not_native_session_child')
     return w
-
 
 def next_unambiguous(ledger):
     """Single protected pending grant, never an operator-selected ID."""
