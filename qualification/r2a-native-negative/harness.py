@@ -190,6 +190,51 @@ try:
     shot('09-cancel-keeps-browser-session')
     print('PASS installed Tk cancellation retains original PAM session, no independent login and no credentials',flush=True)
     print('R2A_NATIVE_NEGATIVE_CANCEL_PASS',flush=True)
+    # Reauthenticate in the still-running browser: activating the account
+    # link signs out the dashboard even if the *native* session prompt is
+    # cancelled. The second request must originate from an actual browser
+    # click and ordinary one-time external-protocol consent, never direct
+    # helper or serial invocation.
+    x('windowfocus ' + win)
+    find('Admin access token');key('Tab');type_text('synthetic-r2ar1-browser-bearer-'*2);key('Return');time.sleep(2)
+    find('Settings');key('Return');time.sleep(1)
+    find('Manage account connections');key('Return');time.sleep(1)
+    find('Open secure account sign-in');key('Tab');time.sleep(.5)
+    shot('10-second-browser-link')
+    click(195,383)
+    await_browser_consent(35)
+    shot('11-second-browser-consent')
+    click(650,184)
+    modal2=wait_window('Maj Vaj.*Open account connections',30)
+    assert modal2 and session('maj-vaj-console') == console_id
+    shot('12-native-confirmation-before-session-loss')
+    # Fixture administrator forcibly removes the *real* console PAM/logind
+    # session during an outstanding Tk review. No privileged credential
+    # operator is introduced and the GUI prompt must die with its owner.
+    command('loginctl terminate-session '+shlex.quote(console_id))
+    wait_cmd('! loginctl show-session '+shlex.quote(console_id)+' >/dev/null 2>&1',40)
+    greeter()
+    wait_cmd("! DISPLAY=:0 XAUTHORITY=/run/lightdm/root/:0 xdotool search --onlyvisible --name 'Maj Vaj.*Open account connections' | grep -q .",20)
+    assert not session('maj-vaj-credential-operator')
+    assert read_status() == initial
+    shot('13-greeter-after-session-loss')
+    print('PASS installed modal owner-session revocation; no credential operator or vault mutation',flush=True)
+    print('R2A_NATIVE_NEGATIVE_REVOKE_PASS',flush=True)
+    # The vault remains authoritative and fail-closed after a genuine
+    # systemd service restart; the fresh console PAM session is distinct.
+    command('systemctl restart maj-vaj-paper-vault.service',timeout=45)
+    wait_cmd('test -S /run/maj-vaj-paper-vault-status/status.sock',40)
+    assert read_status() == initial
+    recovered = login('maj-vaj-console','d2-console-fixture-813')
+    assert recovered and recovered != console_id
+    assert_active('maj-vaj-console')
+    wait_cmd("pgrep -u maj-vaj-console -f '/usr/lib/chromium/chromium' >/dev/null",90)
+    wait_window('Maj Vaj Trade Bot',60)
+    assert not session('maj-vaj-credential-operator')
+    assert read_status() == initial
+    shot('14-fresh-pam-session-after-vault-restart')
+    print('PASS fresh PAM login and vault service restart after session loss, status remains not_configured',flush=True)
+    print('R2A_NATIVE_NEGATIVE_RECOVERY_PASS',flush=True)
 finally:
     # Cleanup of synthetic values and service/session boundary even after failure.
     try:shot('final')
