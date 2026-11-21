@@ -215,11 +215,13 @@ try:
     # structured properties, not necessarily colon-delimited entries.
     # Verify *installed unit* directives exactly and the live, private
     # systemd credential files; never print or read their secret values.
-    _,u=command('systemctl cat '+unit)
-    assert 'LoadCredential=venue-vault-key:'+keys+'/venue-vault-key' in u
-    assert 'LoadCredential=provider-tag-key:'+keys+'/provider-tag-key' in u
+    # The serial fixture must never invoke systemctl's default pager.
+    # The installer already verifies the deployed unit matches frozen source;
+    # require exact directives from the deployed file and the live mount.
+    deployed='/etc/systemd/system/'+unit
     for name in ('venue-vault-key','provider-tag-key'):
-        command('test -f /run/credentials/'+unit+'/'+name)
+        command('grep -Fx '+shlex.quote('LoadCredential='+name+':'+keys+'/'+name)+' '+shlex.quote(deployed)+' >/dev/null',timeout=12)
+        command('test -f /run/credentials/'+unit+'/'+name,timeout=12)
     _,isolation=command('systemctl show -p PrivateNetwork -p RestrictAddressFamilies -p User --value '+unit)
     assert 'maj-vaj-vault' in isolation and 'yes' in isolation and 'AF_UNIX' in isolation
     print('R2B_INSTALLED_SYSTEMD_KEY_CUSTODY_PASS',flush=True)
