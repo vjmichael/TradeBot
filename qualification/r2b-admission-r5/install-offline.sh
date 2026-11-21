@@ -69,6 +69,20 @@ check_seal() {
   [[ "$(stat -c '%u:%a:%h' "$seal")" == '0:644:1' ]] || die installation_seal_refused
   [[ "$(cat "$seal")" == 'R5:offline-synthetic-only:v1' ]] || die installation_seal_refused
 }
+wait_socket() {
+  local unit="$1" socket="$2" i
+  for ((i=0;i<45;i++)); do
+    if [[ -S "$socket" ]] && systemctl is-active --quiet "$unit"; then
+      return 0
+    fi
+    if systemctl is-failed --quiet "$unit"; then
+      die service_failed
+    fi
+    sleep 1
+  done
+  die service_readiness_unavailable
+}
+
 check_units() {
   cmp -s "$root/r2b-admission-r2/$broker" "/etc/systemd/system/$broker" || die broker_unit_changed
   cmp -s "$root/r2b-admission-r2/$worker" "/etc/systemd/system/$worker" || die worker_unit_changed
@@ -130,7 +144,7 @@ PY
     systemctl daemon-reload
     check_units
     systemctl restart "$vault"
-    [[ -S /run/maj-vaj-paper-vault-status/status.sock ]] || die vault_startup
+    wait_socket "$vault" /run/maj-vaj-paper-vault-status/status.sock
     # Both independent systemd services are NOT enabled or active.
     ! systemctl is-active --quiet "$broker" || die broker_not_disabled
     ! systemctl is-active --quiet "$worker" || die worker_not_disabled
@@ -152,8 +166,9 @@ PY
     fi
     systemctl start "$broker" "$worker"
     systemctl restart "$vault"
-    systemctl is-active --quiet "$vault" "$broker" "$worker"
-    [[ -S /run/maj-vaj-r2b-approval/agent.sock && -S /run/maj-vaj-r2b-synthetic-worker/result.sock ]] || die isolated_socket_missing
+    wait_socket "$vault" /run/maj-vaj-paper-vault-status/status.sock
+    wait_socket "$broker" /run/maj-vaj-r2b-approval/agent.sock
+    wait_socket "$worker" /run/maj-vaj-r2b-synthetic-worker/result.sock
     echo R5_EXPLICIT_OFFLINE_ACTIVATION_PASS
     ;;
   disable)
