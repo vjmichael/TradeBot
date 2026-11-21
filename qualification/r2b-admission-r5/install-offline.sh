@@ -8,6 +8,7 @@ config=/etc/maj-vaj
 marker="$config/r2b-approval-test-enabled"
 seal="$config/r2b-r5-offline-installed"
 transaction="$root/r2b-admission-r5/r5_transaction.py"
+receipt="$config/r2b-r5-rollback-completion"
 pending="$config/r2b-r5-transaction-pending"
 snapshot="$config/r2b-r5-rollback-snapshot"
 identity="$config/r2b-r5-installed-identity"
@@ -35,7 +36,7 @@ base=pathlib.Path(sys.argv[1])
 # Original accepted R3/R4 Git blob identity; no caller-named modules.
 expected={
  'r2b-admission-r1/broker_service.py':'c25093157840a38adb838377d17e62b707c489b3',
- 'r2b-admission-r5/r5_transaction.py':'f45a91025a156bd6923725648fd7316606f2b76b',
+ 'r2b-admission-r5/r5_transaction.py':'c2a1d89f6ae2ffd259ada7795bd6d236139d15e4',
  'r2b-admission-r1/owner_execution_bridge.py':'882875e35b046a13a94ffb7f24ca52c7d70c37d7',
  'r2b-admission-r2/approval_ledger.py':'39cd2c1b06823f025655b2191bff45988ef2c858',
  'r2b-admission-r2/operator_session.py':'b61a656740989cb6b284498503837d2252258fec',
@@ -105,7 +106,26 @@ rollback_files() {
   ! systemctl is-active --quiet "$vault" || die vault_still_active
   check_bundle
   no_saved_credentials
-  transaction_cmd restore
+  if [[ -f "$pending" && ! -L "$pending" &&
+        "$(cat "$pending")" == 'R5-PREPARING-NO-MUTATIONS' ]]; then
+    # No application mutation is authorized until snapshot is sealed.
+    if [[ -e "$root/.r5-stage" || -L "$root/.r5-stage" ]]; then
+      [[ -d "$root/.r5-stage" && ! -L "$root/.r5-stage" &&
+         "$(stat -c '%u:%a' "$root/.r5-stage")" == '0:700' ]] || die stage_custody_refused
+      rm -rf -- "$root/.r5-stage"
+    fi
+    transaction_cmd abandon
+    systemctl restart "$vault"
+    wait_socket "$vault" /run/maj-vaj-paper-vault-status/status.sock
+    echo R5_R2_UNFINISHED_BACKUP_ABANDON_PASS
+    return
+  fi
+  if [[ -e "$receipt" || -L "$receipt" ]]; then
+    [[ -f "$receipt" && ! -L "$receipt" ]] || die recovery_receipt_custody
+    : # Restored sources are verified by resume after systemd/key cleanup.
+  else
+    transaction_cmd restore
+  fi
   for unit in "$broker" "$worker"; do
     rm -f -- "/etc/systemd/system/$unit"
     rm -f -- "/etc/systemd/system/$unit.d/10-r5-qemu-only.conf"
@@ -123,11 +143,15 @@ rollback_files() {
     check_seal
     rm -f -- "$seal"
   fi
-  transaction_cmd cleanup
   if [[ -e "$root/.r5-stage" || -L "$root/.r5-stage" ]]; then
     [[ -d "$root/.r5-stage" && ! -L "$root/.r5-stage" &&
        "$(stat -c '%u:%a' "$root/.r5-stage")" == '0:700' ]] || die stage_custody_refused
     rm -rf -- "$root/.r5-stage"
+  fi
+  if [[ -e "$receipt" || -L "$receipt" ]]; then
+    transaction_cmd resume
+  else
+    transaction_cmd cleanup
   fi
   echo R5_R1_RECOVERY_ROLLBACK_PASS
 }
@@ -169,6 +193,7 @@ case "$action" in
     [[ ! -e "$seal" && ! -L "$seal" ]] || die already_installed
     [[ ! -e "$snapshot" && ! -L "$snapshot" ]] || die stale_rollback_snapshot
     no_pending
+    [[ ! -e "$receipt" && ! -L "$receipt" ]] || die rollback_completion_pending
     [[ ! -e "$marker" && ! -L "$marker" ]] || die approval_marker_preexisting
     check_bundle
     for u in maj-vaj-vault maj-vaj-approval maj-vaj-credential-operator; do
@@ -283,11 +308,13 @@ PY
     echo R5_R1_SAME_SOURCE_UPGRADE_PASS
     ;;
   recover)
-    [[ -f "$pending" && ! -L "$pending" ]] || die recovery_requires_pending
+    [[ -f "$pending" && ! -L "$pending" ]] ||
+      [[ -f "$receipt" && ! -L "$receipt" ]] || die recovery_requires_pending
     rollback_files
     ;;
   rollback)
-    [[ -e "$snapshot" && ! -L "$snapshot" ]] || die rollback_snapshot_unavailable
+    [[ -e "$snapshot" && ! -L "$snapshot" ]] ||
+      [[ -e "$receipt" && ! -L "$receipt" ]] || die rollback_snapshot_unavailable
     rollback_files
     ;;
 esac
