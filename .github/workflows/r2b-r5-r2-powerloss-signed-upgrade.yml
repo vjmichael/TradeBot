@@ -43,7 +43,7 @@ jobs:
           test "$(git hash-object qualification/r2b-admission-r5-r2/upgrade_v2.py)" = 8a312df1eba70a5debd729d72b4cf6a4d7eb389c
           test "$(git hash-object qualification/r2b-admission-r5-r2/build_signed_fixture.py)" = 9e627f55dc8d2576ed0004302a3cf42f5ed39fc6
           test "$(git hash-object qualification/r2b-admission-r5-r2/test_upgrade_v2.py)" = 60c6d9d0528f802959d06b89901d239e3c605b39
-          test "$(git hash-object qualification/r2b-admission-r5-r2/native_power_and_upgrade.py)" = c22f992538fcd6020182d962fc88e48ab039fa04
+          test "$(git hash-object qualification/r2b-admission-r5-r2/native_power_and_upgrade.py)" = 3047571e7897b8b9e9cf3d150af0a30653cfc394
           python -m py_compile qualification/r2b-admission-r5-r2/upgrade_v2.py qualification/r2b-admission-r5-r2/build_signed_fixture.py qualification/r2b-admission-r5-r2/test_upgrade_v2.py qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
           grep -F 'kill -KILL "$$"' qualification/r2b-admission-r5/install-offline.sh
           grep -Fx '    install -d -o root -g root -m 0700 "$root/.r5-stage"' qualification/r2b-admission-r5/install-offline.sh
@@ -53,6 +53,7 @@ jobs:
           grep -F 'R5_R2_SIGNED_CROSS_VERSION_UPGRADE_PASS' qualification/r2b-admission-r5-r2/upgrade_v2.py
           grep -F 'MAJ-VAJ-R5-R2-OFFLINE-COMPATIBLE-RELEASE' qualification/r2b-admission-r5-r2/build_signed_fixture.py
           grep -F 'R5_R2_ORIGINAL_VAULT_POST_POWER_UNIT=' qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
+          grep -F 'SYSTEMD_PAGER=cat PAGER=cat systemctl --no-pager cat' qualification/r2b-admission-r5-r2/native_power_and_upgrade.py
           grep -F "r2b-admission-r5/r5_transaction.py" qualification/r2b-admission-r5/install-offline.sh
           grep -F "transaction_cmd prepare" qualification/r2b-admission-r5/install-offline.sh
           grep -F "transaction_cmd restore" qualification/r2b-admission-r5/install-offline.sh
