@@ -82,6 +82,41 @@ worker result must be independently verified before
 `OwnerHooks.finish`, inside a fresh vault transaction. It is not yet
 exposed as an installed operator command.
 
+## Installed R2 native broker closeout (independently observed)
+
+[Original R2 native run #44868873434](https://github.com/vjmichael/TradeBot/actions/runs/44868873434)
+**SUCCESS** at exact SHA `5848013fcfe18b922c2d426d99929b7e3ba9365e`.
+All eight required native markers passed: negative-default gate, protected
+broker sockets, same-UID outsider refusal, native decline/cancel,
+genuine LightDM GUI one-use positive review and consumption,
+restart revocation, logout and complete installed agent IPC.
+The source-locked acceptance also passed Python regressions and
+frozen-root GUI restoration; this is the installed native BROKER
+boundary only. The request-scoped consume guard now requires the exact
+approval request's live event latch, not an ambiguous session witness.
+
+The earlier #44868453665 run failed after a real negative review when
+the second GUI approval stayed pending. A screenshot-grounded explicit
+click of the native OK control corrected the acceptance; no
+broker-API direct approval, simulated PAM login or protective-session
+bypass was substituted. This proves the original QEMU GUI event path
+only, not physical keyboard provenance on a hostile X11 session.
+
+The independent synthetic no-network worker qualification has its own
+[original native run #44869299133](https://github.com/vjmichael/TradeBot/actions/runs/44869299133)
+at exact SHA `46cee56bf2225337cf8a77904886a026eccb1926`.
+This run covers actual distinct systemd UID, AF_UNIX peer checking,
+LoadCredential custody, HMAC signed `provider_refused`, wrong-UID
+refusal, missing-key restart/recovery and disabled-by-default gating.
+Its outcome remains **OPEN** until terminal evidence is inspected.
+The isolated worker's explicit root-owned Python import-path fix
+(`7f3d2f1`) is included in that worker run.
+
+The owner-only `FixedReadOnlyCoordinator` implementation and source
+tests remain staging, not proof of an installed vault handler or
+authorized owner → broker → worker complete system transaction.
+No real Kraken call or positive permissions authority is admitted.
+
 ## Source acceptance and remaining work
 
 [GitHub Actions #44867768044](https://github.com/vjmichael/TradeBot/actions/runs/44867768044)
@@ -96,13 +131,14 @@ The revised direct-child attestor and separately signed synthetic
 worker must pass **new, same-source** acceptance before extension of
 the claim.
 
-**Still OPEN:** independently accepted native yes/decline/cancel, PIN
-or GUI-session lock / logout revocation, replay and restart; trusted
-real owner-prepared current credential state; installed vault service
-owner-side consume/reserve/finish bridge; installed fixed synthetic
-worker plus authenticated receipt custody; positive non-destructive
-reviewed legacy migration; actual optional provider sandbox checks;
-and all R2C/financial/LIVE gates. As X11 permits other authorized
+**Still OPEN:** independently verified GUI-session lock event refusal
+(including change during a dialog), installed authoritative vault-owner
+prepare/consume/reserve/finish interface, genuine encrypted generation
+and policy binding, independent installed synthetic worker acceptance
+until the native receipt passes, replay/crash and owner-worker restart
+cross-boundary qualification, positive non-destructive reviewed legacy
+migration, optional real-provider sandbox checks only after separate
+authorization, and all R2C/financial/LIVE gates. As X11 permits other authorized
 clients to synthesize UI input, pinned IPC identity alone cannot
 certify that a physical person clicked the confirmation. Dedicated
 session isolation and its limits require explicit security review;
