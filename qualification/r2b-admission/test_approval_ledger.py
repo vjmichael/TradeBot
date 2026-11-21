@@ -133,6 +133,7 @@ class KernelSessionGuard(unittest.TestCase):
         try:
             with patch('operator_session.pwd.getpwnam') as p:
                 p.return_value.pw_uid=os.getuid()+17
+                p.return_value.pw_gid=os.getgid()
                 with self.assertRaises(Refused):attest_operator_peer(one)
         finally:one.close();two.close()
     def test_session_must_be_genuine_active_local_lightdm(self):
