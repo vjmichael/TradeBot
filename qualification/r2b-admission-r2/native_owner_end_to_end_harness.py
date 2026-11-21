@@ -306,7 +306,35 @@ try:
     command('systemctl start '+approval)
     command('systemctl start '+worker)
     command('systemctl restart maj-vaj-paper-vault.service',timeout=45)
-    wait_cmd('test -S /run/maj-vaj-paper-vault/enroll.sock && test -S /run/maj-vaj-r2b-approval/agent.sock && test -S /run/maj-vaj-r2b-synthetic-worker/result.sock',45)
+    try:
+        wait_cmd('test -S /run/maj-vaj-paper-vault/enroll.sock && test -S /run/maj-vaj-r2b-approval/agent.sock && test -S /run/maj-vaj-r2b-synthetic-worker/result.sock',45)
+    except RuntimeError:
+        # Native fixture diagnosis: collect independent service status BEFORE
+        # any diagnostic change. Never authorize or credit a repaired retry.
+        units='maj-vaj-paper-vault.service maj-vaj-r2b-approval.service maj-vaj-r2b-synthetic-worker.service'
+        _,before=command('for u in '+units+'; do systemctl status --no-pager --full "$u"; '+
+            'systemctl show "$u" -p ActiveState -p SubState -p Result -p ExecMainStatus '+
+            '-p LoadState -p ConditionResult -p CredentialsDirectory; done; '+
+            'ls -ld /run/maj-vaj-paper-vault /run/maj-vaj-r2b-approval '+
+            '/run/maj-vaj-r2b-synthetic-worker 2>&1; '+
+            'ls -l /run/maj-vaj-paper-vault/*.sock /run/maj-vaj-r2b-approval/*.sock '+
+            '/run/maj-vaj-r2b-synthetic-worker/*.sock 2>&1',ok=False)
+        (out/'r3-original-startup-status.txt').write_text(before+'\\n')
+        # systemd original units deliberately discard Python traceback.
+        # A fixture-only stderr override captures the first exception, then
+        # the harness ALWAYS fails: never certify modified sandbox custody.
+        for unit in (approval,worker,'maj-vaj-paper-vault.service'):
+            drop='/run/systemd/system/'+unit+'.d'
+            command('mkdir -p '+drop+
+                '; printf "[Service]\\nStandardError=journal\\n" >'+
+                drop+'/r3-diagnostic-only.conf')
+        command('systemctl daemon-reload')
+        _,diag=command('systemctl restart maj-vaj-paper-vault.service; '+
+            'systemctl restart '+approval+'; systemctl restart '+worker+'; '+
+            'sleep 3; journalctl --no-pager -o cat -n 120 '+
+            '-u maj-vaj-paper-vault.service -u '+approval+' -u '+worker,ok=False)
+        (out/'r3-fixture-only-restart-trace.txt').write_text(diag+'\\n')
+        raise
     for unit in (approval,worker,'maj-vaj-paper-vault.service'):
         command('systemctl is-active --quiet '+unit)
     ensure_empty()
