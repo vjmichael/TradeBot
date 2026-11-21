@@ -20,7 +20,7 @@ jobs:
           bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/source" | tee receipt/restore.txt
           test "$(git -C "$RUNNER_TEMP/source" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
           cd "$RUNNER_TEMP/source"
-          for file in scripts/review_session_wrapper.sh scripts/provision_credential_desktop.sh scripts/credential_operator_session.sh credential_graphical.py native_test_review.py scripts/account_handoff_wrapper.sh scripts/provision_account_handoff.sh deploy/maj-vaj-paper-vault.service managed_paper_vault.py vault_owner_hooks.py paper_credential_vault.py; do
+          for file in scripts/review_session_wrapper.sh scripts/credential_session_wrapper.sh scripts/provision_credential_desktop.sh scripts/provision_review_desktop.sh credential_graphical.py reserve_review_session.py reserve_review_launcher.py reserve_review_events.py reserve_ipc.py reserve_checkpoint.py deploy/maj-vaj-account-connections.desktop deploy/maj-vaj-approval-session.desktop scripts/account_handoff_wrapper.sh scripts/provision_account_handoff.sh deploy/maj-vaj-paper-vault.service managed_paper_vault.py vault_owner_hooks.py paper_credential_vault.py; do
             if test -f "$file"; then
               mkdir -p "$GITHUB_WORKSPACE/receipt/$(dirname "$file")"
               cp "$file" "$GITHUB_WORKSPACE/receipt/$file"
@@ -32,6 +32,6 @@ jobs:
           git write-tree > "$GITHUB_WORKSPACE/receipt/frozen-tree.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: r2b-r2-original-source-interfaces
+          name: r2b-r2-complete-session-interfaces
           path: receipt/
           retention-days: 2
