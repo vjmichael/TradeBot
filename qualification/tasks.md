@@ -815,3 +815,28 @@ Frozen source D2 tree `a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b` and R2B R3 rela
 **Failed runs preserved and reconciled:** [44853516075](https://github.com/vjmichael/TradeBot/actions/runs/44853516075) proved lock but fixture omitted `XDG_SEAT_PATH` for LightDM; [44854160149](https://github.com/vjmichael/TradeBot/actions/runs/44854160149) proved lock and seat switch but fixture incorrectly assumed greeter remained on X `:0`. Corrected only the independent native test harness to discover the real greeter display and cookie; one subsequent run passed at unchanged SHA. Neither was a proven production security defect. No stacked CI, main merge, production-code mutation, secret, provider request, financial action or LIVE activation.
 
 **R3 task CLOSED as a bounded native acceptance group. R2A parent / R2B / R2C and release gates remain OPEN** for installed malformed/unauthorized intent, cookie replay and race matrix, protected one-use provider tests and operator receipts, migration/KEK rollback safety, real readiness witnesses, and consolidated financial Gate. **Next independent task:** `TB-SEC-KEY-01-R2A-R1-D2-R3-NATIVE-R4` — finish remaining installed invalid-intent, cookie/session replay and credential/IPC principal-isolation adversarial acceptance; keep successful R1/R2/R3 source-locked receipts intact. The R2B provider/migration and R2C key lifecycle lanes remain separate.
+
+### TB-SEC-KEY-01-R2A-R1-D2-R3-NATIVE-R4 — installed adversarial IPC and replay acceptance (2026-11-20)
+
+**SCOPED NATIVE SECURITY PASS; PARENT RELEASE GATES REMAIN OPEN.** [Successful exact-source CI #44856537336](https://github.com/vjmichael/TradeBot/actions/runs/44856537336), job `136699960753`, accepted unchanged commit `5d0a63a740a4974bec67e853d965cbf89ce49e60`, [receipt artifact #14688037296](https://github.com/vjmichael/TradeBot/actions/runs/44856537336/artifacts/14688037296), independently verified downloaded ZIP SHA-256 `8cc474b1bebb82bbd02bfc8c671b869283909ae2c448a2cbd4045505ff80786d`. [R4 native test contract, source locks, terminal results and exclusions](r2a-native-r4/README.md).
+
+Original D2 production `a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b`, R2B overlay `250310b3409dd4c0feffa33eba1fe74d8b4ca54a`, R2B R2 repaired `12a3c46401d96d616de4f88fa8a42588275d22ae`, R3 relay `89946baeef719d7369887cc7d89a8a4230c7180e` reconstructed and checked with unchanged credential handoff blob `269bdc0b19d8a189496c7ca3b9369c158f85b0f6`. R4 harness blob `7451e502de346b503158b612f9c8943c0c44c2d3`, R4 source tests blob `7b1a64e864a5c95e76bbfceba53262d9991a640a`. Pinned npm dashboard build **PASS**; original handoff guard **9/9 PASS**, combined existing intent/refusal plus added real AF_UNIX adversarial test suite **21/21 PASS**, zero failures.
+
+**Installed Debian 13, no guest NIC, genuine LightDM/PAM, Chromium native Tk and protected PaperVault — all R4 markers PASS:**
+
+| R4 security case | Terminal installed status |
+|---|---|
+| Invalid native desktop URI forms fail closed | **PASS** |
+| Genuine Chromium→external protocol→native Tk confirmation and canceled handoff | **PASS** |
+| Actual Unix socket owner/mode and wrong-UID `SO_PEERCRED` rejection, including root | **PASS** |
+| Malformed, oversized, extra/trailing, incomplete/no-EOF IPC frames receive no ACK | **PASS** |
+| Valid same-UID fixed `OPEN\n` is UI intent only; still needs explicit Tk confirmation; cancel keeps PAM/session/vault | **PASS** |
+| Prior PAM login terminates, old socket retires, old path cannot ACK | **PASS** |
+| New PAM session/current X cookie works; saved old session X cookie replay refuses | **PASS** |
+| Root-owned encryption tag/key files and console Xauthority/credential RPC enforce cross-principal isolation | **PASS** |
+| Independent graphical credential-operator PAM login remains functional, without credential enrollment | **PASS** |
+| Full `R4_NATIVE_ADVERSARIAL_PASS` marker, all acceptance checks and artifact upload | **PASS** |
+
+The same-UID fixed IPC request is intentionally reusable as a **non-authorizing UI intent**; R4 validates mandatory independent native confirmation, not cryptographic anti-replay of that UI signal. Neither a forged request nor a stale cookie grants credential enrollment or trading authority. No production source changes, real credentials, provider calls, trades, financial data mutations, automatic LIVE enablement, main merge or stacked CI.
+
+**R4 CLOSED as a scoped installed negative-security task. R1–R4 native handoff security qualification is complete within its stated threat model.** The wider R2A product/release contract, R2B protected one-use operator admission and provider receipt custody, reviewed legacy migration, independently witnessed service readiness, R2C KEK/rollback/nonce-safe recovery and consolidated PAPER/financial release Gate remain **OPEN**. Recommended next independent work: **`TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2` closeout** — finish installed vault/migration custody, one-use authenticated provider test approval and verified receipt provenance before enabling any provider testing.
