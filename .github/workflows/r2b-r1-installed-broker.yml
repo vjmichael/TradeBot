@@ -1,0 +1,94 @@
+name: R2B R1 installed protected approval broker and owner worker bridge
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2b-admission-r1]
+    paths: ['.github/workflows/r2b-r1-installed-broker.yml']
+permissions:
+  contents: read
+jobs:
+  native-protected-approval:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Reconstruct production source and lock exact new broker, worker bridge and native fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/source-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
+          test "$(git hash-object qualification/r2b-admission-r1/broker_service.py)" = c25093157840a38adb838377d17e62b707c489b3
+          test "$(git hash-object qualification/r2b-admission-r1/maj-vaj-r2b-approval.service)" = f2fa70f064a066b9d04822e7858100902eda6f9a
+          test "$(git hash-object qualification/r2b-admission-r1/test_broker_service.py)" = c4b7a599adf13690886822d245e8c79ae2fe5cc5
+          test "$(git hash-object qualification/r2b-admission-r1/owner_execution_bridge.py)" = 882875e35b046a13a94ffb7f24ca52c7d70c37d7
+          test "$(git hash-object qualification/r2b-admission-r1/test_owner_execution_bridge.py)" = e23ca29f2697cd466dec1f1fd9d1ac1bba99aae9
+          test "$(git hash-object qualification/r2b-admission-r1/native_broker_harness.py)" = 42189a740d0c553ea9e0e3a49fa2349f8e2b80d6
+          test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 39cd2c1b06823f025655b2191bff45988ef2c858
+          test "$(git hash-object qualification/r2b-admission/broker_gateway.py)" = 22155167d8ce887770c2b7b500341e358268a0f0
+          test "$(git hash-object qualification/r2b-admission/operator_session.py)" = b61a656740989cb6b284498503837d2252258fec
+          test "$(git hash-object qualification/r2b-admission/receipt_channel.py)" = c1550d83d299ae061e71e00e2e937139f6f84618
+          test "$(git hash-object qualification/r2b-closeout-custody/worker_receipt_verifier.py)" = 6d3dd869086febb21b2c1f8a50cd1fcc8d62e0dc
+          mkdir "$RUNNER_TEMP/r2b-r3/r2b-admission-r1"
+          cp qualification/r2b-admission-r1/{broker_service,owner_execution_bridge}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r1/"
+          cp qualification/r2b-admission/{approval_ledger,broker_gateway,operator_session,receipt_channel}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r1/"
+          cp qualification/r2b-closeout-custody/worker_receipt_verifier.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r1/"
+          cp qualification/r2b-admission-r1/maj-vaj-r2b-approval.service "$RUNNER_TEMP/r2b-r3/r2b-admission-r1/"
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          git rev-parse HEAD | tee receipt/acceptance-sha.txt
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Requalify exact one-use real SQLite owner bridge and all admission source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/migration:$GITHUB_WORKSPACE/qualification/r2b-closeout-custody:$GITHUB_WORKSPACE/qualification/r2b-admission:$GITHUB_WORKSPACE/qualification/r2b-admission-r1"
+          python -m compileall -q qualification/r2b-admission-r1 qualification/r2b-admission
+          python -m unittest discover -s qualification/r2b-admission-r1 -p test_*.py -v 2>&1 | tee receipt/owner-broker-bridge-tests.txt
+          python -m unittest discover -s qualification/r2b-admission -p test_*.py -v 2>&1 | tee receipt/old-admission-tests.txt
+          python -m unittest -v test_managed_paper_vault test_native_test_review test_reviewed_migration test_worker_receipt_verifier 2>&1 | tee receipt/previous-r2b-tests.txt
+      - name: Preserve prior session handoff and malicious AF_UNIX refusals
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r3/tests:$GITHUB_WORKSPACE/qualification/r2a-native-negative:$GITHUB_WORKSPACE/qualification/r2a-native-r4"
+          python -m unittest discover -s "$RUNNER_TEMP/r2b-r3/tests" -p test_credential_handoff.py -v 2>&1 | tee receipt/accepted-native-guard-tests.txt
+          python -m unittest -v test_credential_intent test_handoff_refusals test_adversarial_intent 2>&1 | tee receipt/accepted-refusal-tests.txt
+      - name: Install Debian VM prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build isolated no-NIC Debian 13 original vault with independent broker candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-r3" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/native" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Qualify installed broker custody, owner peer, cancellation restart and unchanged real GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 qualification/r2b-admission-r1/native_broker_harness.py "$RUNNER_TEMP/r2b-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/installed-broker.txt
+          for marker in R2B_R1_DISABLED_DEFAULT_PASS R2B_R1_INSTALLED_PROTECTED_BROKER_PASS R2B_R1_KERNEL_PRINCIPAL_ISOLATION_PASS R2B_R1_NO_FORGED_NATIVE_APPROVAL_PASS R2B_R1_CANCEL_REPLAY_REFUSAL_PASS R2B_R1_RESTART_REVOKES_PENDING_PASS R2B_R1_ORIGINAL_GUI_UNCHANGED_PASS R2B_R1_INSTALLED_NEGATIVE_BROKER_PASS; do
+            grep -Fx "$marker" receipt/installed-broker.txt
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-r1-native-protected-broker-acceptance
+          path: receipt/
+          retention-days: 5
