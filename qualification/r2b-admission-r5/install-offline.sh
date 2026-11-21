@@ -7,6 +7,11 @@ root=/opt/maj-vaj
 config=/etc/maj-vaj
 marker="$config/r2b-approval-test-enabled"
 seal="$config/r2b-r5-offline-installed"
+transaction="$root/r2b-admission-r5/r5_transaction.py"
+pending="$config/r2b-r5-transaction-pending"
+snapshot="$config/r2b-r5-rollback-snapshot"
+identity="$config/r2b-r5-installed-identity"
+fixture_abort="$config/r2b-r5-fixture-abort-after-first"
 vault=maj-vaj-paper-vault.service
 broker=maj-vaj-r2b-approval.service
 worker=maj-vaj-r2b-synthetic-worker.service
@@ -14,7 +19,7 @@ key="$config/credential-keys/r2b-worker-signing-key"
 die() { echo "R5_INSTALL_REFUSED:$1" >&2; exit 1; }
 [[ $# == 1 ]] || die argument_count
 action="$1"
-case "$action" in install|enable|disable|verify) ;; *) die action ;; esac
+case "$action" in install|enable|disable|verify|recover|rollback|upgrade) ;; *) die action ;; esac
 [[ $(id -u) == 0 ]] || die root_required
 [[ $(systemd-detect-virt) == qemu ]] || die offline_qemu_only
 [[ "$(ls -1 /sys/class/net)" == lo ]] || die network_interface_refused
@@ -30,6 +35,7 @@ base=pathlib.Path(sys.argv[1])
 # Original accepted R3/R4 Git blob identity; no caller-named modules.
 expected={
  'r2b-admission-r1/broker_service.py':'c25093157840a38adb838377d17e62b707c489b3',
+ 'r2b-admission-r5/r5_transaction.py':'f45a91025a156bd6923725648fd7316606f2b76b',
  'r2b-admission-r1/owner_execution_bridge.py':'882875e35b046a13a94ffb7f24ca52c7d70c37d7',
  'r2b-admission-r2/approval_ledger.py':'39cd2c1b06823f025655b2191bff45988ef2c858',
  'r2b-admission-r2/operator_session.py':'b61a656740989cb6b284498503837d2252258fec',
@@ -60,6 +66,64 @@ print('R5_FIXED_NATIVE_SOURCE_LOCK_PASS')
 PY
 }
 
+transaction_cmd() {
+  /usr/bin/python3 -I -B "$transaction" "$1"
+}
+no_pending() {
+  [[ ! -e "$pending" && ! -L "$pending" ]] || die interrupted_transaction_pending
+}
+no_saved_credentials() {
+  # Rollback of executable code is never an authority to discard encrypted
+  # local credentials. A populated vault requires a separate reviewed migration.
+  /usr/bin/python3 -I -B - <<'PY'
+import sqlite3
+from pathlib import Path
+db=Path('/var/lib/maj-vaj-paper-vault/vault.sqlite3')
+if db.exists():
+    try:
+        with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True) as s:
+            if s.execute('SELECT count(*) FROM secrets').fetchone()[0]:
+                raise SystemExit('R5_INSTALL_REFUSED:credential_bearing_rollback')
+    except sqlite3.DatabaseError:
+        raise SystemExit('R5_INSTALL_REFUSED:vault_integrity_unavailable') from None
+print('R5_R1_EMPTY_VAULT_FOR_ROLLBACK_PASS')
+PY
+}
+rollback_files() {
+  # Always revoke first, including after SIGKILL or a previous partial copy.
+  if [[ -e "$marker" || -L "$marker" ]]; then
+    [[ -f "$marker" && ! -L "$marker" && "$(stat -c '%u:%a:%h' "$marker")" == '0:644:1' ]] || die marker_custody_refused
+    rm -f -- "$marker"
+  fi
+  systemctl stop "$broker" "$worker" "$vault"
+  check_bundle
+  no_saved_credentials
+  transaction_cmd restore
+  for unit in "$broker" "$worker"; do
+    rm -f -- "/etc/systemd/system/$unit"
+    rm -f -- "/etc/systemd/system/$unit.d/10-r5-qemu-only.conf"
+  done
+  systemctl daemon-reload
+  systemctl restart "$vault"
+  wait_socket "$vault" /run/maj-vaj-paper-vault-status/status.sock
+  # This signing key belongs solely to the isolated synthetic-denial worker.
+  # Never delete venue-vault-key or provider-tag-key.
+  if [[ -e "$key" || -L "$key" ]]; then
+    check_key
+    rm -f -- "$key"
+  fi
+  if [[ -e "$seal" || -L "$seal" ]]; then
+    check_seal
+    rm -f -- "$seal"
+  fi
+  transaction_cmd cleanup
+  if [[ -e "$root/.r5-stage" || -L "$root/.r5-stage" ]]; then
+    [[ -d "$root/.r5-stage" && ! -L "$root/.r5-stage" &&
+       "$(stat -c '%u:%a' "$root/.r5-stage")" == '0:700' ]] || die stage_custody_refused
+    rm -rf -- "$root/.r5-stage"
+  fi
+  echo R5_R1_RECOVERY_ROLLBACK_PASS
+}
 check_key() {
   [[ -f "$key" && ! -L "$key" ]] || die signing_key_missing
   [[ "$(stat -c '%u:%g:%a:%h:%s' "$key")" == '0:0:600:1:32' ]] || die signing_key_custody
@@ -96,6 +160,8 @@ check_units() {
 case "$action" in
   install)
     [[ ! -e "$seal" && ! -L "$seal" ]] || die already_installed
+    [[ ! -e "$snapshot" && ! -L "$snapshot" ]] || die stale_rollback_snapshot
+    no_pending
     [[ ! -e "$marker" && ! -L "$marker" ]] || die approval_marker_preexisting
     check_bundle
     for u in maj-vaj-vault maj-vaj-approval maj-vaj-credential-operator; do
@@ -113,10 +179,17 @@ case "$action" in
     install -m 0644 "$root/deploy/$vault" "$root/.r5-stage/deploy/$vault"
     "$root/venv/bin/python" -I -B "$root/r2b-admission-r2/patch_owner_vault.py" "$root/.r5-stage"
     "$root/venv/bin/python" -I -B -m py_compile "$root/.r5-stage/"*.py
-    # All immutable source and patch checks have completed before mutation.
-    groupadd --system maj-vaj-r2b-approval-rpc
+    # Durable independent rollback bytes are synced BEFORE user, key,
+    # systemd or source mutation. A crash makes enable/verify refuse.
+    transaction_cmd prepare
+    if ! getent group maj-vaj-r2b-approval-rpc >/dev/null; then
+      groupadd --system maj-vaj-r2b-approval-rpc
+    fi
     usermod -aG maj-vaj-r2b-approval-rpc maj-vaj-vault
-    useradd --system --user-group --no-create-home --shell /usr/sbin/nologin maj-vaj-r2b-worker
+    if ! id -u maj-vaj-r2b-worker >/dev/null 2>&1; then
+      useradd --system --user-group --no-create-home --shell /usr/sbin/nologin maj-vaj-r2b-worker
+    fi
+    [[ "$(getent passwd maj-vaj-r2b-worker | cut -d: -f7)" == '/usr/sbin/nologin' ]] || die worker_principal_tampered
     /usr/bin/python3 -I -B - "$key" <<'PY'
 import os,sys
 fd=os.open(sys.argv[1],os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
@@ -132,6 +205,11 @@ PY
     systemctl stop "$vault"
     for p in paper_credential_vault.py managed_rpc.py credential_graphical.py; do
       install -o root -g root -m 0644 "$root/.r5-stage/$p" "$root/$p"
+      if [[ "$p" == paper_credential_vault.py && -f "$fixture_abort" && ! -L "$fixture_abort" &&
+          "$(stat -c '%u:%a:%h' "$fixture_abort")" == '0:600:1' ]]; then
+        # Privileged QEMU-only deterministic SIGKILL test. Journal persists.
+        kill -KILL "$"
+      fi
     done
     install -o root -g root -m 0644 "$root/.r5-stage/deploy/$vault" "$root/deploy/$vault"
     install -o root -g root -m 0644 "$root/deploy/$vault" "/etc/systemd/system/$vault"
@@ -149,16 +227,20 @@ PY
     ! systemctl is-active --quiet "$broker" || die broker_not_disabled
     ! systemctl is-active --quiet "$worker" || die worker_not_disabled
     test ! -e "$marker" || die unsafe_marker
+    transaction_cmd commit
     printf 'R5:offline-synthetic-only:v1\n' | install -o root -g root -m 0644 /dev/stdin "$seal"
+    transaction_cmd verify
     trap - ERR
     echo R5_INSTALLED_DISABLED_DEFAULT_PASS
     ;;
   verify)
     check_seal; check_bundle; check_key; check_units
+    transaction_cmd verify
     echo R5_INSTALLED_CUSTODY_VERIFIED_PASS
     ;;
   enable)
     check_seal; check_bundle; check_key; check_units
+    transaction_cmd verify
     if [[ -e "$marker" || -L "$marker" ]]; then
       [[ -f "$marker" && ! -L "$marker" && "$(stat -c '%u:%a:%h' "$marker")" == '0:644:1' ]] || die marker_custody_refused
     else
@@ -182,5 +264,23 @@ PY
     ! systemctl is-active --quiet "$broker" || die broker_active_after_disable
     ! systemctl is-active --quiet "$worker" || die worker_active_after_disable
     echo R5_OFFLINE_REVOCATION_PASS
+    ;;
+  upgrade)
+    # Exact same-SHA idempotent admission only. A changed program/metadata
+    # cannot be "upgraded" by silently minting a new authorization or key.
+    check_seal; check_bundle; check_key; check_units
+    transaction_cmd verify
+    [[ ! -e "$marker" && ! -L "$marker" ]] || die upgrade_requires_disabled
+    ! systemctl is-active --quiet "$broker" || die upgrade_requires_disabled
+    ! systemctl is-active --quiet "$worker" || die upgrade_requires_disabled
+    echo R5_R1_SAME_SOURCE_UPGRADE_PASS
+    ;;
+  recover)
+    [[ -f "$pending" && ! -L "$pending" ]] || die recovery_requires_pending
+    rollback_files
+    ;;
+  rollback)
+    [[ -e "$snapshot" && ! -L "$snapshot" ]] || die rollback_snapshot_unavailable
+    rollback_files
     ;;
 esac
