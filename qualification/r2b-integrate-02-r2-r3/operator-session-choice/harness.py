@@ -211,8 +211,13 @@ try:
     assert read_status()['kraken_read_key']=='not_configured'
     x('windowfocus '+win);shot('10-credential-window')
     # Exact Tk window top-left is +30+30; query geometry and use real keyboard traversal.
-    click(180,190);type_text('d2-synthetic-kraken-read-key');key('Tab');type_text('d2-synthetic-kraken-read-secret');key('Tab','space','Tab','Return');time.sleep(1)
-    shot('11-enrollment')
+    # Grounded in installed Tk screenshot: real masked fields at y=234/281,
+    # confirmation at y=316, Save/replace at x=100,y=349.
+    click(220,234);type_text('d2-synthetic-kraken-read-key')
+    click(220,281);type_text('d2-synthetic-kraken-read-secret')
+    click(54,316);shot('11-reviewed-synthetic-form')
+    click(104,349);time.sleep(2)
+    shot('12-enrollment')
     status=read_status()
     assert status['kraken_read_key']==status['kraken_read_secret']=='stored_unverified',status
     print('PASS independent graphical paired enrollment and status-only confirmation',flush=True)
