@@ -15,7 +15,12 @@ import pwd
 import socket
 import socketserver
 import stat
+import sys
 import time
+
+# -I deliberately drops the script directory and cwd from sys.path.
+# Register only the fixed root-owned installed modules, never a client path.
+sys.path[:0]=['/opt/maj-vaj/r2b-admission-r2','/opt/maj-vaj']
 
 from operator_session import peer_from_socket
 from synthetic_worker_protocol import one_frame,sign_denial
