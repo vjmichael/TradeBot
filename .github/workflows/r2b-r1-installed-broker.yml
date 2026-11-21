@@ -33,7 +33,7 @@ jobs:
           test "$(git hash-object qualification/r2b-admission-r1/test_broker_service.py)" = c4b7a599adf13690886822d245e8c79ae2fe5cc5
           test "$(git hash-object qualification/r2b-admission-r1/owner_execution_bridge.py)" = 882875e35b046a13a94ffb7f24ca52c7d70c37d7
           test "$(git hash-object qualification/r2b-admission-r1/test_owner_execution_bridge.py)" = e23ca29f2697cd466dec1f1fd9d1ac1bba99aae9
-          test "$(git hash-object qualification/r2b-admission-r1/native_broker_harness.py)" = 42189a740d0c553ea9e0e3a49fa2349f8e2b80d6
+          test "$(git hash-object qualification/r2b-admission-r1/native_broker_harness.py)" = fdb1cbac1025e4f90e20300822dcf2fddfe398ab
           test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 39cd2c1b06823f025655b2191bff45988ef2c858
           test "$(git hash-object qualification/r2b-admission/broker_gateway.py)" = 22155167d8ce887770c2b7b500341e358268a0f0
           test "$(git hash-object qualification/r2b-admission/operator_session.py)" = b61a656740989cb6b284498503837d2252258fec
