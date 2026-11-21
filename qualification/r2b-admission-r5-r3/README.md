@@ -1,6 +1,6 @@
 # R5-R3 — production installer preparation and protected upgrade custody
 
-**Status: PLANNED / NOT ACCEPTED.** R5-R2-R1 is scoped accepted at exact source `162edb29d60abe8e373c2e961333611d74f13717`, [original native run #44913129057](https://github.com/vjmichael/TradeBot/actions/runs/44913129057), with **235/235** source tests, **4/4** offline QEMU scenarios and independently verified artifact #14710224310 (SHA-256 `504df835b71902df69701a532f23ae3fcbb66b4718114c17d2f1bce025471ff6`). This document defines **the next work**, not acceptance of production deployment.
+**Status: R5-R3A source implemented and locally host-qualified; R5-R3B–D NOT ACCEPTED.** R5-R2-R1 is scoped accepted at exact source `162edb29d60abe8e373c2e961333611d74f13717`, [original native run #44913129057](https://github.com/vjmichael/TradeBot/actions/runs/44913129057), with **235/235** source tests, **4/4** offline QEMU scenarios and independently verified artifact #14710224310 (SHA-256 `504df835b71902df69701a532f23ae3fcbb66b4718114c17d2f1bce025471ff6`). This document defines **the next work**, not acceptance of production deployment.
 
 ## Engineering execution policy
 
@@ -8,7 +8,7 @@
 - **No Docker.** Batch source/staging changes with local preflight; do not push a new CI workflow trigger for every subtask. Retain the accepted R5-R2-R1 original matrix and receipts. No default-branch merge until independent release review.
 - **Default PAPER, fail-closed and disabled.** Never use production credentials, access real Kraken endpoints, place orders, turn on LIVE, or claim a production installer solely from offline synthetic success.
 
-## R5-R3A — publisher and package trust contract (next)
+## R5-R3A — publisher and package trust contract (source implemented)
 
 1. Define a deterministic package manifest: publisher identity, release/version and anti-rollback epoch, permitted file inventory, hashes, exact schema compatibility, target OS/architecture, service identities and installation paths. Cryptographically bind this manifest to a reviewed signed package and a separately preprovisioned publisher trust root; the package must not install or replace its own root of trust.
 2. Define protected trust-root enrollment, rotation and revocation under separate authenticated operator/administrator authority. Reject unknown/revoked signers, altered packages, manifest substitution, replay, out-of-order releases, unauthorized downgrades and swapped executable/service identities. An authenticated rollback may restore the prior *approved* release without granting arbitrary downgrade.
@@ -36,4 +36,15 @@ Qualify a non-trading staging installation on actual Debian/VPS with OS-backed o
 
 R5-R2-R1's proven Ed25519 signed *test* v1→v2 upgrade is a narrowly compatible, offline synthetic code-only change. It does not prove production trust enrollment, rotation/revocation, credential-bearing schema migration, physical installed release, real Kraken privileges, X11 physical-user provenance or LIVE trading. R5-R3 remains **OPEN** pending separately verified receipts.
 
-**Immediate next coding task: `TB-SEC-KEY-01-R2B-ADMISSION-R5-R3A` — implement the independent host-side publisher manifest/trust verifier and refusal tests without introducing a CI trigger.**
+**Immediate next coding task: `TB-SEC-KEY-01-R2B-ADMISSION-R5-R3B-R1` — connect the read-only verifier to a root-protected, durable staging/installed-receipt boundary. No credential migration or live-provider admission.**
+
+
+## R5-R3A host-side verifier implementation (local host PASS; no CI triggered)
+
+- New `publisher_verifier.py` (Git blob `595a4e6ffa22db8bdd226f99ddbc5013ceaea4aa`) is a **read-only Python 3 verifier**. It expects a separately provisioned canonical trust-policy byte string and independently protected installed-state byte string from a **trusted caller**, never from the candidate package. It does not write files, enroll trust, execute installer commands, enable systemd units, contact the network or authorize trading.
+- Exact canonical JSON / duplicate-key refusal, strict schema and size limits, domain-separated **Ed25519** verification, SHA-256 key IDs and source payload digests, bounded O_NOFOLLOW file reads, no symlink/hardlink/undeclared files, pinned install destinations/modes and platform (`linux/x86_64`), signed service user/group declarations checked against both separately provisioned policy and unit contents, unchanged data schema and **PAPER staging scope only**.
+- Policy records active/revoked Ed25519 public keys, key epoch windows, publisher identity, trust generation/epoch floor and exact target/service inventory. Installation state records last accepted release sequence, security epoch, trust generation, schema version and manifest digest. Rejects unknown issuers/keys, revoked/expired/not-yet-authorized keys, mismatched signatures or data, replay, downgrade, stale policy generation, schema migration, LIVE scope and unit identity substitution.
+- New `test_publisher_verifier.py` (Git blob `458d2428ec6fee67e4f8ca2411b4bfd79b934125`) uses **ephemeral in-memory test signing keys**; no persistent signing secret or real credentials. Host-only command: `python -m unittest discover -s qualification/r2b-admission-r5-r3 -p 'test_*.py' -v`. Independent local Python 3.13.5 / cryptography 46.0.4 run passed **41/41** in ~0.06s; `python -m compileall` passed; Git blob IDs exactly matched the local tested files. This is a **local source receipt, not GitHub native CI or production installed acceptance**.
+- **Explicit custody limit:** the verifier cannot establish that the supplied trust policy/installed state are genuine; production identity, immutable root custody, secure enrollment/rotation/revocation and transactional persistence must be implemented in R5-R3B. A compromised caller, mutable package between verification and installation, systemd drop-ins, credential-bearing migrations and physical installation are outside this source gate. A successful verifier result **does not install, enable, authorize LIVE or approve money movement**.
+
+**Next:** R5-R3B-R1 protected on-disk policy and release-state custody, immutable staging, repeated readback/revalidation, journaled admission and refusal tests. Keep host-first testing; batch any future CI acceptance.
