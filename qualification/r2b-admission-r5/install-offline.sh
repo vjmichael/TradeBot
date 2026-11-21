@@ -300,8 +300,34 @@ PY
     ! systemctl is-active --quiet "$broker" || die broker_not_disabled
     ! systemctl is-active --quiet "$worker" || die worker_not_disabled
     test ! -e "$marker" || die unsafe_marker
+    # The fixed original unit and R5 metadata journal were already synced;
+    # persist every installed code/unit/key file and parent directory
+    # BEFORE removing the pending transaction marker. Otherwise abrupt
+    # QEMU power loss can resurrect old source or an incomplete unit.
+    for p in paper_credential_vault.py managed_rpc.py credential_graphical.py; do
+      sync -f "$root/$p"
+    done
+    sync -f "$root"
+    sync -f "$root/deploy/$vault"
+    sync -f "$root/deploy"
+    for unit in "$vault" "$broker" "$worker"; do
+      sync -f "/etc/systemd/system/$unit"
+    done
+    for unit in "$broker" "$worker"; do
+      sync -f "/etc/systemd/system/$unit.d/10-r5-qemu-only.conf"
+      sync -f "/etc/systemd/system/$unit.d"
+    done
+    sync -f "/etc/systemd/system"
+    sync -f "$key"
+    sync -f "$config/credential-keys"
     transaction_cmd commit
+    # The completion seal is a durable admission boundary, not an
+    # unflushed install(1) write. It must survive power loss before any
+    # later signed upgrade or protected-service activation may proceed.
     printf 'R5:offline-synthetic-only:v1\n' | install -o root -g root -m 0644 /dev/stdin "$seal"
+    sync -f "$seal"
+    sync -f "$config"
+    check_seal
     transaction_cmd verify
     trap - ERR
     echo R5_INSTALLED_DISABLED_DEFAULT_PASS
