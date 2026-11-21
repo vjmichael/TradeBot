@@ -28,8 +28,11 @@ def shot(name):
     mon('screendump '+str(out/(name+'.ppm')))
     subprocess.run(['convert',str(out/(name+'.ppm')),str(out/(name+'.png'))],check=True)
     (out/(name+'.ppm')).unlink()
+ACTIVE_DISPLAY=':0'
+def root_x():
+    return 'DISPLAY='+ACTIVE_DISPLAY+' XAUTHORITY=/run/lightdm/root/'+ACTIVE_DISPLAY
 def x(args,ok=True):
-    return command('DISPLAY=:0 XAUTHORITY=/run/lightdm/root/:0 xdotool '+args,ok=ok)[1]
+    return command(root_x()+' xdotool '+args,ok=ok)[1]
 def key(*keys):x('key --clearmodifiers '+ ' '.join(keys));time.sleep(.3)
 def type_text(t):x('type --clearmodifiers --delay 30 -- '+shlex.quote(t))
 def click(xpos,ypos):x(f'mousemove {xpos} {ypos} click 1');time.sleep(.4)
@@ -46,17 +49,29 @@ def assert_active(user):
     sid=wait_cmd("id=$(loginctl list-sessions --no-legend | awk '$3==\""+user+"\" && $4==\"seat0\" {print $1}'); test -n \"$id\" && test \"$(loginctl show-session \"$id\" -p Active --value)\" = yes && test \"$(loginctl show-session \"$id\" -p Type --value)\" = x11 && test \"$(loginctl show-session \"$id\" -p Remote --value)\" = no && test \"$(loginctl show-session \"$id\" -p LockedHint --value)\" = no && echo \"$id\"",75)
     return sid.strip()
 def wait_window(name,timeout=70):
-    return wait_cmd('DISPLAY=:0 XAUTHORITY=/run/lightdm/root/:0 xdotool search --onlyvisible --name '+shlex.quote(name)+' | head -1 | grep -E "^[0-9]+$"',timeout).splitlines()[-1]
+    return wait_cmd(root_x()+' xdotool search --onlyvisible --name '+shlex.quote(name)+' | head -1 | grep -E "^[0-9]+$"',timeout).splitlines()[-1]
 def greeter():
-    # Linux comm is limited to 15 characters; use anchored argv and the same UID.
-    # A process match is only readiness, never a substitute for actual PAM/session assertions.
+    """Find the *active* LightDM greeter display, not a stale X :0 cookie.
+
+    dm-tool switch-to-greeter starts a new X server, often :1, while
+    terminating the prior console may retire /run/lightdm/root/:0.
+    Read only DISPLAY from the trusted installed greeter process, then
+    validate the corresponding root-owned Xauthority cookie and X socket.
+    """
+    global ACTIVE_DISPLAY
+    pid_cmd="pgrep -u lightdm -f '^([^[:space:]]*/)?lightdm-gtk-greeter([[:space:]]|$)' | head -1"
+    env_cmd="p=$("+pid_cmd+"); test -n \"$p\" && tr '\\000' '\\n' <\"/proc/$p/environ\" | grep -E '^DISPLAY=:[0-9]+$' | head -1"
     try:
-        wait_cmd("pgrep -u lightdm -f '^([^[:space:]]*/)?lightdm-gtk-greeter([[:space:]]|$)' >/dev/null && test -e /run/lightdm/root/:0",75)
-    except RuntimeError:
-        _, report=command("systemctl show lightdm -p ActiveState -p SubState -p Result; if test -e /run/lightdm/root/:0; then echo display_cookie_present; else echo display_cookie_missing; fi; if pgrep -u lightdm -f '^([^[:space:]]*/)?lightdm-gtk-greeter([[:space:]]|$)' >/dev/null; then echo greeter_process_present; else echo greeter_process_missing; fi",ok=False)
-        (out/'greeter-readiness.txt').write_text(report+'\n')
+        display_line=wait_cmd(env_cmd,75).splitlines()[-1]
+        assert re.fullmatch(r'DISPLAY=:[0-9]+',display_line),display_line
+        ACTIVE_DISPLAY=display_line.split('=',1)[1]
+        wait_cmd('test -e /run/lightdm/root/'+ACTIVE_DISPLAY+' && '+root_x()+' xdotool getdisplaygeometry >/dev/null',25)
+    except (RuntimeError,AssertionError):
+        _,state=command("systemctl show lightdm -p ActiveState -p SubState -p Result; "+pid_cmd+"; find /run/lightdm/root -maxdepth 1 -name ':*' -printf '%f\\n' 2>/dev/null",ok=False)
+        (out/'greeter-readiness.txt').write_text('active_display='+ACTIVE_DISPLAY+'\n'+state+'\n')
         raise
     time.sleep(3)
+
 def fixture_physical_keys(text):
     # Only these disposable fixture passwords have this deliberately limited alphabet.
     if not re.fullmatch(r'[a-z0-9-]+',text):
@@ -122,7 +137,7 @@ def await_browser_consent(timeout=35):
     raise RuntimeError('browser_external_app_permission_not_visible')
 
 def visible(title):
-    rc,_=command('DISPLAY=:0 XAUTHORITY=/run/lightdm/root/:0 xdotool search --onlyvisible --name '+shlex.quote(title)+' >/dev/null 2>&1',ok=False)
+    rc,_=command(root_x()+' xdotool search --onlyvisible --name '+shlex.quote(title)+' >/dev/null 2>&1',ok=False)
     return rc == 0
 
 def ensure_empty():
@@ -194,7 +209,7 @@ try:
     time.sleep(3)
     if visible('Maj Vaj.*Open account connections'):
         x('windowfocus '+locked_modal);key('Return')
-    wait_cmd("! DISPLAY=:0 XAUTHORITY=/run/lightdm/root/:0 xdotool search --onlyvisible --name 'Maj Vaj.*Open account connections' | grep -q .",30)
+    wait_cmd("! "+root_x()+" xdotool search --onlyvisible --name 'Maj Vaj.*Open account connections' | grep -q .",30)
     assert not session('maj-vaj-credential-operator')
     ensure_empty()
     shot('02-after-session-lock')
@@ -214,7 +229,7 @@ try:
     _,seats=command('/usr/bin/dm-tool list-seats',timeout=12)
     assert re.search(r'\bSeat0\b',seats), 'installed_LightDM_seat0_missing'
     seat_path='/org/freedesktop/DisplayManager/Seat0'
-    switch_env='XDG_SEAT_PATH='+shlex.quote(seat_path)+' DISPLAY=:0 XAUTHORITY=/home/maj-vaj-console/.Xauthority XDG_RUNTIME_DIR=/run/user/$(id -u maj-vaj-console)'
+    switch_env='XDG_SEAT_PATH='+shlex.quote(seat_path)+' DISPLAY='+ACTIVE_DISPLAY+' XAUTHORITY=/home/maj-vaj-console/.Xauthority XDG_RUNTIME_DIR=/run/user/$(id -u maj-vaj-console)'
     command('runuser -u maj-vaj-console -- env '+switch_env+' /usr/bin/dm-tool switch-to-greeter',timeout=20)
     greeter()
     assert not session('maj-vaj-credential-operator')
