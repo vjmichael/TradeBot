@@ -238,7 +238,7 @@ try:
       "from approval_ledger import Witness,Refused;"
       "from operator_session import _systemd_pid_session,check_live_session;"
       "try_session=None;"
-      "exec('try:\\n try_session=_systemd_pid_session(os.getpid())\\n except Refused:pass');"
+      "exec('try:\\n try_session=_systemd_pid_session(os.getpid())\\nexcept Refused:pass');"
       "assert try_session is None or not check_live_session(Witness(try_session,os.getuid()));"
       "print('R2B_NATIVE_NON_GUI_SAME_UID_REFUSAL_PASS')"
     )
@@ -255,7 +255,7 @@ try:
       "from approval_ledger import Witness,Refused;"
       "from operator_session import check_live_session;"
       "sid=sys.argv[1];uid=pwd.getpwnam('maj-vaj-credential-operator').pw_uid;"
-      "exec('try:\\n assert not check_live_session(Witness(sid,uid))\\n except Refused:pass');"
+      "exec('try:\\n assert not check_live_session(Witness(sid,uid))\\nexcept Refused:pass');"
       "print('R2B_NATIVE_EXPIRED_PAM_SESSION_REFUSED_PASS')"
     )
     res=command('/usr/bin/python3 -I -B -c '+shlex.quote(gone)+' '+shlex.quote(sid))[1]
