@@ -1,11 +1,130 @@
 # TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2-ADMISSION-R2
 
-**Task status: IN PROGRESS / not a release gate.**
+**Task status: SCOPED R2 NATIVE SYNTHETIC ACCEPTANCE PASS; real provider and financial release gates remain OPEN.**
 All code is isolated on
 `qualification/tb-sec-key-01-r2b-admission-r2`, branched from accepted R1
 documentation `4802c2199af54a8fddac75e07864875c8057c0d0`.
 No default branch merge, provider network operation, real credentials,
 financial execution or LIVE authority.
+
+## Terminal same-SHA acceptance — 2026-11-21 UTC
+
+**Full installed source and native synthetic end-to-end PASS:**
+[GitHub Actions run #44870540390](https://github.com/vjmichael/TradeBot/actions/runs/44870540390),
+job `136743841744`, exact tested commit
+`09a73108073e2324a85b9ce532fff8edd7988240`.
+[Artifact #14694290035](https://github.com/vjmichael/TradeBot/actions/runs/44870540390/artifacts/14694290035)
+was independently downloaded and SHA-256 verified against the
+GitHub artifact digest:
+`b3c449579f8a622d7b83a750318d0bef5030d5a74d74de6faec83501d1f565f5`.
+The receipts include source locks, original frozen source/tree reconstruction,
+the source-level guarded overlay, Debian package list, empty `dpkg-audit.txt`,
+six authentic QEMU graphical screenshots, and actual native receipts.
+No production mainline or physical user's desktop was modified.
+
+| Independently source-locked test group | Result |
+|---|---|
+| New R2 GUI agent, synthetic-only worker and owner coordinator source | **31/31 PASS** |
+| Prior R1 owner/broker source | **22/22 PASS** |
+| Earlier one-use native session approval and HMAC source | **51/51 PASS** |
+| Managed vault, migration refusal and worker receipt source | **71/71 PASS** |
+| Original handoff | **9/9 PASS** |
+| Original intent, cancellation and adversarial AF_UNIX | **21/21 PASS** |
+| **Total same-source** | **205/205 PASS** |
+
+**Installed offline Debian 13 QEMU genuine operator/multiple systemd service acceptance** — all **9/9 markers PASS**:
+
+| Installed result | Terminal marker |
+|---|---|
+| Broker/worker without explicit root-owned qualification marker refuse startup | `R2B_R2_END_TO_END_DEFAULT_REFUSAL_PASS` |
+| Original vault owner, independent broker, independent worker and all three protected Unix sockets available under systemd custody | `R2B_R2_END_TO_END_INSTALLED_OWNER_CUSTODY_PASS` |
+| Fixed provider test refuses when no authoritatively encrypted Kraken read-only pair exists | `R2B_R2_END_TO_END_MISSING_CREDENTIAL_REFUSAL_PASS` |
+| Real original Account Connections Tk saves a disposable pair with authentic encrypted credential generation/policy | `R2B_R2_END_TO_END_ENCRYPTED_GENERATION_PASS` |
+| Actual native Cancel durably refuses broker grant without beginning a worker attempt | `R2B_R2_END_TO_END_NATIVE_CANCEL_NO_WORKER_PASS` |
+| Actual native **OK**, exact request/session latch, single owner broker consume, authoritative `OwnerHooks.begin`, independent signed synthetic `provider_refused` and `OwnerHooks.finish` change encrypted metadata while both credential slots remain `stored_unverified` | `R2B_R2_END_TO_END_NATIVE_SIGNED_DENIAL_PASS` |
+| Second attempt to finish consumed request refused, with no additional stored approval consumption | `R2B_R2_END_TO_END_REPLAY_REFUSAL_PASS` |
+| Actual LightDM operator logout, broker/vault service restart, one-use receipt preserved and original unverified credential state unchanged | `R2B_R2_END_TO_END_LOGOUT_RESTART_REFUSAL_PASS` |
+| Consolidated **end-to-end installed SYNTHETIC-only** acceptance | `R2B_R2_INSTALLED_END_TO_END_SYNTHETIC_PASS` |
+
+The prior independent subsystems also passed without weakening acceptance:
+[real LightDM native review #44868873434](https://github.com/vjmichael/TradeBot/actions/runs/44868873434),
+SHA `5848013fcfe18b922c2d426d99929b7e3ba9365e`,
+**8/8 native**; and
+[separate systemd synthetic-worker HMAC custody #44869628432](https://github.com/vjmichael/TradeBot/actions/runs/44869628432),
+SHA `de7748c7cfa7ae76515256e567434b0a6ad37b7c`,
+**7/7 native** and **11/11 source**. These are separate exact-source
+receipts. The new end-to-end result is the decisive R2 candidate SHA.
+
+### Failure history and exact-source repairs
+
+- [#44867939143](https://github.com/vjmichael/TradeBot/actions/runs/44867939143):
+  source passed; broker wrongly expected real native GUI PID to equal
+  the LightDM session leader; observed the original fixed GUI was a
+  genuine direct child, then required the real kernel PPID, PAM session,
+  and kernel socket peer, without relaxing same-UID isolation.
+- [#44868453665](https://github.com/vjmichael/TradeBot/actions/runs/44868453665):
+  genuine native Cancel passed; key Return did not click the intended
+  native OK, and request remained pending. The successful GUI run used
+  the screenshot-confirmed real OK control and exact per-request latch.
+- [#44869299133](https://github.com/vjmichael/TradeBot/actions/runs/44869299133):
+  separate worker could not start because the exact
+  `approval_ledger.py` import needed by its kernel peer helper was not
+  packaged. Corrected without altering worker key/receipt policy.
+- [#44869988835](https://github.com/vjmichael/TradeBot/actions/runs/44869988835):
+  full owner source group failed one cancellation test because the new
+  wrapper caught only the derived refusal class, not the original
+  `vault_owner_hooks.Refused`. Fixed cancellation to fail closed and
+  spend the local pending request.
+- [#44870100466](https://github.com/vjmichael/TradeBot/actions/runs/44870100466):
+  source **205/205 PASS**, but original vault service had no
+  `owner_execution_bridge.py` in the installed R2 Python import
+  directory. Source-lock qualified the corrected module packaging
+  and installed import graph, then [#44870540390](https://github.com/vjmichael/TradeBot/actions/runs/44870540390)
+  passed the full Debian acceptance.
+- All historical failures remain in GitHub; none authorizes weakening
+  a production security gate or treating a caller boolean as review.
+
+### Hard boundaries and remaining obligations
+
+**R2 is accepted for an OFFLINE SYNTHETIC REFUSAL path only.** The
+worker can return only `provider_refused` with the explicit
+`maj-vaj-synthetic-no-network-refusal-v1` worker identity and separate
+HMAC domain. It has `PrivateNetwork=yes`, no real adapter,
+no destination selector and no source of positive Kraken or Telegram
+permission verification. The owner/test unit variants and the fixed
+review/finish operations all require an explicit, root-owned
+`r2b-approval-test-enabled` marker and are not merged into mainline.
+The user's installed product is unchanged. The original PAPER status
+still shows `stored_unverified`, `connections_verified=false`,
+`deployment_ready=false`; no financial or LIVE gate is enabled.
+
+Real native **lock or seat switch during an open approval modal**
+and unexpected session death/recovery must still be independently
+requalified at the combined owner/worker same SHA, including
+rapid revoke/race/PID reuse. Unit-level `SessionEvents` refusal
+exists but does not substitute for installed adversarial acceptance.
+The use of X11 also means kernel/PAM-bound IPC does **not** independently
+prove a physical user's click against a compromised, display-authorized
+same-session X client. A stronger UI isolation/consent contract and
+security review remain required before real provider authority.
+
+Positive reviewed legacy ciphertext migration under authentic
+one-use approval is not installed-qualified, and R2C independent key
+rotation, loss/restore, rollback, real permission-limited provider
+sandbox evidence, Telegram/Grok destination policy, financial controls,
+funds, trades and LIVE activation remain OPEN. Any positive external
+provider test must require separate operator authorization, narrowly
+bounded network egress, and actual source-locked independent receipt
+verification. Nothing here constitutes that authorization.
+
+**Recommended next security task:**
+`TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2-ADMISSION-R3` —
+reconcile existing independent R3 native qualification, test lock/seat
+switch/logout and malicious X11 input in the integrated owner-worker
+workflow, prove irreversible revocation and unknown-delivery recovery,
+and only then prepare separately authorized provider sandbox and
+positive reviewed legacy migration acceptance. Do not conflate
+another branch's partial/failing CI with R2's accepted exact SHA.
 
 ## Immutable source and implemented candidates
 
