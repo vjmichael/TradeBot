@@ -26,10 +26,15 @@ jobs:
           test "$(sha256sum "$RUNNER_TEMP/r2b-r3/credential_graphical.py" | cut -d' ' -f1)" = 74cd63e6533c237f5222c151c00548dd2631a95b2b69f147bf8c3871f32a5a9f
           test "$(git hash-object qualification/r2b-admission-r2/native_agent_harness.py)" = 88f39f5d761822360bd64e5152df30e829805fd1
           test "$(git hash-object qualification/r2b-admission-r2/native_agent_protocol.py)" = 62bc716449395b8fbd3aeb933cf3cd37e5d8c257
-          test "$(git hash-object qualification/r2b-admission-r2/agent_broker_channel.py)" = 4090c99aa4d65af1c8b360accc07475c4dd05ecf
+          test "$(git hash-object qualification/r2b-admission-r2/agent_broker_channel.py)" = d9e124cb86c1e34a3bd27a646cebd6f2ef98d8ab
           test "$(git hash-object qualification/r2b-admission-r2/broker_service_r2.py)" = d23128df0cdcb9c80220eb6b507c325434aac97c
           test "$(git hash-object qualification/r2b-admission-r2/patch_credential_gui.py)" = 17b1315a903edb9b92d9c052c3988ed8984b13b2
-          test "$(git hash-object qualification/r2b-admission-r2/maj-vaj-r2b-approval.service)" = 0cad9dc88caef22b7b8127237a19eb3009b17e15
+          test "$(git hash-object qualification/r2b-admission-r2/maj-vaj-r2b-approval.service)" = 379a0cd1f34795c3b1361d69a5ad63e3d3fb7fc2
+          test "$(git hash-object qualification/r2b-admission-r2/test_agent_channel.py)" = 746b8064229a5fe404b6f4d422571b0b5444df55
+          test "$(git hash-object qualification/r2b-admission-r2/synthetic_worker_protocol.py)" = a26e5651658bafbd0bf86dc1af3d83a1d1d7d217
+          test "$(git hash-object qualification/r2b-admission-r2/synthetic_worker_service.py)" = 0e91b3a80eefa807426159109b19c3cf5f1e199b
+          test "$(git hash-object qualification/r2b-admission-r2/maj-vaj-r2b-synthetic-worker.service)" = 1f0414e72e6985623fec94892eb28db70e208be8
+          test "$(git hash-object qualification/r2b-admission-r2/test_synthetic_worker.py)" = 43edf4a9a2990cc6efd70a586ccf174403520ec4
           test "$(git hash-object qualification/r2b-admission-r1/broker_service.py)" = c25093157840a38adb838377d17e62b707c489b3
           test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 39cd2c1b06823f025655b2191bff45988ef2c858
           test "$(git hash-object qualification/r2b-admission/broker_gateway.py)" = 22155167d8ce887770c2b7b500341e358268a0f0
@@ -39,6 +44,8 @@ jobs:
           cp qualification/r2b-admission-r1/broker_service.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r1/"
           cp qualification/r2b-admission/{approval_ledger,broker_gateway,operator_session}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
           cp qualification/r2b-admission-r2/{native_agent_protocol,agent_broker_channel,broker_service_r2}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-admission-r2/{synthetic_worker_protocol,synthetic_worker_service}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-admission-r2/maj-vaj-r2b-synthetic-worker.service "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
           cp qualification/r2b-admission-r2/maj-vaj-r2b-approval.service "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
           git rev-parse HEAD | tee receipt/acceptance-sha.txt
           cd "$RUNNER_TEMP/r2b-r3/dashboard"
