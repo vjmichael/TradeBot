@@ -366,6 +366,19 @@ def refuses(c):
     return data
 def killed(c):
     rc,data=cmd(c,ok=False)
+    if rc!=137:
+        # Only offline QEMU synthetic negative receipts. Do not print
+        # command contents, request IDs, credential values or worker keys.
+        # Any source exception is reduced to the fixed refusal category.
+        categories=('R5_R2_UPGRADE_REFUSED:','R5_INSTALL_REFUSED:','R5_R1_REFUSED:')
+        reasons=[]
+        for line in data.splitlines():
+            for prefix in categories:
+                if prefix in line:
+                    code=line.split(prefix,1)[1].split()[0][:72]
+                    reasons.append(prefix+code)
+        print('R5_R2_UNEXPECTED_UPGRADE_EXIT='+str(rc)+
+              ' REFUSALS='+','.join(reasons[-3:]),flush=True)
     assert rc==137,('expected_genuine_sigkill_exit_137',rc)
     return data
 def absent(p):
