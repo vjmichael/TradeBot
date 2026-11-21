@@ -41,7 +41,7 @@ of the original, **unchanged** Account Connections operator GUI.
 
 All eight installed markers emitted by the genuine Debian 13 guest and
 independently checked at the same workflow SHA. The unchanged installed GUI
-still explicitly says PAPЕR qualification only, no connection test or trading;
+still explicitly says PAPER qualification only, no connection test or trading;
 no positive approval agent, real worker or provider test is available.
 
 **Failed predecessor preserved:** [#44865248533](https://github.com/vjmichael/TradeBot/actions/runs/44865248533)
