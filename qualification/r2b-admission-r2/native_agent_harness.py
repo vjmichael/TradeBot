@@ -308,10 +308,24 @@ try:
     print('R2B_R2_NATIVE_DECLINE_CANCEL_PASS',flush=True)
 
     rid2=new_owner_request()
-    click_review();wait_review()
+    click_review();dialog=wait_review()
     shot('03-native-approve-review')
-    key('Return');time.sleep(2)
-    assert current_state(rid2)=='approved',('native_yes_not_approved',current_state(rid2))
+    # Return alone may be delivered to the previously focused Tk widget.
+    # Click the screenshot-observed OK control in the real 1280x800 QEMU
+    # LightDM desktop; do not inject broker responses or invoke a callback.
+    x('windowraise '+dialog)
+    time.sleep(1)
+    click(312,425)
+    time.sleep(2)
+    observed=current_state(rid2)
+    if observed!='approved':
+        shot('native-approve-click-diagnostic')
+        _,trace=command('loginctl show-session '+shlex.quote(sid)+
+            ' -p Active -p LockedHint -p Type -p Leader; '+
+            'systemctl show maj-vaj-r2b-approval.service -p ActiveState -p Result',ok=False)
+        (out/'native-approve-click-diagnostic.txt').write_text(
+            'observed_state='+observed+'\n'+trace+'\n')
+    assert observed=='approved',('native_yes_not_approved',observed)
     assert owner_consume(rid2)=={'ok':True}
     assert current_state(rid2)=='consumed'
     refusal('maj-vaj-vault',{'op':'consume','request_id':rid2,'context':{
