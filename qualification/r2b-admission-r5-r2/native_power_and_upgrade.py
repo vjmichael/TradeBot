@@ -425,7 +425,24 @@ try:
         refuses('bash '+installer+' install')
         refuses('bash '+installer+' enable')
         clear('r2b-r5-fixture-abort-prepare-first')
-        cmd('bash '+installer+' recover',timeout=100)
+        # Independently capture original unit provenance after a HARD host
+        # QEMU kill, before issuing any recovery or repair.
+        status_command=("systemctl show "+vault+
+            " -p LoadState -p UnitFileState -p ActiveState -p FragmentPath -p SourcePath -p ConditionResult; "+
+            "ls -ld /etc/systemd/system/"+vault+" /run/systemd/system/"+vault+
+            " /lib/systemd/system/"+vault+" /usr/lib/systemd/system/"+vault+" 2>&1; "+
+            "readlink /etc/systemd/system/"+vault+" 2>&1; "+
+            "systemctl cat "+vault+" 2>&1")
+        _,state=cmd(status_command,ok=False)
+        (out/'r5-r2-original-vault-post-power-unit.txt').write_text(state+'\n')
+        print('R5_R2_ORIGINAL_VAULT_POST_POWER_UNIT='+state.replace('\n','|')[:950],flush=True)
+        try:
+            cmd('bash '+installer+' recover',timeout=100)
+        except RuntimeError:
+            _,state2=cmd(status_command,ok=False)
+            (out/'r5-r2-original-vault-recovery-failure.txt').write_text(state2+'\n')
+            print('R5_R2_ORIGINAL_VAULT_RECOVERY_FAILURE='+state2.replace('\n','|')[:950],flush=True)
+            raise
         absent(pending);absent(backup)
         assert source_digest()==baseline
         print('R5_R2_INTERRUPTED_BACKUP_ABANDON_PASS',flush=True)
