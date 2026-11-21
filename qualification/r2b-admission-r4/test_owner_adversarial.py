@@ -44,9 +44,7 @@ class R4OwnerAdversarial(unittest.TestCase):
                          'stored_unverified')
         with self.assertRaises(Refused):
             f.coordinator.finish()
-        self.assertNotEqual(old.generation,
-                            f.managed._owner_generation if hasattr(f.managed,'_owner_generation') else
-                            self._generation())
+        self.assertNotEqual(old.generation,self._generation())
 
     def _generation(self):
         f=self.fixture
