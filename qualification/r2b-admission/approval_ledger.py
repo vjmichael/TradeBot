@@ -202,6 +202,25 @@ class Ledger:
                 or row[2]!=self.incarnation or now<row[3] or now>=row[4]):
             raise Refused('approval_unavailable')
 
+    def preview_for_native(self, request_id):
+        """Internal fixed-field preview for broker-owned UI, never HTTP."""
+        self._id(request_id)
+        now,boot=self._time()
+        with self._tx() as db:
+            row=db.execute("""SELECT state,boot_id,incarnation,created,expires,context
+                FROM approvals WHERE request_id=?""",(request_id,)).fetchone()
+            if row is None:
+                raise Refused('approval_unavailable')
+            self._pending(row[:5],now,boot,'pending')
+        try:
+            data=json.loads(row[5])
+            if type(data) is not dict or set(data)!={'operation','role','generation','policy','inventory','roles'}:
+                raise Refused('approval_context_invalid')
+            return Context(data['operation'],data['role'],data['generation'],
+                           data['policy'],data['inventory'],tuple(data['roles'])).validated()
+        except (ValueError,TypeError,KeyError):
+            raise Refused('approval_context_invalid') from None
+
     def review_with_native_prompt(self, request_id, *, witness, prompt, reattest):
         """INTERNAL trusted native UI operation, never a caller-supplied bool.
 
