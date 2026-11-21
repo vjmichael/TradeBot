@@ -138,19 +138,34 @@ class AgentNativeSource(unittest.TestCase):
                          clock=lambda:1_000_000_000_000,boot=lambda:BOOT)
         self.assertEqual(restarted.state_for_test(rid),'revoked')
 
-    def test_native_attestor_requires_session_leader(self):
+    def test_genuine_lightdm_direct_child_passes(self):
         from operator_session import Peer
         with patch('agent_broker_channel.attest_operator_peer',return_value=W),patch(
                 'agent_broker_channel.peer_from_socket',return_value=Peer(2041,4312,4312)),patch(
-                'agent_broker_channel._session_leader',return_value=2042):
+                'agent_broker_channel._session_leader',return_value=2042),patch(
+                'agent_broker_channel._kernel_parent',return_value=2042):
+            self.assertEqual(attest_exact_gui(None),W)
+
+    def test_non_child_same_uid_refused(self):
+        from operator_session import Peer
+        with patch('agent_broker_channel.attest_operator_peer',return_value=W),patch(
+                'agent_broker_channel.peer_from_socket',return_value=Peer(2041,4312,4312)),patch(
+                'agent_broker_channel._session_leader',return_value=2042),patch(
+                'agent_broker_channel._kernel_parent',return_value=9999):
             with self.assertRaises(Refused):attest_exact_gui(None)
 
-    def test_wrong_native_cmdline_refused(self):
-        from operator_session import Peer
-        with patch('agent_broker_channel.attest_operator_peer',return_value=W),patch(
-                'agent_broker_channel.peer_from_socket',return_value=Peer(2041,4312,4312)),patch(
-                'agent_broker_channel._session_leader',return_value=2041),patch(
-                'pathlib.Path.read_bytes',return_value=b'/usr/bin/python\x00-c\x00evil()'):
-            with self.assertRaises(Refused):attest_exact_gui(None)
+    def test_kernel_proc_parent_unavailable_refused(self):
+        from agent_broker_channel import _kernel_parent
+        with patch('pathlib.Path.read_bytes',side_effect=PermissionError):
+            with self.assertRaises(Refused):_kernel_parent(2041)
+        for value in (b'not-a-proc-stat',b'2041 (python) R foo'):
+            with patch('pathlib.Path.read_bytes',return_value=value):
+                with self.assertRaises(Refused):_kernel_parent(2041)
+
+    def test_kernel_proc_parent_parser(self):
+        from agent_broker_channel import _kernel_parent
+        with patch('pathlib.Path.read_bytes',return_value=
+                b'873 (python3) S 833 833 833 0 -1 0 0 0 0 0 0 0 0'):
+            self.assertEqual(_kernel_parent(873),833)
 
 if __name__=='__main__':unittest.main()
