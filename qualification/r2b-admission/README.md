@@ -1,11 +1,111 @@
 # R2B-INTEGRATE-02-R2-R2-ADMISSION — protected one-use approval and worker custody candidate
 
-**Status: candidate implementation, NOT installed or authorized to run provider tests. Full task remains OPEN.**
+**Status: SOURCE QUALIFICATION PASS + READ-ONLY INSTALLED PAM/LOGIND ATTESTATION PASS. Protected broker/agent/worker deployment and full provider-admission task remain OPEN.**
 
 Based on accepted R2B custody ledger head `e0e2fb7e1fcaa9d404f61c87e2cce005d08f9892`.
 The exact frozen D2, R2B, R3 and R1–R4 handoff source locks are
 preserved. Work is isolated on branch
 `qualification/tb-sec-key-01-r2b-admission`. No mainline merge.
+
+## Terminal qualification receipts (2026-11-20 local / 2026-11-21 UTC)
+
+**Consolidated source PASS:** [GitHub Actions #44864093095](https://github.com/vjmichael/TradeBot/actions/runs/44864093095),
+job `136723770737`, unchanged accepted SHA
+`faf512829c7ee6bd7811bb69a9c2fa246a612d69`.
+[Source artifact #14691445622](https://github.com/vjmichael/TradeBot/actions/runs/44864093095/artifacts/14691445622),
+downloaded archive SHA-256
+`d7c50b9f655b89afabec4dfd036d5adb9ada870540915af6988e5d364914963d`,
+independently checked against GitHub's digest. The source transcript shows
+**51/51** new ledger, gateway, session and AF_UNIX receipt tests,
+**71/71** prior managed-vault, reviewed-migration, local review and
+HMAC-receipt tests, **9/9** original native handoff guards, and
+**21/21** unchanged intent/refusal/adversarial socket tests:
+**152/152 total PASS**. Pinned dashboard npm build and exact production
+relay restoration PASS; no production-code mutation.
+
+**Native OS/session PASS:** [GitHub Actions #44863739057](https://github.com/vjmichael/TradeBot/actions/runs/44863739057),
+job `136722673714`, unchanged accepted SHA
+`c4acb54aca2099025578a6296e7fbba2cf98268d`.
+[Native artifact #14691156922](https://github.com/vjmichael/TradeBot/actions/runs/44863739057/artifacts/14691156922),
+downloaded SHA-256
+`3c50f6c0c1dc677ed19fbede943c310c1a080a7a4494b5541a40b20f88be3d22`,
+independently matched GitHub's digest. Offline QEMU Debian 13 built from
+the exact restored source, no guest NIC; original installed LightDM/PAM
+Account Connections GUI **not replaced or bypassed**.
+Native terminal markers:
+
+| Installed native condition | Result |
+|---|---|
+| `R2B_NATIVE_ORIGINAL_GUI_LOGIND_PASS`: genuine operator GUI process maps through `sd_pid_get_session` to correct active LightDM seat | **PASS** |
+| `R2B_NATIVE_NON_GUI_SAME_UID_REFUSAL_PASS`: another operator-UID process without owning the graphical PAM session is denied | **PASS** |
+| `R2B_NATIVE_EXPIRED_PAM_SESSION_REFUSED_PASS`: original session refused after actual `loginctl terminate-session` | **PASS** |
+| `R2B_NATIVE_READONLY_LOGIND_PASS`: complete same-source installed OS attestation | **PASS** |
+
+The native source suite also passed **51/51**. The archive contains
+actual original Account Connections screenshots, before/after LightDM
+greeter captures, exact tree/source locks, empty `dpkg-audit.txt`,
+package listing and terminal receipts. This **qualifies only the OS
+session-attestation foundation**, not an installed one-use broker.
+
+**Exact source lock:** D2, R2B, R3 production source, including
+`credential_handoff.py` blob
+`269bdc0b19d8a189496c7ca3b9369c158f85b0f6`,
+remain unmodified. Admission modules on the source run:
+`approval_ledger.py`, `operator_session.py`,
+`broker_gateway.py`, `receipt_channel.py`, and their
+source tests are locked in workflow `r2b-one-use-admission.yml`.
+Native proof uses a separate workflow `r2b-native-logind-readonly.yml`
+with the original installed UI and test-only read-only OS introspection.
+
+### Failed acceptance history retained
+
+- [#44861862894](https://github.com/vjmichael/TradeBot/actions/runs/44861862894) source failure: seven test errors, six due a
+  new/refrozen refusal exception class mismatch and one incomplete
+  mocked operator GID. Reconciled without weakening refusals.
+- [#44861971909](https://github.com/vjmichael/TradeBot/actions/runs/44861971909) source PASS (37 admission regressions),
+  [#44862196232](https://github.com/vjmichael/TradeBot/actions/runs/44862196232) source PASS (49 new, 150 total).
+- [#44862419218](https://github.com/vjmichael/TradeBot/actions/runs/44862419218) native setup failed at an omitted source
+  `PYTHONPATH`. [#44862482138](https://github.com/vjmichael/TradeBot/actions/runs/44862482138) was a rejected test-only
+  replacement desktop probe: it did not survive the approved installed
+  launcher. The test then switched to **read-only inspection of the real,
+  unmodified Account Connections desktop**, not a permissive substitute.
+- [#44863008254](https://github.com/vjmichael/TradeBot/actions/runs/44863008254) genuine GUI launched but the new
+  `loginctl` parser refused Debian's property report; repaired to read
+  complete installed logind output while requiring all security-critical
+  properties exactly.
+- [#44863417257](https://github.com/vjmichael/TradeBot/actions/runs/44863417257) proved the actual GUI session binding
+  but then failed on a malformed negative-test inline Python `except`.
+  The negative fixture was fixed and precompiled before QEMU.
+- [#44863739057](https://github.com/vjmichael/TradeBot/actions/runs/44863739057) passed native 4/4 at one unchanged SHA;
+  [#44864093095](https://github.com/vjmichael/TradeBot/actions/runs/44864093095) passed consolidated source 152/152.
+  These CI runs were sequential, not stacked.
+
+### Non-negotiable outstanding installation/release gates
+
+**Full `TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2-ADMISSION` is not closed.**
+The current gateway is an internal candidate callable and has *no*
+installed authenticated broker socket, systemd-owned approval database,
+independent protected GUI agent, sealed GUI response transport,
+independent fixed-destination worker service, root-provisioned separate
+receipt key, or positive provider execution. Source tests inject fake
+prompt/session behavior; that does **not** authenticate a real user's
+approval. Native tests validate existing GUI logind identity only,
+not authorization consumption or any provider action.
+
+The next scoped task is
+`TB-SEC-KEY-01-R2B-INTEGRATE-02-R2-R2-ADMISSION-R1` —
+install and independently qualify the one-use broker under a distinct
+protected service UID, prove a real current-session native approval
+cannot be forged or replayed, and durably consume the approved
+exact vault generation/policy/inventory **before** any supervised
+fixed-provider worker attempt. After that, add independently verified
+worker `SO_PEERCRED` and separate-key receipt custody through the
+existing owner transaction, cancellation/revocation/recovery negatives,
+and safe positive reviewed legacy migration on disposable ciphertext.
+Actual provider sandbox/permission checking, Telegram/Grok policy,
+R2C rollback/key recovery and financial Gate remain OPEN.
+No real keys, provider network request, money, paid model calls or LIVE
+activation were used or authorized in this qualification.
 
 ## What is implemented
 
