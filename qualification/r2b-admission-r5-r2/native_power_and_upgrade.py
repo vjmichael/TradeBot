@@ -364,6 +364,10 @@ def refuses(c):
     rc,data=cmd(c,ok=False)
     assert rc!=0,'untrusted_action_not_refused'
     return data
+def killed(c):
+    rc,data=cmd(c,ok=False)
+    assert rc==137,('expected_genuine_sigkill_exit_137',rc)
+    return data
 def absent(p):
     cmd('test ! -e '+shlex.quote(p)+' && test ! -L '+shlex.quote(p))
 def stopped():
@@ -418,7 +422,7 @@ try:
 
     if case=='backup_power':
         fixture('r2b-r5-fixture-abort-prepare-first')
-        refuses('bash '+installer+' install')
+        killed('bash '+installer+' install')
         hard_cut()
         cmd('test "$(cat '+pending+')" = R5-PREPARING-NO-MUTATIONS')
         absent(marker);stopped()
@@ -454,20 +458,22 @@ try:
         # The accepted R5-R1 fixture had "kill -KILL '$'"; R5-R2 uses
         # actual "$$" and independently SIGKILLs the whole QEMU system.
         fixture('r2b-r5-fixture-abort-after-first')
-        refuses('bash '+installer+' install')
+        killed('bash '+installer+' install')
         hard_cut()
-        assert source_digest()!=baseline
+        # Linux can persist either old or newly copied bytes after sudden
+        # power loss. Never require a dirty write to survive. Require the
+        # *fsynced mutation-authorized journal* and exact signal 137 instead.
         cmd('test "$(cat '+pending+')" = R5-PENDING-ROLLBACK-ONLY')
         absent(marker);stopped()
         clear('r2b-r5-fixture-abort-after-first')
         fixture('r2b-r5-fixture-abort-restore-first')
-        refuses('bash '+installer+' recover')
+        killed('bash '+installer+' recover')
         hard_cut()
         absent(marker);stopped()
         cmd('test -e '+backup+'/manifest.json')
         clear('r2b-r5-fixture-abort-restore-first')
         fixture('r2b-r5-fixture-abort-cleanup-first')
-        refuses('bash '+installer+' recover')
+        killed('bash '+installer+' recover')
         hard_cut()
         cmd('test -e '+receipt)
         absent(marker);stopped()
@@ -533,18 +539,18 @@ try:
         before=source_digest()
         signature_key=fingerprint(keypath)
         fixture('r5-r2-fixture-abort-upgrade-after-code')
-        refuses('bash '+installer+' upgrade-v2')
+        killed('bash '+installer+' upgrade-v2')
         hard_cut()
         cmd('test -f '+upgrade_pending)
         absent(marker);stopped()
         refuses('bash '+installer+' enable')
         clear('r5-r2-fixture-abort-upgrade-after-code')
         fixture('r5-r2-fixture-abort-recover-after-code')
-        refuses('bash '+installer+' recover-v2')
+        killed('bash '+installer+' recover-v2')
         hard_cut()
         clear('r5-r2-fixture-abort-recover-after-code')
         fixture('r5-r2-fixture-abort-recover-cleanup-first')
-        refuses('bash '+installer+' recover-v2')
+        killed('bash '+installer+' recover-v2')
         hard_cut()
         clear('r5-r2-fixture-abort-recover-cleanup-first')
         cmd('bash '+installer+' recover-v2',timeout=100)
