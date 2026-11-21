@@ -29,6 +29,26 @@ all refuse; no failed or indeterminate request is automatically retried.
 The approval database must live in a 0700 directory and its 0600 file
 must be owned by its dedicated service UID, not operator or browser.
 
+### Owner/operator gateway without caller-forged confirmation
+
+`broker_gateway.py` adds a protected entrypoint contract. The vault owner
+must present its actual kernel-authenticated Unix socket identity to
+`prepare_from_owner`, `consume_from_owner` or `cancel_from_owner`.
+Only an operator peer in its real active LightDM/PAM session may request
+`review_from_operator`, and **the broker itself** invokes its fixed
+native Tk prompt and re-attests the same session before recording approval.
+The operator RPC has no `approved`, `destination` or `result` parameter.
+
+The fixed native prompt can preview a Kraken READ-ONLY permission check
+or a non-destructive legacy ciphertext inventory. Telegram and Grok remain
+refused until their provider-specific recipient/identity and opt-in
+contracts are installed; there is no hidden send or inference fallback.
+The stored context is read from the protected ledger, not nominated by
+the operator/HTML client. All positive `BrokerGateway` test callbacks
+are synthetic fixtures; there is **no trusted socket listener or installed
+native GUI broker agent yet**, so this gateway must not be deployed
+or used to start provider tests.
+
 ### Kernel/PAM/LightDM identity attestation
 
 `operator_session.py` requires actual Unix
