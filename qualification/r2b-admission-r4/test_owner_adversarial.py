@@ -7,9 +7,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from approval_ledger import Refused
 from test_owner_rpc_extension import OwnerCoordinator
-from vault_owner_hooks import Attempt
+from vault_owner_hooks import Attempt,Refused
 from owner_synthetic_bridge import reserve_after_approval,finish_fixed_synthetic
 from synthetic_worker_protocol import sign_denial,verify_denial
 
@@ -18,8 +17,11 @@ class R4OwnerAdversarial(unittest.TestCase):
     def setUp(self):
         self.fixture=OwnerCoordinator('test_empty_vault_cannot_prepare')
         self.fixture.setUp()
+        self.owner_bridge_identity=patch('owner_execution_bridge._require_owner',return_value=None)
+        self.owner_bridge_identity.start()
 
     def tearDown(self):
+        self.owner_bridge_identity.stop()
         self.fixture.tearDown()
 
     def prepare(self):
