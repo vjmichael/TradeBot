@@ -288,8 +288,23 @@ if R4_CASE not in ('reboot','lock','switch','generation','broker_crash',
     raise SystemExit('invalid_r4_case')
 
 def counts():
-    return {state:approval_state_count(state) for state in
-            ('pending','approved','consumed','cancelled','revoked')}
+    # One SQLite SELECT is one snapshot. Five sequential cross-process
+    # queries can otherwise straddle broker restart and fabricate a
+    # contradictory pending+revoked combination from the SAME row.
+    states=('pending','approved','consumed','cancelled','revoked')
+    py=("import sqlite3,json;"
+        "db=sqlite3.connect('file:/var/lib/maj-vaj-r2b-approval/ledger.sqlite3?mode=ro',uri=True);"
+        "rows=db.execute('SELECT state,count(*) FROM approvals GROUP BY state').fetchall();"
+        "db.close();"
+        "print('ATOMIC_COUNTS='+json.dumps(dict(rows),sort_keys=True))")
+    raw=command('runuser -u maj-vaj-approval -- /usr/bin/python3 -I -B -c '+shlex.quote(py))[1]
+    values=[json.loads(x.split('ATOMIC_COUNTS=',1)[1]) for x in raw.splitlines()
+            if x.startswith('ATOMIC_COUNTS=')]
+    assert len(values)==1,'broker_atomic_snapshot_missing'
+    found=values[0]
+    assert type(found) is dict and set(found)<=set(states) and all(
+        type(n) is int and n>=0 for n in found.values()),'broker_atomic_snapshot_invalid'
+    return {state:found.get(state,0) for state in states}
 
 def native_yes(dialog):
     x('windowraise '+dialog)
