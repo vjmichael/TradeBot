@@ -794,3 +794,24 @@ Genuine disposable Debian 13 QEMU, network-off guest, installed Chromium→nativ
 First negative CI [44851985905](https://github.com/vjmichael/TradeBot/actions/runs/44851985905) passed all source tests and installed Escape, then failed because the second test navigation toggled the already-expanded Account connections panel closed. Screenshot receipt diagnosed the test error; repaired the navigation only and ran one successive (not overlapping) qualification that passed. Historical failure retained; do not mark it a production defect.
 
 **Remaining R2A closing gates:** independently installed native lock / seat-switch / abrupt logout and cookie invalidation during review; unauthorized/malformed intent installed negatives; unsaved credential entry interruption, replace/remove, post-save service restart and recovery. R2B real provider adapters, one-use authenticated operator/receipt custody, legacy migration and positive service witnesses; R2C authenticated KEK/key lifecycle and rollback; final PAPER/financial Gate and release acceptance remain OPEN. **Next independent task: TB-SEC-KEY-01-R2A-R1-D2-R3-NATIVE-R3 — qualify installed lock/seat-switch/logoff and credential-entry cancellation/restart without weakening verified R1/R2 source locks.**
+
+### TB-SEC-KEY-01-R2A-R1-D2-R3-NATIVE-R3 — final installed lock/switch/logout and vault lifecycle acceptance (2026-11-20)
+
+**SCOPED INSTALLED PASS; broader security/financial release gate OPEN.** [Successful source-locked GitHub CI #44855035644](https://github.com/vjmichael/TradeBot/actions/runs/44855035644), job `136695120403`, accepted commit `f4ec1d27ea7eb844afde9faa85e2cbcf4782af82`, [artifact #14687955533](https://github.com/vjmichael/TradeBot/actions/runs/44855035644/artifacts/14687955533), SHA-256 `b87c8541919947cc16618b0b64008bace9d3c1f437f6b742fa318d3143a058e2` (downloaded bytes checked). [Full qualification evidence, fixed source lock and exclusions](r2a-native-r3/README.md).
+
+Frozen source D2 tree `a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b` and R2B R3 relay production tree `89946baeef719d7369887cc7d89a8a4230c7180e` reconstructed unchanged; native credential handoff blob `269bdc0b19d8a189496c7ca3b9369c158f85b0f6`, R3 harness blob `78f2e644340649104ae7ea31fd9589541b659bdb`. Dashboard rebuild PASS; 9/9 original handoff and 17/17 refusal/intent unit tests PASS. Real isolated Debian 13 QEMU with **no guest NIC**, installed Chromium, LightDM/PAM/logind, Tk and PaperVault service reached eight exact terminal markers:
+
+| Installed R3 check | Terminal status |
+|---|---|
+| Real logind lock while console native confirmation open; no operator enrollment | **PASS** |
+| Actual LightDM seat switch while native confirmation open; original console inactive | **PASS** |
+| Actual console PAM session termination while native confirmation open; return to greeter | **PASS** |
+| Masked synthetic operator fields typed/confirmed, then native End session without Save | **PASS — vault unchanged** |
+| Masked unsaved operator fields then abrupt PAM/operator logout | **PASS — vault unchanged** |
+| Actual Tk paired synthetic Kraken read-only Save and protected vault service restart | **PASS — both `stored_unverified` retained** |
+| Actual Tk Remove locally, another vault restart and graphical operator logout | **PASS — both `not_configured`** |
+| Full original source+native matrix and status-only PAPER API | **PASS — no provider verification / deployment authority** |
+
+**Failed runs preserved and reconciled:** [44853516075](https://github.com/vjmichael/TradeBot/actions/runs/44853516075) proved lock but fixture omitted `XDG_SEAT_PATH` for LightDM; [44854160149](https://github.com/vjmichael/TradeBot/actions/runs/44854160149) proved lock and seat switch but fixture incorrectly assumed greeter remained on X `:0`. Corrected only the independent native test harness to discover the real greeter display and cookie; one subsequent run passed at unchanged SHA. Neither was a proven production security defect. No stacked CI, main merge, production-code mutation, secret, provider request, financial action or LIVE activation.
+
+**R3 task CLOSED as a bounded native acceptance group. R2A parent / R2B / R2C and release gates remain OPEN** for installed malformed/unauthorized intent, cookie replay and race matrix, protected one-use provider tests and operator receipts, migration/KEK rollback safety, real readiness witnesses, and consolidated financial Gate. **Next independent task:** `TB-SEC-KEY-01-R2A-R1-D2-R3-NATIVE-R4` — finish remaining installed invalid-intent, cookie/session replay and credential/IPC principal-isolation adversarial acceptance; keep successful R1/R2/R3 source-locked receipts intact. The R2B provider/migration and R2C key lifecycle lanes remain separate.
