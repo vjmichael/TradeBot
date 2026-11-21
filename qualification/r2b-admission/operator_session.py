@@ -113,7 +113,8 @@ def attest_operator_peer(connection):
         operator=pwd.getpwnam('maj-vaj-credential-operator')
     except KeyError:
         raise Refused('operator_identity_unavailable') from None
-    if operator.pw_uid<=0 or peer.uid!=operator.pw_uid:
+    if (operator.pw_uid<=0 or operator.pw_gid<=0
+            or peer.uid!=operator.pw_uid or peer.gid!=operator.pw_gid):
         raise Refused('operator_peer_refused')
     sid=_systemd_pid_session(peer.pid)
     w=Witness(sid,peer.uid).validated()
