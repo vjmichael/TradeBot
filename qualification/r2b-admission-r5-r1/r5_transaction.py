@@ -8,6 +8,7 @@ A pending transaction is a hard fail-closed hold until explicit rollback.
 from __future__ import annotations
 import hashlib
 import json
+import signal
 import os
 from pathlib import Path
 import stat
@@ -43,6 +44,7 @@ class Transaction:
         self.backup=self.etc/"r2b-r5-rollback-snapshot"
         self.pending=self.etc/"r2b-r5-transaction-pending"
         self.identity=self.etc/"r2b-r5-installed-identity"
+        self.receipt=self.etc/"r2b-r5-rollback-completion"
 
     def path(self, entry):
         if entry.startswith("@systemd/"):
@@ -127,6 +129,17 @@ class Transaction:
                 raise Refused("snapshot_digest_refused")
         return manifest
 
+    def _fixture_kill(self,stage):
+        # Test-only hard SIGKILL inside disposable QEMU with root 0600 flag.
+        # Never enable via untrusted input or expose to production systems.
+        flag=self.etc/("r2b-r5-fixture-abort-"+stage)
+        try:st=flag.lstat()
+        except FileNotFoundError:return
+        if (not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid()
+                or stat.S_IMODE(st.st_mode)!=0o600 or st.st_nlink!=1):
+            raise Refused("invalid_test_abort_fixture")
+        os.kill(os.getpid(),signal.SIGKILL)
+
     def prepare(self):
         if self.backup.exists() or self.backup.is_symlink() or self.pending.exists() or self.pending.is_symlink():
             raise Refused("unfinished_transaction_refused")
@@ -135,6 +148,9 @@ class Transaction:
         st=self.etc.lstat()
         if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid() or st.st_mode & 0o022:
             raise Refused("configuration_directory_refused")
+        # This first durable checkpoint proves NO application mutations can
+        # have occurred yet. An interrupted backup can be abandoned safely.
+        self._write(self.pending,b"R5-PREPARING-NO-MUTATIONS\n")
         self.backup.mkdir(mode=0o700)
         self._syncdir(self.etc)
         entries={}
@@ -142,9 +158,14 @@ class Transaction:
             data=self._bytes(self.path(entry))
             entries[entry]=hashlib.sha256(data).hexdigest()
             self._write(self.backup/self._backup_name(entry),data)
+            if entry==ORIGINAL[0]:
+                self._fixture_kill("prepare-first")
         manifest={"version":1,"entries":entries}
         self._write(self.backup/"manifest.json",json.dumps(manifest,sort_keys=True,separators=(",",":")).encode())
         self._syncdir(self.backup)
+        # Atomically advance to mutation-permitted only AFTER all backups
+        # and the manifest have been fsynced and independently verified.
+        self._snapshot()
         self._write(self.pending,b"R5-PENDING-ROLLBACK-ONLY\n")
         return True
 
@@ -182,28 +203,109 @@ class Transaction:
         for entry in ORIGINAL:
             data=self._bytes(self.backup/self._backup_name(entry),private=True)
             self._write(self.path(entry),data,mode=0o644)
+            if entry==ORIGINAL[0]:
+                self._fixture_kill("restore-first")
         return True
 
+    def _rollback_receipt(self):
+        record=json.loads(self._bytes(self.receipt,private=True))
+        if (type(record) is not dict or set(record)!={"version","entries"}
+                or record["version"]!=2 or type(record["entries"]) is not dict
+                or set(record["entries"])!=set(ORIGINAL)):
+            raise Refused("rollback_receipt_invalid")
+        for entry in ORIGINAL:
+            expected=record["entries"][entry]
+            if type(expected) is not str or len(expected)!=64:
+                raise Refused("rollback_receipt_invalid")
+            if hashlib.sha256(self._bytes(self.path(entry))).hexdigest()!=expected:
+                raise Refused("rollback_restored_source_changed")
+        return record
+
     def cleanup(self):
-        self._snapshot()
+        if self.receipt.exists() or self.receipt.is_symlink():
+            return self.resume()
+        manifest=self._snapshot()
         for entry in ORIGINAL:
             backup=self.backup/self._backup_name(entry)
             if self._bytes(backup,private=True)!=self._bytes(self.path(entry)):
                 raise Refused("rollback_not_restored")
-        if self.identity.exists() or self.identity.is_symlink():
-            self._secure(self.identity,private=True)
-            self.identity.unlink()
+        record={"version":2,"entries":manifest["entries"]}
+        self._write(self.receipt,json.dumps(record,sort_keys=True,separators=(",",":")).encode())
+        # This is a persistent receipt of completed source restoration;
+        # backup deletion may now be interrupted and safely resumed.
+        return self.resume()
+
+    def resume(self):
+        record=self._rollback_receipt()
         if self.pending.exists() or self.pending.is_symlink():
-            self._secure(self.pending,private=True)
-            self.pending.unlink()
-        for entry in ORIGINAL:
-            (self.backup/self._backup_name(entry)).unlink()
-        (self.backup/"manifest.json").unlink()
-        self.backup.rmdir()
+            if self._bytes(self.pending,private=True)!=b"R5-PENDING-ROLLBACK-ONLY\n":
+                raise Refused("pending_marker_refused")
+        if self.backup.is_symlink():
+            raise Refused("snapshot_directory_refused")
+        if self.backup.exists():
+            st=self.backup.lstat()
+            if (not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid()
+                    or stat.S_IMODE(st.st_mode)!=0o700):
+                raise Refused("snapshot_directory_refused")
+            for entry in ORIGINAL:
+                backup=self.backup/self._backup_name(entry)
+                if backup.exists() or backup.is_symlink():
+                    data=self._bytes(backup,private=True)
+                    if hashlib.sha256(data).hexdigest()!=record["entries"][entry]:
+                        raise Refused("cleanup_backup_tampered")
+                    backup.unlink()
+                    self._syncdir(self.backup)
+                    if entry==ORIGINAL[0]:
+                        self._fixture_kill("cleanup-first")
+            manifest=self.backup/"manifest.json"
+            if manifest.exists() or manifest.is_symlink():
+                m=json.loads(self._bytes(manifest,private=True))
+                if (m!={"version":1,"entries":record["entries"]}):
+                    raise Refused("cleanup_manifest_changed")
+                manifest.unlink()
+                self._syncdir(self.backup)
+            self.backup.rmdir()
+            self._syncdir(self.etc)
+        for file in (self.identity,self.pending):
+            if file.exists() or file.is_symlink():
+                self._secure(file,private=True)
+                file.unlink()
+                self._syncdir(self.etc)
+        self._rollback_receipt()  # Recheck restored bytes before clearing hold.
+        self.receipt.unlink()
         self._syncdir(self.etc)
+        return True
+
+    def abandon(self):
+        # Only a pre-mutation backup can be discarded without restoration.
+        if self._bytes(self.pending,private=True)!=b"R5-PREPARING-NO-MUTATIONS\n":
+            raise Refused("cannot_abandon_mutated_installation")
+        if self.receipt.exists() or self.identity.exists():
+            raise Refused("cannot_abandon_mutated_installation")
+        if self.backup.is_symlink():
+            raise Refused("snapshot_directory_refused")
+        if self.backup.exists():
+            st=self.backup.lstat()
+            if (not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid()
+                    or stat.S_IMODE(st.st_mode)!=0o700):
+                raise Refused("snapshot_directory_refused")
+            allowed={self._backup_name(x) for x in ORIGINAL}|{"manifest.json"}
+            found={p.name for p in self.backup.iterdir()}
+            if not found<=allowed:
+                raise Refused("unexpected_backup_contents")
+            for p in self.backup.iterdir():
+                self._secure(p,private=True)
+                p.unlink()
+                self._syncdir(self.backup)
+            self.backup.rmdir()
+            self._syncdir(self.etc)
+        self.pending.unlink()
+        self._syncdir(self.etc)
+        return True
+
 
 def main():
-    if len(sys.argv)!=2 or sys.argv[1] not in ("prepare","commit","verify","restore","cleanup"):
+    if len(sys.argv)!=2 or sys.argv[1] not in ("prepare","commit","verify","restore","cleanup","resume","abandon"):
         raise SystemExit("R5_R1_REFUSED:action")
     if os.getuid()!=0 or os.geteuid()!=0:
         raise SystemExit("R5_R1_REFUSED:root")
