@@ -1,0 +1,61 @@
+name: R2B protected one-use approval and worker transport source qualification
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2b-admission]
+    paths: ['.github/workflows/r2b-one-use-admission.yml']
+permissions:
+  contents: read
+jobs:
+  source-locked-admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Reconstruct unchanged original R2B and native handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/restored-trees.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
+          test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 242508263572dd518e915a1fc23a1b3f88f20b46
+          test "$(git hash-object qualification/r2b-admission/operator_session.py)" = a25c9c3f1f12ccf40367b8bff5b5fe29fd60a8ba
+          test "$(git hash-object qualification/r2b-admission/receipt_channel.py)" = c1550d83d299ae061e71e00e2e937139f6f84618
+          test "$(git hash-object qualification/r2b-admission/test_approval_ledger.py)" = 44263b90b4ef8b55b6609013a71248bed834d107
+          test "$(git hash-object qualification/r2b-admission/test_receipt_channel.py)" = 962fd0001777a12ba9fc106e3b72e8eb4ae4a6f6
+          git rev-parse HEAD | tee receipt/acceptance-head.txt
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test "$(git hash-object package-lock.json)" = 2e72c5a32098c7d503b2bf0e35fac28b607a02d7
+      - name: Execute source-locked approval and authenticated worker AF_UNIX tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/migration:$GITHUB_WORKSPACE/qualification/r2b-closeout-custody:$GITHUB_WORKSPACE/qualification/r2b-admission"
+          python -m compileall -q qualification/r2b-admission
+          python -m unittest discover -s qualification/r2b-admission -p 'test_*.py' -v 2>&1 | tee receipt/new-admission-tests.txt
+          python -m unittest -v test_managed_paper_vault test_native_test_review test_reviewed_migration test_worker_receipt_verifier 2>&1 | tee receipt/original-r2b-source-tests.txt
+      - name: Verify original handoff, refusal and adversarial AF_UNIX guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r3/tests:$GITHUB_WORKSPACE/qualification/r2a-native-negative:$GITHUB_WORKSPACE/qualification/r2a-native-r4"
+          python -m unittest discover -s "$RUNNER_TEMP/r2b-r3/tests" -p test_credential_handoff.py -v 2>&1 | tee receipt/original-guard-tests.txt
+          python -m unittest -v test_credential_intent test_handoff_refusals test_adversarial_intent 2>&1 | tee receipt/unchanged-refusal-tests.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-one-use-admission-source-qualification
+          path: receipt/
+          retention-days: 5
