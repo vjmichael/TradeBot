@@ -31,7 +31,7 @@ jobs:
           test "$(git hash-object qualification/r2b-admission-r2/patch_owner_vault.py)" = c647db518e922f352acc0ce19e22e4aa32608393
           test "$(git hash-object qualification/r2b-admission-r2/native_owner_end_to_end_harness.py)" = df7cc45803fb3e37384129502e29f980b1ddacae
           test "$(git hash-object qualification/r2b-admission-r4/native_adversarial_harness.py)" = dbe4d07b140af449b4d75794a6e0e0037a635d45
-          test "$(git hash-object qualification/r2b-admission-r4/test_owner_adversarial.py)" = 9ee8473b0f008f863ae37ef384c0eec2355c52ef
+          test "$(git hash-object qualification/r2b-admission-r4/test_owner_adversarial.py)" = eae211347664dde06720a49390e1deff562a4873
           python -m py_compile qualification/r2b-admission-r4/native_adversarial_harness.py qualification/r2b-admission-r4/test_owner_adversarial.py
           test "$(git hash-object qualification/r2b-admission-r2/owner_rpc_extension.py)" = 5aa2b11afd1f3108f6c7d16cb3b7639271371054
           test "$(git hash-object qualification/r2b-admission-r2/owner_synthetic_bridge.py)" = eb22638d04f105bda522cbf0a143419407562b87
