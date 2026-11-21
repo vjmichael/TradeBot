@@ -9,6 +9,10 @@ marker="$config/r2b-approval-test-enabled"
 seal="$config/r2b-r5-offline-installed"
 transaction="$root/r2b-admission-r5/r5_transaction.py"
 receipt="$config/r2b-r5-rollback-completion"
+upgrade="$root/r2b-admission-r5-r2/upgrade_v2.py"
+upgrade_pending="$config/r5-r2-upgrade-pending"
+upgrade_receipt="$config/r5-r2-release-receipt"
+upgrade_backup="$config/r5-r2-upgrade-backup"
 pending="$config/r2b-r5-transaction-pending"
 snapshot="$config/r2b-r5-rollback-snapshot"
 identity="$config/r2b-r5-installed-identity"
@@ -20,7 +24,7 @@ key="$config/credential-keys/r2b-worker-signing-key"
 die() { echo "R5_INSTALL_REFUSED:$1" >&2; exit 1; }
 [[ $# == 1 ]] || die argument_count
 action="$1"
-case "$action" in install|enable|disable|verify|recover|rollback|upgrade) ;; *) die action ;; esac
+case "$action" in install|enable|disable|verify|recover|rollback|upgrade|upgrade-v2|recover-v2|verify-v2) ;; *) die action ;; esac
 [[ $(id -u) == 0 ]] || die root_required
 [[ $(systemd-detect-virt) == qemu ]] || die offline_qemu_only
 [[ "$(ls -1 /sys/class/net)" == lo ]] || die network_interface_refused
@@ -37,6 +41,7 @@ base=pathlib.Path(sys.argv[1])
 expected={
  'r2b-admission-r1/broker_service.py':'c25093157840a38adb838377d17e62b707c489b3',
  'r2b-admission-r5/r5_transaction.py':'c2a1d89f6ae2ffd259ada7795bd6d236139d15e4',
+ 'r2b-admission-r5-r2/upgrade_v2.py':'8a312df1eba70a5debd729d72b4cf6a4d7eb389c',
  'r2b-admission-r1/owner_execution_bridge.py':'882875e35b046a13a94ffb7f24ca52c7d70c37d7',
  'r2b-admission-r2/approval_ledger.py':'39cd2c1b06823f025655b2191bff45988ef2c858',
  'r2b-admission-r2/operator_session.py':'b61a656740989cb6b284498503837d2252258fec',
@@ -73,6 +78,21 @@ transaction_cmd() {
 no_pending() {
   [[ ! -e "$pending" && ! -L "$pending" ]] || die interrupted_transaction_pending
 }
+upgrade_cmd() {
+  "$root/venv/bin/python" -I -B "$upgrade" "$1"
+}
+upgrade_no_pending() {
+  [[ ! -e "$upgrade_pending" && ! -L "$upgrade_pending" ]] || die signed_upgrade_interrupted
+}
+upgrade_status() {
+  upgrade_no_pending
+  if [[ -e "$upgrade_receipt" || -L "$upgrade_receipt" ]]; then
+    [[ -f "$upgrade_receipt" && ! -L "$upgrade_receipt" ]] || die release_receipt_custody
+    upgrade_cmd verify
+  else
+    [[ ! -e "$upgrade_backup" && ! -L "$upgrade_backup" ]] || die orphan_upgrade_snapshot
+  fi
+}
 no_saved_credentials() {
   # Rollback of executable code is never an authority to discard encrypted
   # local credentials. A populated vault requires a separate reviewed migration.
@@ -105,6 +125,8 @@ rollback_files() {
   systemctl stop "$vault"
   ! systemctl is-active --quiet "$vault" || die vault_still_active
   check_bundle
+  upgrade_no_pending
+  [[ ! -e "$upgrade_receipt" && ! -L "$upgrade_receipt" ]] || die signed_release_downgrade_refused
   no_saved_credentials
   if [[ -f "$pending" && ! -L "$pending" &&
         "$(cat "$pending")" == 'R5-PREPARING-NO-MUTATIONS' ]]; then
@@ -193,6 +215,8 @@ case "$action" in
     [[ ! -e "$seal" && ! -L "$seal" ]] || die already_installed
     [[ ! -e "$snapshot" && ! -L "$snapshot" ]] || die stale_rollback_snapshot
     no_pending
+    upgrade_no_pending
+    [[ ! -e "$upgrade_receipt" && ! -L "$upgrade_receipt" ]] || die signed_release_already_present
     [[ ! -e "$receipt" && ! -L "$receipt" ]] || die rollback_completion_pending
     [[ ! -e "$marker" && ! -L "$marker" ]] || die approval_marker_preexisting
     check_bundle
@@ -268,11 +292,13 @@ PY
   verify)
     check_seal; check_bundle; check_key; check_units
     transaction_cmd verify
+    upgrade_status
     echo R5_INSTALLED_CUSTODY_VERIFIED_PASS
     ;;
   enable)
     check_seal; check_bundle; check_key; check_units
     transaction_cmd verify
+    upgrade_status
     if [[ -e "$marker" || -L "$marker" ]]; then
       [[ -f "$marker" && ! -L "$marker" && "$(stat -c '%u:%a:%h' "$marker")" == '0:644:1' ]] || die marker_custody_refused
     else
@@ -302,19 +328,58 @@ PY
     # cannot be "upgraded" by silently minting a new authorization or key.
     check_seal; check_bundle; check_key; check_units
     transaction_cmd verify
+    upgrade_status
     [[ ! -e "$marker" && ! -L "$marker" ]] || die upgrade_requires_disabled
     ! systemctl is-active --quiet "$broker" || die upgrade_requires_disabled
     ! systemctl is-active --quiet "$worker" || die upgrade_requires_disabled
     echo R5_R1_SAME_SOURCE_UPGRADE_PASS
     ;;
   recover)
+    upgrade_no_pending
     [[ -f "$pending" && ! -L "$pending" ]] ||
       [[ -f "$receipt" && ! -L "$receipt" ]] || die recovery_requires_pending
     rollback_files
     ;;
   rollback)
+    upgrade_no_pending
     [[ -e "$snapshot" && ! -L "$snapshot" ]] ||
       [[ -e "$receipt" && ! -L "$receipt" ]] || die rollback_snapshot_unavailable
     rollback_files
+    ;;
+  upgrade-v2)
+    check_seal; check_bundle; check_key; check_units
+    transaction_cmd verify
+    upgrade_no_pending
+    [[ ! -e "$upgrade_receipt" && ! -L "$upgrade_receipt" ]] || die signed_release_already_present
+    [[ ! -e "$marker" && ! -L "$marker" ]] || die upgrade_requires_disabled
+    ! systemctl is-active --quiet "$broker" || die upgrade_requires_disabled
+    ! systemctl is-active --quiet "$worker" || die upgrade_requires_disabled
+    no_saved_credentials
+    systemctl stop "$vault"
+    upgrade_cmd apply
+    systemctl restart "$vault"
+    wait_socket "$vault" /run/maj-vaj-paper-vault-status/status.sock
+    upgrade_cmd verify
+    echo R5_R2_AUTHENTICATED_OFFLINE_UPGRADE_INSTALLED_PASS
+    ;;
+  recover-v2)
+    check_seal;check_bundle;check_key;check_units
+    [[ -f "$upgrade_pending" && ! -L "$upgrade_pending" ]] || die recovery_requires_upgrade_journal
+    [[ ! -e "$marker" && ! -L "$marker" ]] || die recovery_requires_disabled
+    systemctl stop "$broker" "$worker" >/dev/null 2>&1 || :
+    ! systemctl is-active --quiet "$broker" || die broker_still_active
+    ! systemctl is-active --quiet "$worker" || die worker_still_active
+    systemctl stop "$vault"
+    no_saved_credentials
+    upgrade_cmd recover
+    transaction_cmd verify
+    systemctl restart "$vault"
+    wait_socket "$vault" /run/maj-vaj-paper-vault-status/status.sock
+    echo R5_R2_AUTHENTICATED_UPGRADE_ROLLBACK_PASS
+    ;;
+  verify-v2)
+    check_seal;check_bundle;check_key;check_units
+    upgrade_cmd verify
+    echo R5_R2_SIGNED_RELEASE_CUSTODY_VERIFIED_PASS
     ;;
 esac
