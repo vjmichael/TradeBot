@@ -308,6 +308,30 @@ try:
     end_operator(op_id,win)
     assert read_status()==status
     print('R2B_INSTALLED_PAPER_AUTHORITY_REFUSAL_PASS',flush=True)
+
+    # Fixture-only synthetic legacy conversion: remove *only* the R2B
+    # metadata table from an already saved encrypted pair. This models a
+    # nonempty pre-migration PaperVault and must NOT create a runnable
+    # service via migrate_empty. It is not a substitute for native reviewed
+    # migration: that positive authority remains deliberately unavailable.
+    command('systemctl stop '+unit)
+    legacy=(
+        "import sqlite3;db=sqlite3.connect('/var/lib/maj-vaj-paper-vault/vault.sqlite3');"
+        "rows=db.execute('SELECT COUNT(*) FROM secrets').fetchone()[0];assert rows==2;"
+        "db.execute('DROP TABLE provider_metadata');db.commit();db.close()"
+    )
+    command('/opt/maj-vaj/venv/bin/python -c '+shlex.quote(legacy))
+    command('systemctl start '+unit,timeout=30,ok=False)
+    time.sleep(3)
+    rc,_=command('systemctl is-active --quiet '+unit,ok=False)
+    assert rc!=0, 'nonempty_unreviewed_legacy_was_adopted'
+    retained=(
+        "import sqlite3;db=sqlite3.connect('/var/lib/maj-vaj-paper-vault/vault.sqlite3');"
+        "assert db.execute('SELECT COUNT(*) FROM secrets').fetchone()[0]==2;"
+        "assert db.execute(\\\"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='provider_metadata'\\\").fetchone()[0]==0;db.close()"
+    )
+    command('/opt/maj-vaj/venv/bin/python -c '+shlex.quote(retained))
+    print('R2B_INSTALLED_UNREVIEWED_LEGACY_REFUSAL_PASS',flush=True)
     print('R2B_NATIVE_KEY_CUSTODY_PASS',flush=True)
 
 finally:
