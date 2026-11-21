@@ -328,7 +328,7 @@ try:
     retained=(
         "import sqlite3;db=sqlite3.connect('/var/lib/maj-vaj-paper-vault/vault.sqlite3');"
         "assert db.execute('SELECT COUNT(*) FROM secrets').fetchone()[0]==2;"
-        "assert db.execute(\\\"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='provider_metadata'\\\").fetchone()[0]==0;db.close()"
+        "assert db.execute('SELECT COUNT(*) FROM sqlite_master WHERE name=?',('provider_metadata',)).fetchone()[0]==0;db.close()"
     )
     command('/opt/maj-vaj/venv/bin/python -c '+shlex.quote(retained))
     print('R2B_INSTALLED_UNREVIEWED_LEGACY_REFUSAL_PASS',flush=True)
