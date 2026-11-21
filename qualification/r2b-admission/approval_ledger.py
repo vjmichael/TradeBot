@@ -26,7 +26,7 @@ import sqlite3
 import stat
 import time
 
-from vault_owner_hooks import ROLES
+from vault_owner_hooks import ROLES, Refused as OwnerRefused
 
 HEX32 = re.compile(r'[0-9a-f]{32}\Z')
 HEX64 = re.compile(r'[0-9a-f]{64}\Z')
@@ -36,7 +36,7 @@ MAX_TTL = 120
 STATES = ('pending','approved','consumed','cancelled','revoked')
 
 
-class Refused(ValueError):
+class Refused(OwnerRefused):
     """Fixed non-secret refusal. Do not print request or exception context."""
 
 
