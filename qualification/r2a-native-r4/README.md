@@ -1,11 +1,88 @@
 # TB-SEC-KEY-01-R2A-R1-D2-R3-NATIVE-R4 — installed adversarial intent, replay and principal isolation
 
-**Status: staged, NOT accepted until same-SHA native run completes.**
+**Status: SCOPED INSTALLED ACCEPTANCE PASS — native R2A handoff security qualified; broader product and financial gates OPEN.**
 
 **Scope:** extend the already accepted R1/R2/R3 native Windows-independent Debian
 credential-handoff contract with genuinely installed negative checks.
 No production-code changes, mainline integration, real credentials, provider
 network calls, trading, funds, or LIVE activation.
+
+
+## Final exact-source acceptance — 2026-11-20 local / 2026-11-21 UTC
+
+**[Successful GitHub Actions run #44856537336](https://github.com/vjmichael/TradeBot/actions/runs/44856537336)**, job `136699960753`, unchanged tested commit
+`5d0a63a740a4974bec67e853d965cbf89ce49e60`. Independent downloadable
+[receipt artifact #14688037296](https://github.com/vjmichael/TradeBot/actions/runs/44856537336/artifacts/14688037296)
+has SHA-256 `8cc474b1bebb82bbd02bfc8c671b869283909ae2c448a2cbd4045505ff80786d`;
+the downloaded ZIP bytes were independently SHA-256 checked and exactly matched
+the GitHub artifact digest. Receipt includes the terminal source lock, package
+inventory, 9 original guard test results, 21 intent/refusal/adversarial tests,
+native markers and actual QEMU screenshots.
+
+Frozen D2 source tree `a9cd0f3392a573d3c91cc2d8464c4b8de5eefb0b`,
+R2B overlay `250310b3409dd4c0feffa33eba1fe74d8b4ca54a`, repaired
+R2B R2 tree `12a3c46401d96d616de4f88fa8a42588275d22ae`,
+and authoritative R3 native relay production tree
+`89946baeef719d7369887cc7d89a8a4230c7180e` restored unchanged.
+Production handoff blob `269bdc0b19d8a189496c7ca3b9369c158f85b0f6`
+and original accepted R3 harness blob
+`78f2e644340649104ae7ea31fd9589541b659bdb` were
+reverified; R4 harness blob
+`7451e502de346b503158b612f9c8943c0c44c2d3`
+and four-case AF_UNIX source test blob
+`7b1a64e864a5c95e76bbfceba53262d9991a640a`
+were source-locked. Pinned npm dashboard build PASS.
+
+| Exact-source and installed test | Outcome |
+|---|---|
+| Original handoff guard suite | **9/9 PASS** |
+| R2 fixed-intent/refusal + R4 AF_UNIX regression suite | **21/21 PASS** |
+| Installed malformed native URI refusal | **PASS** |
+| Real Chromium consent, Tk confirmation and native cancellation | **PASS** |
+| Actual Linux socket peer/directory ownership and cross-UID rejection | **PASS** |
+| Malformed, oversized, trailing, partial/no-EOF IPC requests | **PASS** |
+| Valid same-UID fixed intent requires real native Tk confirmation; Escape refuses | **PASS** |
+| Old PAM session terminated, listener socket removed; stale socket request refused | **PASS** |
+| Fresh distinct PAM login; current X cookie accepted, old saved X cookie refused | **PASS** |
+| Root-owned tag/KEK custody and console X-cookie cross-principal denial | **PASS** |
+| Distinct operator PAM login after all denials, no vault enrollment | **PASS** |
+| Full offline R4 adversarial matrix `R4_NATIVE_ADVERSARIAL_PASS` | **PASS** |
+
+All ten expected native markers were emitted once by the installed QEMU
+harness and verified independently by the workflow. The actual Tk screenshot
+shows the credential form still in PAPER-only mode: Kraken trading keys,
+Telegram pairing and provider verification are not available. No synthetic
+or real credentials were enrolled by R4, no privileges were escalated and no
+LIVE authority was enabled.
+
+### Security interpretation
+
+The `OPEN\n` socket frame remains **reusable UI intent within the currently
+authenticated console UID**. It is *not* a one-use, cryptographically
+authenticated transaction and cannot grant enrollment, sign-out or
+provider permission without the independent native confirmation and
+fresh credential-operator PAM login. The R4 evidence establishes
+cross-UID refusal, old socket removal, old Xauth cookie rejection and
+native explicit confirmation, **not** global replay prevention for same-UID
+requests across time or a general guarantee against arbitrary same-UID
+malware. Such stronger threat models would need a separate contract.
+
+The negative invalid-URI shell invocations are intentionally not treated
+as positive native handoff acceptance; the real Chromium-to-Tk positive
+path was independently exercised in the same VM. Source tests retain
+the exact URI validation requirement.
+
+### Remaining gates
+
+The **R2A native handoff-security R1–R4 qualification group is closed**,
+but this does **not** release Maj Vaj for production. Protected
+provider-test adapters, owner one-use approval and authenticated receipt
+custody, legacy stored-credential migration, recovery/KEK rotation,
+independent positive internet/service-readiness witnesses and full
+PAPER/financial Gate remain open under R2B/R2C and associated
+integration work. There were no production-code changes, source
+relaxations, mainline merges, real secrets, external provider calls,
+orders, financial changes or paid resources in this R4 run.
 
 ## Preserved acceptance
 
