@@ -30,7 +30,8 @@ jobs:
           test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
           test "$(git hash-object qualification/r2b-admission/native_readonly_harness.py)" = 87587d2a33250e915a8400786df7d2e3cef61cf3
           test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 39cd2c1b06823f025655b2191bff45988ef2c858
-          test "$(git hash-object qualification/r2b-admission/operator_session.py)" = a25c9c3f1f12ccf40367b8bff5b5fe29fd60a8ba
+          test "$(git hash-object qualification/r2b-admission/operator_session.py)" = b61a656740989cb6b284498503837d2252258fec
+          test "$(git hash-object qualification/r2b-admission/test_approval_ledger.py)" = e25aa3e1b177edf484ec31f753231b41f303a7fd
           mkdir "$RUNNER_TEMP/r2b-r3/r2b-admission"
           cp qualification/r2b-admission/{approval_ledger,operator_session}.py "$RUNNER_TEMP/r2b-r3/r2b-admission/"
           test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
