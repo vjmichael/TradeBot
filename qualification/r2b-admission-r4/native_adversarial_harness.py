@@ -314,6 +314,20 @@ def operator_request(payload):
     assert len(values)==1, 'fixture_vault_result_missing'
     return values[0]
 
+def broker_ledger_inventory():
+    # Read-only native fixture: no request ID, witness, secret or signing key
+    # is copied into acceptance artifacts. Distinguish restart generations.
+    py=("import sqlite3,json,hashlib;"
+        "db=sqlite3.connect('file:/var/lib/maj-vaj-r2b-approval/ledger.sqlite3?mode=ro',uri=True);"
+        "rows=db.execute('SELECT state,incarnation,created FROM approvals ORDER BY created,request_id').fetchall();"
+        "db.close();"
+        "print('LEDGER_EVIDENCE='+json.dumps([{'state':a,'incarnation_fp':hashlib.sha256(b.encode()).hexdigest()[:12],'created_ns':c} for a,b,c in rows]))")
+    raw=command('runuser -u maj-vaj-approval -- /usr/bin/python3 -I -B -c '+shlex.quote(py))[1]
+    records=[json.loads(line.split('LEDGER_EVIDENCE=',1)[1])
+             for line in raw.splitlines() if line.startswith('LEDGER_EVIDENCE=')]
+    assert len(records)==1,'broker_restart_evidence_missing'
+    return records[0]
+
 def negative_case(case,sid,window,before,approval,worker):
     if case=='reboot':
         return
@@ -387,7 +401,21 @@ def negative_case(case,sid,window,before,approval,worker):
         assert approval_state_count('consumed')==0
         print('R4_INSTALLED_GENERATION_RACE_REFUSAL_PASS',flush=True)
     elif case=='broker_crash':
+        pre_state=counts()
+        pre_inventory=broker_ledger_inventory()
+        _,old_pid=command('systemctl show maj-vaj-paper-vault.service -p MainPID -p ActiveState')
         command('systemctl restart '+approval)
+        # Capture immutable non-secret ledger lineage BEFORE assertion.
+        # This fixture must still FAIL if a fresh unapproved request
+        # appears unexpectedly. Never permit success by relaxing gates.
+        post_state=counts()
+        post_inventory=broker_ledger_inventory()
+        _,new_pid=command('systemctl show maj-vaj-paper-vault.service -p MainPID -p ActiveState')
+        (out/'r4-broker-lineage.txt').write_text(json.dumps({
+            'before_counts':pre_state,'before_rows':pre_inventory,
+            'after_counts':post_state,'after_rows':post_inventory,
+            'owner_before':old_pid,'owner_after':new_pid
+        },sort_keys=True,indent=2)+'\\n')
         # Native transport loss may cancel the request before the
         # restarted ledger revokes surviving pending rows. Both terminal
         # states are valid; pending/approved/consumed are never accepted.
