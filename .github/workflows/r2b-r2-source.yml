@@ -1,0 +1,62 @@
+name: R2B R2 protected native operator agent source qualification
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2b-admission-r2]
+    paths: ['.github/workflows/r2b-r2-source.yml']
+permissions:
+  contents: read
+jobs:
+  native-agent-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22.16.0'}
+      - name: Exact-source restore with original Tk session additive patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/original-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          test "$(sha256sum "$RUNNER_TEMP/r2b-r3/credential_graphical.py" | cut -d' ' -f1)" = 74cd63e6533c237f5222c151c00548dd2631a95b2b69f147bf8c3871f32a5a9f
+          test "$(git hash-object qualification/r2b-admission-r2/native_agent_protocol.py)" = 62bc716449395b8fbd3aeb933cf3cd37e5d8c257
+          test "$(git hash-object qualification/r2b-admission-r2/agent_broker_channel.py)" = 4090c99aa4d65af1c8b360accc07475c4dd05ecf
+          test "$(git hash-object qualification/r2b-admission-r2/broker_service_r2.py)" = d23128df0cdcb9c80220eb6b507c325434aac97c
+          test "$(git hash-object qualification/r2b-admission-r2/patch_credential_gui.py)" = 17b1315a903edb9b92d9c052c3988ed8984b13b2
+          test "$(git hash-object qualification/r2b-admission-r2/maj-vaj-r2b-approval.service)" = 0cad9dc88caef22b7b8127237a19eb3009b17e15
+          test "$(git hash-object qualification/r2b-admission-r2/test_agent_channel.py)" = f6f14c707153d19cff83818d72b6e5560180976c
+          python qualification/r2b-admission-r2/patch_credential_gui.py "$RUNNER_TEMP/r2b-r3/credential_graphical.py" | tee receipt/native-patch.txt
+          grep -F 'Review pending read-only check' "$RUNNER_TEMP/r2b-r3/credential_graphical.py" >/dev/null
+          git rev-parse HEAD | tee receipt/exact-sha.txt
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Qualify agent, broker and all prior source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/migration:$GITHUB_WORKSPACE/qualification/r2b-closeout-custody:$GITHUB_WORKSPACE/qualification/r2b-admission:$GITHUB_WORKSPACE/qualification/r2b-admission-r1:$GITHUB_WORKSPACE/qualification/r2b-admission-r2"
+          python -m compileall -q qualification/r2b-admission-r2
+          python -m unittest discover -s qualification/r2b-admission-r2 -p test_*.py -v 2>&1 | tee receipt/r2-agent-source.txt
+          python -m unittest discover -s qualification/r2b-admission-r1 -p test_*.py -v 2>&1 | tee receipt/r1-broker-owner.txt
+          python -m unittest discover -s qualification/r2b-admission -p test_*.py -v 2>&1 | tee receipt/prior-approval-session.txt
+          python -m unittest -v test_managed_paper_vault test_native_test_review test_reviewed_migration test_worker_receipt_verifier 2>&1 | tee receipt/r2b-custody-regressions.txt
+      - name: Original native and adversarial security source regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r3/tests:$GITHUB_WORKSPACE/qualification/r2a-native-negative:$GITHUB_WORKSPACE/qualification/r2a-native-r4"
+          python -m unittest discover -s "$RUNNER_TEMP/r2b-r3/tests" -p test_credential_handoff.py -v 2>&1 | tee receipt/original-native-guard.txt
+          python -m unittest -v test_credential_intent test_handoff_refusals test_adversarial_intent 2>&1 | tee receipt/original-adversarial.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-r2-native-agent-source-receipts
+          path: receipt/
+          retention-days: 5
