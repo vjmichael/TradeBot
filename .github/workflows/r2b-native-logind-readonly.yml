@@ -28,7 +28,7 @@ jobs:
           bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/production-tree.txt
           test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
           test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
-          test "$(git hash-object qualification/r2b-admission/native_readonly_harness.py)" = 87587d2a33250e915a8400786df7d2e3cef61cf3
+          test "$(git hash-object qualification/r2b-admission/native_readonly_harness.py)" = 9d561476e2e6d42fb113cabb4a616217d1a8d9c2
           test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 39cd2c1b06823f025655b2191bff45988ef2c858
           test "$(git hash-object qualification/r2b-admission/operator_session.py)" = b61a656740989cb6b284498503837d2252258fec
           test "$(git hash-object qualification/r2b-admission/test_approval_ledger.py)" = e25aa3e1b177edf484ec31f753231b41f303a7fd
@@ -46,6 +46,22 @@ jobs:
           python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
           export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-closeout-custody:$GITHUB_WORKSPACE/qualification/r2b-admission"
           python -m compileall -q qualification/r2b-admission
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          source=Path('qualification/r2b-admission/native_readonly_harness.py').read_text()
+          tree=ast.parse(source)
+          found={}
+          for node in ast.walk(tree):
+              if isinstance(node,ast.Assign) and isinstance(node.value,ast.Constant) and isinstance(node.value.value,str):
+                  for target in node.targets:
+                      if isinstance(target,ast.Name) and target.id in ('code','wrong','gone'):
+                          found[target.id]=node.value.value
+          assert set(found)=={'code','wrong','gone'},found.keys()
+          for name,script in found.items():
+              compile(script,'<native-fixture-'+name+'>','exec')
+          print('PASS embedded native fixture Python scripts compile')
+          PY
           python -m unittest discover -s qualification/r2b-admission -p 'test_*.py' -v 2>&1 | tee receipt/new-source-tests.txt
       - name: Install offline Debian QEMU tools
         shell: bash
