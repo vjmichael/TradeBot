@@ -160,8 +160,13 @@ class AgentHandler(socketserver.BaseRequestHandler):
                             raise Refused('native_extra_frame_refused')
                         events.check()
                         return response['choice']=='approve'
-                    accepted=self.server.gateway.ledger.review_with_native_prompt(
-                        rid,witness=guarded,prompt=native_dialog,reattest=guarded)
+                    try:
+                        accepted=self.server.gateway.ledger.review_with_native_prompt(
+                            rid,witness=guarded,prompt=native_dialog,reattest=guarded)
+                    except BaseException:
+                        # Lost transport or session events revoke this request.
+                        self.server.gateway.ledger.cancel(rid)
+                        raise
                     if accepted is True:
                         # Keep the irreversible logind session-event latch
                         # alive until OWNER consumption. Restart drops it
@@ -238,4 +243,7 @@ class AgentServer(socketserver.ThreadingUnixStreamServer):
                 AGENT_SOCKET.unlink()
         except OSError:
             pass
+        # Python's superclass may unlink server_address unconditionally.
+        # We already made an inode-verified decision above.
+        self._unlink_socket=False
         super().server_close()
