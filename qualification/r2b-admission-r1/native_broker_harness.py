@@ -298,12 +298,11 @@ try:
     # Read-only inspection by dedicated approval UID. Never expose the
     # internal ledger diagnostic through product or broker RPC.
     inspect=(
-      "import sys;"
-      "sys.path.insert(0,'/opt/maj-vaj/r2b-admission-r1');"
-      "from approval_ledger import Ledger;"
-      "db=Ledger('/var/lib/maj-vaj-r2b-approval/ledger.sqlite3');"
-      "assert db.state_for_test(sys.argv[1])=='revoked';"
-      "print('R2B_REVOKED')"
+      "import sys,sqlite3;"
+      "db=sqlite3.connect('file:/var/lib/maj-vaj-r2b-approval/ledger.sqlite3?mode=ro',uri=True);"
+      "row=db.execute('SELECT state FROM approvals WHERE request_id=?',(sys.argv[1],)).fetchone();"
+      "assert row==('revoked',), 'approval_restart_not_revoked';"
+      "db.close();print('R2B_REVOKED')"
     )
     observed=command('runuser -u maj-vaj-approval -- /usr/bin/python3 -I -B -c '+shlex.quote(inspect)+' '+shlex.quote(pending))[1]
     assert 'R2B_REVOKED' in observed
