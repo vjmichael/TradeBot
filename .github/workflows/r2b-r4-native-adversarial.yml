@@ -21,7 +21,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p receipt
-          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/source-tree.txt
+          # Historical exact-source restore must use the frozen R3 snapshot:
+          # the live qualification ledger was legitimately updated AFTER the
+          # accepted R3 source build, changing docs patch contexts only.
+          git worktree add --detach "$RUNNER_TEMP/r3-frozen-restore" f4b513480f948c638f450d2aeccb2acdfe6201af
+          bash "$RUNNER_TEMP/r3-frozen-restore/qualification/r2b-integrate-02-r2-r3/restore-r3.sh" "$RUNNER_TEMP/r2b-r3" | tee receipt/source-tree.txt
           test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
           test "$(git -C "$RUNNER_TEMP/r2b-r3" hash-object credential_handoff.py)" = 269bdc0b19d8a189496c7ca3b9369c158f85b0f6
           test "$(git hash-object qualification/r2b-admission-r2/patch_owner_vault.py)" = c647db518e922f352acc0ce19e22e4aa32608393
