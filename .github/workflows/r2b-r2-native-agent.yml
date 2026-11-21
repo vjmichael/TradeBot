@@ -1,0 +1,81 @@
+name: R2B R2 installed native one-use operator review and session-bound broker
+on:
+  push:
+    branches: [qualification/tb-sec-key-01-r2b-admission-r2]
+    paths: ['.github/workflows/r2b-r2-native-agent.yml']
+permissions:
+  contents: read
+jobs:
+  native-agent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22.16.0'}
+      - name: Source-lock frozen source original GUI overlay and independent broker agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p receipt
+          bash qualification/r2b-integrate-02-r2-r3/restore-r3.sh "$RUNNER_TEMP/r2b-r3" | tee receipt/production-tree.txt
+          test "$(git -C "$RUNNER_TEMP/r2b-r3" write-tree)" = 89946baeef719d7369887cc7d89a8a4230c7180e
+          test "$(sha256sum "$RUNNER_TEMP/r2b-r3/credential_graphical.py" | cut -d' ' -f1)" = 74cd63e6533c237f5222c151c00548dd2631a95b2b69f147bf8c3871f32a5a9f
+          test "$(git hash-object qualification/r2b-admission-r2/native_agent_harness.py)" = 88f39f5d761822360bd64e5152df30e829805fd1
+          test "$(git hash-object qualification/r2b-admission-r2/native_agent_protocol.py)" = 62bc716449395b8fbd3aeb933cf3cd37e5d8c257
+          test "$(git hash-object qualification/r2b-admission-r2/agent_broker_channel.py)" = 4090c99aa4d65af1c8b360accc07475c4dd05ecf
+          test "$(git hash-object qualification/r2b-admission-r2/broker_service_r2.py)" = d23128df0cdcb9c80220eb6b507c325434aac97c
+          test "$(git hash-object qualification/r2b-admission-r2/patch_credential_gui.py)" = 17b1315a903edb9b92d9c052c3988ed8984b13b2
+          test "$(git hash-object qualification/r2b-admission-r2/maj-vaj-r2b-approval.service)" = 0cad9dc88caef22b7b8127237a19eb3009b17e15
+          test "$(git hash-object qualification/r2b-admission-r1/broker_service.py)" = c25093157840a38adb838377d17e62b707c489b3
+          test "$(git hash-object qualification/r2b-admission/approval_ledger.py)" = 39cd2c1b06823f025655b2191bff45988ef2c858
+          test "$(git hash-object qualification/r2b-admission/broker_gateway.py)" = 22155167d8ce887770c2b7b500341e358268a0f0
+          test "$(git hash-object qualification/r2b-admission/operator_session.py)" = b61a656740989cb6b284498503837d2252258fec
+          python qualification/r2b-admission-r2/patch_credential_gui.py "$RUNNER_TEMP/r2b-r3/credential_graphical.py" | tee receipt/native-patch.txt
+          mkdir -p "$RUNNER_TEMP/r2b-r3/r2b-admission-r1" "$RUNNER_TEMP/r2b-r3/r2b-admission-r2"
+          cp qualification/r2b-admission-r1/broker_service.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r1/"
+          cp qualification/r2b-admission/{approval_ledger,broker_gateway,operator_session}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-admission-r2/{native_agent_protocol,agent_broker_channel,broker_service_r2}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          cp qualification/r2b-admission-r2/maj-vaj-r2b-approval.service "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
+          git rev-parse HEAD | tee receipt/acceptance-sha.txt
+          cd "$RUNNER_TEMP/r2b-r3/dashboard"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Full source qualification before native install
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
+          export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/migration:$GITHUB_WORKSPACE/qualification/r2b-closeout-custody:$GITHUB_WORKSPACE/qualification/r2b-admission:$GITHUB_WORKSPACE/qualification/r2b-admission-r1:$GITHUB_WORKSPACE/qualification/r2b-admission-r2"
+          python -m compileall -q qualification/r2b-admission-r2
+          python -m unittest discover -s qualification/r2b-admission-r2 -p test_*.py -v 2>&1 | tee receipt/r2-source.txt
+          python -m unittest discover -s qualification/r2b-admission-r1 -p test_*.py -v 2>&1 | tee receipt/r1-regression.txt
+          python -m unittest discover -s qualification/r2b-admission -p test_*.py -v 2>&1 | tee receipt/base-admission-regression.txt
+      - name: Install genuine offline Debian 13 QEMU prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap debian-archive-keyring qemu-system-x86 qemu-utils e2fsprogs python3-pexpect imagemagick
+      - name: Build exact-source native LightDM operator GUI and broker
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash qualification/d2/build.sh "$RUNNER_TEMP/r2b-r3" "$RUNNER_TEMP/r2b-root" "$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/native" "$RUNNER_TEMP/r2b-vm"
+          cp "$RUNNER_TEMP/r2b-vm/"{packages,dpkg-audit}.txt receipt/
+      - name: Real GUI yes/no, wrong peer, one-use, restart and logout acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 qualification/r2b-admission-r2/native_agent_harness.py "$RUNNER_TEMP/r2b-vm" "$GITHUB_WORKSPACE/receipt" | tee receipt/r2-native.txt
+          for marker in R2B_R2_DEFAULT_REFUSAL_PASS R2B_R2_TWO_PROTECTED_SOCKETS_PASS R2B_R2_SAME_UID_OUT_OF_SESSION_REFUSED_PASS R2B_R2_NATIVE_DECLINE_CANCEL_PASS R2B_R2_NATIVE_ONE_USE_APPROVAL_PASS R2B_R2_RESTART_REVOKES_PENDING_PASS R2B_R2_LOGIN_SESSION_LOGOUT_PASS R2B_R2_INSTALLED_AGENT_IPC_PASS; do
+            grep -Fx "$marker" receipt/r2-native.txt
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r2b-r2-native-agent-acceptance
+          path: receipt/
+          retention-days: 5
