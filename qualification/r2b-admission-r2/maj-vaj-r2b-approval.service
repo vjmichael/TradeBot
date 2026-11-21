@@ -1,0 +1,42 @@
+[Unit]
+Description=Maj Vaj R2B source-locked operator approval broker (synthetic PAPER only)
+ConditionPathExists=/etc/maj-vaj/r2b-approval-test-enabled
+After=systemd-user-sessions.service
+RequiresMountsFor=/var/lib/maj-vaj-r2b-approval
+
+[Service]
+Type=simple
+User=maj-vaj-approval
+Group=maj-vaj-approval
+SupplementaryGroups=maj-vaj-r2b-approval-rpc maj-vaj-credential-operator
+WorkingDirectory=/opt/maj-vaj
+ExecStart=/opt/maj-vaj/venv/bin/python -I -B /opt/maj-vaj/r2b-admission-r2/broker_service_r2.py
+StateDirectory=maj-vaj-r2b-approval
+StateDirectoryMode=0700
+RuntimeDirectory=maj-vaj-r2b-approval
+RuntimeDirectoryMode=0711
+UMask=0077
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+LimitCORE=0
+InaccessiblePaths=-/var/lib/maj-vaj-paper-vault -/var/lib/maj-vaj -/etc/maj-vaj/credential-keys -/var/lib/maj-vaj-native
+StandardOutput=null
+StandardError=null
+Restart=no
+TimeoutStopSec=5s
+
+[Install]
+WantedBy=multi-user.target
