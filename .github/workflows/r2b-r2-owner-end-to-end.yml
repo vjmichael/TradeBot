@@ -57,6 +57,9 @@ jobs:
           python qualification/r2b-admission-r2/patch_credential_gui.py "$RUNNER_TEMP/r2b-r3/credential_graphical.py"
           mkdir -p "$RUNNER_TEMP/r2b-r3/r2b-admission-r1" "$RUNNER_TEMP/r2b-r3/r2b-admission-r2"
           cp qualification/r2b-admission-r1/{broker_service,owner_execution_bridge}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r1/"
+          # owner_synthetic_bridge imports this protected transaction module
+          # from the SAME frozen owner module path inside the installed unit.
+          cp qualification/r2b-admission-r1/owner_execution_bridge.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
           cp qualification/r2b-admission/{approval_ledger,operator_session,broker_gateway,receipt_channel}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
           cp qualification/r2b-closeout-custody/worker_receipt_verifier.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
           cp qualification/r2b-admission-r2/{native_agent_protocol,agent_broker_channel,broker_service_r2,synthetic_worker_protocol,synthetic_worker_service,owner_synthetic_bridge,owner_rpc_extension,patch_owner_vault}.py "$RUNNER_TEMP/r2b-r3/r2b-admission-r2/"
@@ -74,6 +77,17 @@ jobs:
           python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/r2b-r3/requirements.txt"
           export PYTHONPATH="$RUNNER_TEMP/r2b-r3:$GITHUB_WORKSPACE/qualification/r2b-integrate-02:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2:$GITHUB_WORKSPACE/qualification/r2b-integrate-02-r2-r2/migration:$GITHUB_WORKSPACE/qualification/r2b-closeout-custody:$GITHUB_WORKSPACE/qualification/r2b-admission:$GITHUB_WORKSPACE/qualification/r2b-admission-r1:$GITHUB_WORKSPACE/qualification/r2b-admission-r2"
           python -m compileall -q qualification/r2b-admission-r2 qualification/r2b-admission-r1
+          # Import the actual installed subdirectory assembly BEFORE QEMU,
+          # with the isolated restored source and installed venv modules.
+          R2B_INSTALLED_TREE="$RUNNER_TEMP/r2b-r3" python - <<'PY'
+          import os,sys
+          from pathlib import Path
+          root=Path(os.environ['R2B_INSTALLED_TREE'])
+          sys.path[:0]=[str(root/'r2b-admission-r2'),str(root/'r2b-admission-r1'),str(root)]
+          import approval_ledger,owner_execution_bridge,owner_synthetic_bridge,owner_rpc_extension
+          import broker_service_r2,synthetic_worker_service
+          print('PASS installed owner/broker/worker import dependency closure')
+          PY
           python -m unittest discover -s qualification/r2b-admission-r2 -p 'test_*.py' -v 2>&1 | tee receipt/r2-all-source.txt
           python -m unittest discover -s qualification/r2b-admission-r1 -p 'test_*.py' -v 2>&1 | tee receipt/r1-owner-bridge.txt
           python -m unittest discover -s qualification/r2b-admission -p 'test_*.py' -v 2>&1 | tee receipt/previous-native-admission.txt
