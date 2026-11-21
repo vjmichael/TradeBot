@@ -64,7 +64,7 @@ class IntentTests(unittest.TestCase):
                 self.assertNotIn(ACK,responses)
                 self.assertTrue(
                     (responses == [b''] and not errors) or
-                    (not responses and errors == ['ConnectionResetError']),
+                    (not responses and errors in (['ConnectionResetError'], ['BrokenPipeError'])),
                     (responses,errors)
                 )
         self.assertFalse(path.exists())
